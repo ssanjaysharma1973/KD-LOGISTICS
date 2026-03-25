@@ -174,15 +174,18 @@ function getVehiclesFromSqlite(tenantId = null) {
     try {
       const db = new sqlite3.Database(SQLITE_DB_PATH, sqlite3.OPEN_READONLY);
       db.configure('busyTimeout', 5000);
-      let sql = 'SELECT vehicle_number, latitude, longitude, gps_time, client_id FROM gps_current';
+      let sql = `SELECT g.vehicle_number, g.latitude, g.longitude, g.gps_time, g.client_id, g.speed, g.stop_start_time,
+        v.driver_name, v.vehicle_size, v.fuel_type, v.route_from, v.route_to, v.city, v.munshi_name, v.vehicle_no
+        FROM gps_current g
+        LEFT JOIN vehicles v ON v.vehicle_no = g.vehicle_number AND (v.client_id = g.client_id OR v.client_id IS NULL)`;
       const params = [];
       
       if (tenantId) {
-        sql += ' WHERE client_id = ?';
+        sql += ' WHERE g.client_id = ?';
         params.push(tenantId);
       }
       
-      sql += ' ORDER BY gps_time DESC LIMIT 1000';
+      sql += ' ORDER BY g.gps_time DESC LIMIT 1000';
       
       db.all(sql, params, (err, rows) => {
         db.close();
@@ -209,12 +212,24 @@ function getVehiclesFromSqlite(tenantId = null) {
           return {
             id: row.vehicle_number,
             number: row.vehicle_number,
+            vehicle_number: row.vehicle_number,
             lat: Number(row.latitude) || null,
             lng: Number(row.longitude) || null,
+            latitude: Number(row.latitude) || null,
+            longitude: Number(row.longitude) || null,
+            speed: Number(row.speed) || 0,
             lastUpdate,
+            gps_time: lastUpdate,
             status: computeStatus(lastUpdate, row.speed || 0),
-            type: '',
-            driver: '',
+            type: row.fuel_type || '',
+            driver: row.driver_name || '',
+            driver_name: row.driver_name || '',
+            vehicle_size: row.vehicle_size || '',
+            fuel_type: row.fuel_type || '',
+            route_from: row.route_from || '',
+            route_to: row.route_to || '',
+            city: row.city || '',
+            munshi_name: row.munshi_name || '',
             fuel: 0,
             client_id: row.client_id,
             _raw: row,
@@ -1266,11 +1281,440 @@ const server = http.createServer(async (req, res) => {
       [vehicleId, clientId, startTime, endTime], null);
   }
 
+  // ── EWB Hub helpers ───────────────────────────────────────────────────────
+  function sqAll(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      if (!sqlite3) return reject(new Error('sqlite3 unavailable'));
+      const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+      db2.all(sql, params, (err, rows) => { db2.close(); err ? reject(err) : resolve(rows || []); });
+    });
+  }
+  function sqRun(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      if (!sqlite3) return reject(new Error('sqlite3 unavailable'));
+      const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+      db2.run(sql, params, function(err) { db2.close(); err ? reject(err) : resolve(this); });
+    });
+  }
+  function haversineM(lat1, lon1, lat2, lon2) {
+    const R = 6371000, toRad = x => x * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  function findPoiForVehicle(lat, lon, pois) {
+    if (!lat || !lon) return null;
+    for (const p of pois) {
+      if (p.latitude && p.longitude) {
+        const d = haversineM(parseFloat(lat), parseFloat(lon), parseFloat(p.latitude), parseFloat(p.longitude));
+        if (d <= parseFloat(p.radius_meters || 1500)) return p;
+      }
+    }
+    return null;
+  }
+  // Simple POI name matching for reclassify/rematch
+  function matchPoiByName(tradeName, place, pincode, pois) {
+    if (!tradeName && !place) return null;
+    const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const tn = norm(tradeName), pl = norm(place), pc = (pincode || '').replace(/\D/g, '');
+    let best = null, bestScore = 0;
+    for (const p of pois) {
+      const pn = norm(p.poi_name), pc2 = (p.pin_code || '').replace(/\D/g, '');
+      let score = 0;
+      if (tn && pn.includes(tn.slice(0, 6))) score += 10;
+      if (tn && tn.includes(pn.slice(0, 6))) score += 8;
+      if (pl && (pn.includes(pl) || pl.includes(pn.slice(0, 4)))) score += 5;
+      if (pc && pc2 && pc === pc2) score += 15;
+      if (score > bestScore) { bestScore = score; best = p; }
+    }
+    return bestScore >= 8 ? best : null;
+  }
+  function classifyMovement(fromPoi, toPoi, supplyType) {
+    const st = (supplyType || '').toLowerCase();
+    if (st.includes('return') || st.includes('inward')) return 'inward_return';
+    if (!fromPoi || !toPoi) return 'unclassified';
+    const ft = (fromPoi.type || '').toLowerCase(), tt = (toPoi.type || '').toLowerCase();
+    if (ft === 'primary' && tt === 'secondary') return 'primary_to_secondary';
+    if (ft === 'primary' && tt === 'tertiary') return 'primary_to_tertiary';
+    if (ft === 'primary') return 'primary_to_other';
+    if (ft === 'secondary' && tt === 'tertiary') return 'secondary_to_dealer';
+    if (ft === 'secondary') return 'secondary_to_other';
+    if (ft === tt && ft === 'secondary') return 'dealer_transfer';
+    if (ft === tt && ft === 'primary') return 'hub_transfer';
+    return 'unclassified';
+  }
+  function jsonResp(res, data, status = 200) {
+    res.statusCode = status;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(data));
+  }
+
+  // GET /api/eway-bills-hub  (bills list with filters + pagination)
+  if (pathname === '/api/eway-bills-hub' && req.method === 'GET') {
+    try {
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const movType = parsed.query.movement_type || '';
+      const status  = parsed.query.status || '';
+      const vno     = parsed.query.vehicle_no || '';
+      const search  = parsed.query.search || '';
+      const dfrom   = parsed.query.date_from || '';
+      const dto     = parsed.query.date_to || '';
+      const page    = Math.max(1, parseInt(parsed.query.page || '1'));
+      const perPage = Math.min(200, parseInt(parsed.query.per_page || '50'));
+      const where = ['client_id = ?'], params = [cid];
+      if (movType) { where.push('movement_type = ?'); params.push(movType); }
+      if (status)  { where.push('status = ?');        params.push(status); }
+      if (vno)     { where.push('vehicle_no = ?');     params.push(vno); }
+      if (dfrom)   { where.push('doc_date >= ?');      params.push(dfrom); }
+      if (dto)     { where.push('doc_date <= ?');      params.push(dto); }
+      if (search) {
+        where.push('(ewb_no LIKE ? OR vehicle_no LIKE ? OR from_place LIKE ? OR to_place LIKE ?)');
+        const like = `%${search}%`;
+        params.push(like, like, like, like);
+      }
+      const whereClause = where.join(' AND ');
+      const [cntRows, bills] = await Promise.all([
+        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE ${whereClause}`, params),
+        sqAll(`SELECT * FROM eway_bills_master WHERE ${whereClause} ORDER BY doc_date DESC, id DESC LIMIT ? OFFSET ?`,
+              [...params, perPage, (page - 1) * perPage]),
+      ]);
+      return jsonResp(res, { bills, total: cntRows[0]?.cnt || 0, page, per_page: perPage });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // GET /api/eway-bills-hub/summary
+  if (pathname === '/api/eway-bills-hub/summary' && req.method === 'GET') {
+    try {
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const [breakdown, [unc], [exp], [expd], hubs, dists] = await Promise.all([
+        sqAll(`SELECT movement_type, status, COUNT(*) as cnt, SUM(total_value) as total_value
+               FROM eway_bills_master WHERE client_id=? GROUP BY movement_type, status`, [cid]),
+        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND movement_type='unclassified'`, [cid]),
+        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND status='active'
+               AND valid_upto IS NOT NULL AND DATE(valid_upto) <= DATE('now','+1 day') AND DATE(valid_upto) >= DATE('now')`, [cid]),
+        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND status='active'
+               AND valid_upto IS NOT NULL AND DATE(valid_upto) < DATE('now')`, [cid]),
+        sqAll(`SELECT from_poi_name as name, COUNT(*) as total,
+               SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) as active,
+               SUM(CASE WHEN status='delivered' THEN 1 ELSE 0 END) as delivered,
+               SUM(total_value) as total_value, COUNT(DISTINCT to_poi_name) as destinations
+               FROM eway_bills_master WHERE client_id=? AND from_poi_name IS NOT NULL AND from_poi_name != ''
+               GROUP BY from_poi_name ORDER BY total DESC LIMIT 20`, [cid]),
+        sqAll(`SELECT to_poi_name as name, COUNT(*) as total,
+               SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) as active,
+               SUM(CASE WHEN status='delivered' THEN 1 ELSE 0 END) as delivered,
+               SUM(total_value) as total_value, COUNT(DISTINCT from_poi_name) as sources
+               FROM eway_bills_master WHERE client_id=? AND to_poi_name IS NOT NULL AND to_poi_name != ''
+               GROUP BY to_poi_name ORDER BY total DESC LIMIT 30`, [cid]),
+      ]);
+      // build by_movement map
+      const byMovement = {};
+      for (const r of breakdown) {
+        if (!byMovement[r.movement_type]) byMovement[r.movement_type] = { total: 0, active: 0, delivered: 0, expired: 0, total_value: 0 };
+        const m = byMovement[r.movement_type];
+        m.total += r.cnt; m.total_value += r.total_value || 0;
+        if (r.status === 'active') m.active += r.cnt;
+        else if (r.status === 'delivered') m.delivered += r.cnt;
+        else if (r.status === 'expired') m.expired += r.cnt;
+      }
+      return jsonResp(res, {
+        breakdown, by_movement: byMovement,
+        unclassified: unc?.cnt || 0, unclassified_count: unc?.cnt || 0,
+        expiring_soon: exp?.cnt || 0, expired_active: expd?.cnt || 0,
+        by_hub: hubs, by_distributor: dists,
+      });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // GET /api/eway-bills-hub/warnings
+  if (pathname === '/api/eway-bills-hub/warnings' && req.method === 'GET') {
+    try {
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const [gpsRows, pois, activeEwbs] = await Promise.all([
+        sqAll(`SELECT vehicle_number, latitude, longitude, gps_time, speed FROM gps_current WHERE client_id=?`, [cid]),
+        sqAll(`SELECT id, poi_name, latitude, longitude, radius_meters, type FROM pois WHERE client_id=?`, [cid]),
+        sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND status='active' ORDER BY doc_date DESC`, [cid]),
+      ]);
+      const vehicles = {};
+      for (const g of gpsRows) vehicles[g.vehicle_number] = g;
+      const vehiclePoi = {};
+      for (const [vno, v] of Object.entries(vehicles)) {
+        const p = findPoiForVehicle(v.latitude, v.longitude, pois);
+        if (p) vehiclePoi[vno] = p;
+      }
+      const alerts = [];
+      const today = new Date().toISOString().slice(0, 10);
+      for (const ewb of activeEwbs) {
+        const vno = (ewb.vehicle_no || '').trim();
+        if (ewb.valid_upto) {
+          const exp = ewb.valid_upto.slice(0, 10);
+          if (exp < today) {
+            alerts.push({ warning_type: 'ewb_expired', severity: 'HIGH', vehicle_no: vno, ewb_no: ewb.ewb_no, valid_upto: exp,
+              message: `EWB ${ewb.ewb_no} expired ${exp} – vehicle ${vno}` });
+          } else if (exp === today) {
+            alerts.push({ warning_type: 'ewb_expiring_soon', severity: 'MEDIUM', vehicle_no: vno, ewb_no: ewb.ewb_no, valid_upto: exp,
+              message: `EWB ${ewb.ewb_no} expires today – extend now` });
+          }
+        }
+        if (vno && vehiclePoi[vno] && ewb.from_poi_id && String(vehiclePoi[vno].id) === String(ewb.from_poi_id)) {
+          alerts.push({ warning_type: 'ewb_issued_not_departed', severity: 'LOW', vehicle_no: vno, ewb_no: ewb.ewb_no,
+            poi_name: vehiclePoi[vno].poi_name, message: `${vno} has EWB ${ewb.ewb_no} but still at loading POI` });
+        }
+      }
+      for (const [vno, poi] of Object.entries(vehiclePoi)) {
+        if ((poi.type || '') === 'primary') {
+          const hasEwb = activeEwbs.some(e => e.vehicle_no === vno && (e.movement_type || '').startsWith('primary'));
+          if (!hasEwb) alerts.push({ warning_type: 'vehicle_at_loading_no_ewb', severity: 'LOW', vehicle_no: vno, ewb_no: null,
+            poi_name: poi.poi_name, message: `${vno} at "${poi.poi_name}" with no active outward EWB` });
+        }
+        if (['secondary','tertiary'].includes(poi.type || '')) {
+          const matchEwb = activeEwbs.find(e => e.vehicle_no === vno && String(e.to_poi_id) === String(poi.id));
+          alerts.push({ warning_type: 'vehicle_unloading', severity: 'INFO', vehicle_no: vno,
+            ewb_no: matchEwb?.ewb_no || null, poi_name: poi.poi_name,
+            message: `${vno} arrived at "${poi.poi_name}" — unloading in progress` });
+        }
+      }
+      return jsonResp(res, { warnings: alerts, count: alerts.length });
+    } catch(e) { return jsonResp(res, { warnings: [], count: 0, error: e.message }); }
+  }
+
   // GET /api/eway-bills-hub/vehicle-movement
   if (pathname === '/api/eway-bills-hub/vehicle-movement' && req.method === 'GET') {
-    return sqliteJson(res, `SELECT e.vehicle_no, e.ewb_no, e.from_place, e.to_place, e.status, g.latitude, g.longitude, g.gps_time
-      FROM eway_bills_master e LEFT JOIN gps_current g ON g.vehicle_number=e.vehicle_no
-      WHERE e.client_id='CLIENT_001' AND e.status='active' ORDER BY e.imported_at DESC LIMIT 100`, [], null);
+    try {
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const [vehicleRows, pois, activeEwbs] = await Promise.all([
+        sqAll(`SELECT v.vehicle_no, v.driver_name, v.munshi_name, v.vehicle_size,
+                      g.latitude, g.longitude, g.gps_time, g.speed
+               FROM vehicles v LEFT JOIN gps_current g ON g.vehicle_number = v.vehicle_no
+               WHERE v.client_id = ?`, [cid]),
+        sqAll(`SELECT id, poi_name, latitude, longitude, radius_meters, type FROM pois WHERE client_id=?`, [cid]),
+        sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND status='active'`, [cid]),
+      ]);
+      const ewbByVehicle = {};
+      for (const e of activeEwbs) {
+        const vno = (e.vehicle_no || '').trim();
+        if (!ewbByVehicle[vno]) ewbByVehicle[vno] = [];
+        ewbByVehicle[vno].push(e);
+      }
+      const result = vehicleRows.map(v => {
+        const lat = v.latitude, lon = v.longitude;
+        const currentPoi = findPoiForVehicle(lat, lon, pois);
+        const poiType = currentPoi?.type || '';
+        const vEwbs = ewbByVehicle[v.vehicle_no] || [];
+        let load_status;
+        if (currentPoi && poiType === 'primary') load_status = 'empty_at_loading';
+        else if (currentPoi && ['secondary','tertiary','other'].includes(poiType) && vEwbs.length) load_status = 'unloading_at_delivery';
+        else if (currentPoi && ['secondary','tertiary','other'].includes(poiType)) load_status = 'empty_at_delivery';
+        else if (lat && lon) load_status = vEwbs.length ? 'in_transit_loaded' : 'in_transit_empty';
+        else load_status = 'unknown';
+        return { ...v, current_poi: currentPoi || null, current_poi_name: currentPoi?.poi_name || null,
+          current_poi_type: poiType || null, load_status, active_ewbs: vEwbs, ewb_count: vEwbs.length, last_seen: v.gps_time };
+      });
+      return jsonResp(res, { vehicles: result });
+    } catch(e) { return jsonResp(res, { vehicles: [], error: e.message }); }
+  }
+
+  // PATCH /api/eway-bills-hub/:id
+  if (/^\/api\/eway-bills-hub\/\d+$/.test(pathname) && req.method === 'PATCH') {
+    try {
+      const billId = parseInt(pathname.split('/').pop());
+      const body = await readBody(req);
+      const allowed = ['munshi_id','munshi_name','status','matched_trip_id','notes','movement_type',
+                       'vehicle_status','to_poi_id','to_poi_name','from_poi_id','from_poi_name','delivered_at'];
+      const sets = {};
+      for (const k of allowed) if (k in body) sets[k] = body[k];
+      if (!Object.keys(sets).length) return jsonResp(res, { error: 'Nothing to update' }, 400);
+      if (sets.status === 'delivered' && !sets.delivered_at)
+        sets.delivered_at = new Date().toISOString().replace('T',' ').slice(0,19);
+      const setClause = Object.keys(sets).map(k => `${k}=?`).join(', ');
+      await sqRun(`UPDATE eway_bills_master SET ${setClause} WHERE id=?`, [...Object.values(sets), billId]);
+      return jsonResp(res, { success: true });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // DELETE /api/eway-bills-hub/:id
+  if (/^\/api\/eway-bills-hub\/\d+$/.test(pathname) && req.method === 'DELETE') {
+    try {
+      const billId = parseInt(pathname.split('/').pop());
+      await sqRun('DELETE FROM eway_bills_master WHERE id=?', [billId]);
+      return jsonResp(res, { success: true });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/eway-bills-hub/reclassify
+  if (pathname === '/api/eway-bills-hub/reclassify' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const cid = body.client_id || 'CLIENT_001';
+      const [pois, bills] = await Promise.all([
+        sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE client_id=?`, [cid]),
+        sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND movement_type='unclassified'`, [cid]),
+      ]);
+      let updated = 0;
+      for (const bill of bills) {
+        const fp = matchPoiByName(bill.from_trade_name, bill.from_place, bill.from_pincode, pois);
+        const tp = matchPoiByName(bill.to_trade_name, bill.to_place, bill.to_pincode, pois);
+        const mov = classifyMovement(fp, tp, bill.supply_type);
+        await sqRun(`UPDATE eway_bills_master SET from_poi_id=?,from_poi_name=?,to_poi_id=?,to_poi_name=?,movement_type=? WHERE id=?`,
+          [fp?.id||bill.from_poi_id, fp?.poi_name||bill.from_poi_name, tp?.id||bill.to_poi_id, tp?.poi_name||bill.to_poi_name, mov, bill.id]);
+        updated++;
+      }
+      return jsonResp(res, { success: true, updated });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/eway-bills-hub/rematch-pois
+  if (pathname === '/api/eway-bills-hub/rematch-pois' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const cid = body.client_id || 'CLIENT_001';
+      const allBills = !!body.all_bills;
+      const sql = allBills
+        ? `SELECT * FROM eway_bills_master WHERE client_id=?`
+        : `SELECT * FROM eway_bills_master WHERE client_id=? AND (from_poi_id IS NULL OR to_poi_id IS NULL)`;
+      const [pois, bills] = await Promise.all([
+        sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE client_id=?`, [cid]),
+        sqAll(sql, [cid]),
+      ]);
+      let updated = 0;
+      for (const bill of bills) {
+        const fp = matchPoiByName(bill.from_trade_name, bill.from_place, bill.from_pincode, pois) ||
+                   (bill.from_poi_id ? null : null);
+        const tp = matchPoiByName(bill.to_trade_name, bill.to_place, bill.to_pincode, pois);
+        const newFromId = fp?.id ?? bill.from_poi_id;
+        const newFromName = fp?.poi_name ?? bill.from_poi_name;
+        const newToId = tp?.id ?? bill.to_poi_id;
+        const newToName = tp?.poi_name ?? bill.to_poi_name;
+        if (newFromId !== bill.from_poi_id || newToId !== bill.to_poi_id) {
+          const mov = classifyMovement(fp || (bill.from_poi_id ? { id: bill.from_poi_id, type: null } : null),
+                                        tp || (bill.to_poi_id ? { id: bill.to_poi_id, type: null } : null), bill.supply_type);
+          await sqRun(`UPDATE eway_bills_master SET from_poi_id=?,from_poi_name=?,to_poi_id=?,to_poi_name=?,movement_type=? WHERE id=?`,
+            [newFromId, newFromName, newToId, newToName, mov, bill.id]);
+          updated++;
+        }
+      }
+      return jsonResp(res, { success: true, updated, total: bills.length });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/eway-bills-hub/deduplicate
+  if (pathname === '/api/eway-bills-hub/deduplicate' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const cid = body.client_id || 'CLIENT_001';
+      const dryRun = !!body.dry_run;
+      const truncRows = await sqAll(
+        `SELECT id, ewb_no, doc_no FROM eway_bills_master WHERE client_id=? AND ewb_no LIKE '%000000'`, [cid]);
+      const truncDel = [];
+      for (const row of truncRows) {
+        if (row.doc_no) {
+          const good = await sqAll(
+            `SELECT id FROM eway_bills_master WHERE doc_no=? AND client_id=? AND ewb_no NOT LIKE '%000000' AND id != ?`,
+            [row.doc_no, cid, row.id]);
+          if (good.length) truncDel.push(row.id);
+        } else { truncDel.push(row.id); }
+      }
+      const dupRows = await sqAll(
+        `SELECT doc_no, COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND doc_no IS NOT NULL GROUP BY doc_no HAVING cnt > 1`, [cid]);
+      const dupDel = [];
+      for (const row of dupRows) {
+        const ids = await sqAll(`SELECT id FROM eway_bills_master WHERE doc_no=? AND client_id=? ORDER BY id ASC`, [row.doc_no, cid]);
+        for (const r of ids.slice(0, -1)) if (!dupDel.includes(r.id)) dupDel.push(r.id);
+      }
+      const allDel = [...new Set([...truncDel, ...dupDel])];
+      if (!dryRun && allDel.length) {
+        await sqRun(`DELETE FROM eway_bills_master WHERE id IN (${allDel.map(()=>'?').join(',')})`, allDel);
+      }
+      return jsonResp(res, { success: true, dry_run: dryRun, truncated_removed: truncDel.length, doc_dup_removed: dupDel.length, total_removed: allDel.length });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/eway-bills-hub/purge-all
+  if (pathname === '/api/eway-bills-hub/purge-all' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      if (body.confirm !== 'PURGE') return jsonResp(res, { error: 'Send { "confirm": "PURGE" } to confirm deletion' }, 400);
+      const cid = body.client_id || 'CLIENT_001';
+      const result = await sqRun('DELETE FROM eway_bills_master WHERE client_id=?', [cid]);
+      return jsonResp(res, { success: true, deleted: result.changes });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // GET /api/eway-bills-hub/unmatched-pois
+  if (pathname === '/api/eway-bills-hub/unmatched-pois' && req.method === 'GET') {
+    try {
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const threshold = Math.max(0, parseInt(parsed.query.threshold || '5'));
+      const page    = Math.max(1, parseInt(parsed.query.page || '1'));
+      const perPage = Math.min(100, parseInt(parsed.query.per_page || '25'));
+      const [cntRows, bills, pois] = await Promise.all([
+        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND (from_poi_id IS NULL OR to_poi_id IS NULL)`, [cid]),
+        sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND (from_poi_id IS NULL OR to_poi_id IS NULL)
+               ORDER BY doc_date DESC, id DESC LIMIT ? OFFSET ?`, [cid, perPage, (page-1)*perPage]),
+        sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE client_id=?`, [cid]),
+      ]);
+      const norm = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+      function scoredSuggestions(tradeName, place, pincode) {
+        const tn=norm(tradeName), pl=norm(place), pc=(pincode||'').replace(/\D/g,'');
+        return pois.map(p => {
+          const pn=norm(p.poi_name), pc2=(p.pin_code||'').replace(/\D/g,'');
+          let score=0;
+          if (tn && pn.includes(tn.slice(0,6))) score+=10;
+          if (tn && tn.includes(pn.slice(0,6))) score+=8;
+          if (pl && (pn.includes(pl)||pl.includes(pn.slice(0,4)))) score+=5;
+          if (pc && pc2 && pc===pc2) score+=15;
+          return { ...p, score };
+        }).filter(p => p.score >= threshold).sort((a,b)=>b.score-a.score).slice(0,5);
+      }
+      for (const bill of bills) {
+        bill.from_suggestions = !bill.from_poi_id ? scoredSuggestions(bill.from_trade_name, bill.from_place, bill.from_pincode) : [];
+        bill.to_suggestions   = !bill.to_poi_id   ? scoredSuggestions(bill.to_trade_name,   bill.to_place,   bill.to_pincode)   : [];
+      }
+      return jsonResp(res, { bills, total: cntRows[0]?.cnt||0, page, per_page: perPage, threshold });
+    } catch(e) { return jsonResp(res, { bills:[], total:0, error: e.message }); }
+  }
+
+  // GET /api/eway-bills-hub/suggest-pois
+  if (pathname === '/api/eway-bills-hub/suggest-pois' && req.method === 'GET') {
+    try {
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const q = (parsed.query.q || '').trim();
+      const pin = (parsed.query.pin || '').trim();
+      const poiType = (parsed.query.type || '').trim();
+      let pois = await sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE client_id=?`, [cid]);
+      if (poiType) pois = pois.filter(p => (p.type||'').toLowerCase() === poiType.toLowerCase());
+      if (q || pin) {
+        const norm = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+        const tn = norm(q), pc = pin.replace(/\D/g,'');
+        const scored = pois.map(p => {
+          const pn=norm(p.poi_name), pc2=(p.pin_code||'').replace(/\D/g,'');
+          let score=0;
+          if (tn && pn.includes(tn.slice(0,4))) score+=10;
+          if (tn && tn.includes(pn.slice(0,4))) score+=8;
+          if (pc && pc2 && pc===pc2) score+=15;
+          return { id:p.id, poi_name:p.poi_name, city:p.city, pin_code:p.pin_code, type:p.type, score };
+        }).sort((a,b)=>b.score-a.score).slice(0,10);
+        return jsonResp(res, { pois: scored });
+      }
+      return jsonResp(res, { pois: pois.slice(0,50).map(p=>({...p,score:0})) });
+    } catch(e) { return jsonResp(res, { pois:[], error: e.message }); }
+  }
+
+  // POST /api/eway-bills-hub/create-poi
+  if (pathname === '/api/eway-bills-hub/create-poi' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const cid = body.client_id || 'CLIENT_001';
+      const poiName = (body.poi_name || '').trim();
+      if (!poiName) return jsonResp(res, { error: 'poi_name required' }, 400);
+      const existing = await sqAll(
+        `SELECT id, poi_name, city, pin_code, type FROM pois WHERE LOWER(poi_name)=LOWER(?) AND client_id=?`, [poiName, cid]);
+      if (existing.length) return jsonResp(res, { success: true, poi: existing[0], created: false });
+      await sqRun(`INSERT INTO pois (poi_name, city, pin_code, type, client_id) VALUES (?,?,?,?,?)`,
+        [poiName, (body.city||'').trim(), (body.pin_code||'').trim(), body.type||'secondary', cid]);
+      const [row] = await sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE LOWER(poi_name)=LOWER(?) AND client_id=?`, [poiName, cid]);
+      return jsonResp(res, { success: true, poi: row, created: true });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
   }
 
   // POST /api/fuel-type-rates/:type

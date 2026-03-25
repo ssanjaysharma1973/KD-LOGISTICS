@@ -1,17 +1,21 @@
 #!/usr/bin/env node
+/* eslint-env node */
 /**
  * Express.js API server for Atul Logistics
  * Minimal implementation to verify Railway routing works with Node.js
  */
-const express = require('express');
+import express from 'express';
+import process from 'process';
 const app = express();
-const PORT = process.env.PORT || 8080;
+// Use process.env.PORT if available, otherwise default to 8080
+const PORT = (typeof process !== 'undefined' && process.env && process.env.PORT) ? process.env.PORT : 8080;
 
 // Middleware
 app.use(express.json());
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
+  
 });
 
 // Health check

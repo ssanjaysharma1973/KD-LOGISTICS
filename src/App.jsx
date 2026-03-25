@@ -137,6 +137,7 @@ function App() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null);
   const [selectedSizeFilter, setSelectedSizeFilter] = useState(null);
   const [dashboardView, setDashboardView] = useState('poi');
+  const [showAllPois, setShowAllPois] = useState(false);
   const [ewbVehicleMap, setEwbVehicleMap] = useState({}); // vehicle_no → ewb movement data
 
   // Fetch EWB vehicle-movement for dashboard cards
@@ -426,11 +427,11 @@ function App() {
   const hasAnyFilter = selectedStatusFilter || selectedPoiFilter || selectedSizeFilter;
 
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', fontFamily: 'sans-serif', background: '#fff' }}>
-      {/* Sidebar with navigation */}
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', fontFamily: 'sans-serif', background: '#fff' }}>
+      {/* Top navigation bar */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} dashboardView={dashboardView} setDashboardView={setDashboardView} pois={pois} onSelectPOI={setSelectedPOI} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(c => !c)} sidebarCollapsed={sidebarCollapsed} />
       {/* Main Content Area */}
-      <div style={{ flex: 1, marginLeft: sidebarCollapsed ? 48 : 180, padding: 20, overflowY: 'auto', height: '100vh', background: '#fff', color: '#111', transition: 'margin-left 0.2s' }}>
+      <div style={{ flex: 1, marginTop: 46, padding: activeTab === 'ewaybill' ? '12px 12px' : 20, overflowY: 'auto', background: '#fff', color: '#111' }}>
         {loading && (
           <div style={{ color: '#111', textAlign: 'center', marginTop: 32, fontSize: 24 }}>
             Loading vehicles...
@@ -759,7 +760,9 @@ function App() {
                     SECONDARY: 'Distributor', TERTIARY: 'Dealer', OTHER: 'Other',
                   };
                   // Assign each vehicle to its single nearest POI; leftovers = in transit
-                  const filteredVehicles = vehicles.filter(v => {
+                  const filteredVehicles = vehicles
+                    .map(v => ({ ...v, latitude: v.latitude ?? v.lat, longitude: v.longitude ?? v.lng }))
+                    .filter(v => {
                     if (selectedStatusFilter && v.status !== selectedStatusFilter) return false;
                     if (selectedSizeFilter === '__UNSET__' && v.vehicle_size) return false;
                     if (selectedSizeFilter && selectedSizeFilter !== '__UNSET__' && (v.vehicle_size || '') !== selectedSizeFilter) return false;
@@ -796,7 +799,7 @@ function App() {
                   const approachTotal = Object.values(poiApproachingMap).reduce((s, arr) => s + arr.length, 0);
                   const poisWithVehicles = [...pois]
                     .map(poi => ({ ...poi, vehiclesAtPoi: poiVehicleMap[poi.id] || [], approachingVehicles: poiApproachingMap[poi.id] || [] }))
-                    .filter(poi => poi.vehiclesAtPoi.length > 0 || poi.approachingVehicles.length > 0)
+                    .filter(poi => showAllPois ? true : (poi.vehiclesAtPoi.length > 0 || poi.approachingVehicles.length > 0))
                     .sort((a, b) => (b.vehiclesAtPoi.length + b.approachingVehicles.length) - (a.vehiclesAtPoi.length + a.approachingVehicles.length));
                   const totalParked = poisWithVehicles.reduce((s, p) => s + p.vehiclesAtPoi.length, 0);
 
@@ -827,9 +830,9 @@ function App() {
                   return (
                     <>
                       {/* Summary bar */}
-                      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '5px 13px', fontSize: 12, fontWeight: 700, color: '#166534' }}>
-                          📍 {poisWithVehicles.length} POIs occupied
+                          📍 {showAllPois ? pois.length : poisWithVehicles.length} POIs {showAllPois ? 'total' : 'occupied'}
                         </div>
                         <div style={{ background: '#eff6ff', border: '1px solid #2563eb', borderRadius: 8, padding: '5px 13px', fontSize: 12, fontWeight: 700, color: '#1e40af' }}>
                           🚛 {totalParked} parked
@@ -844,6 +847,11 @@ function App() {
                             🛣️ {inTransit.length} in transit
                           </div>
                         )}
+                        <button
+                          onClick={() => setShowAllPois(v => !v)}
+                          style={{ marginLeft: 'auto', padding: '5px 13px', fontSize: 12, fontWeight: 700, borderRadius: 8, border: '1px solid #6366f1', background: showAllPois ? '#6366f1' : '#fff', color: showAllPois ? '#fff' : '#6366f1', cursor: 'pointer' }}>
+                          {showAllPois ? '📍 Occupied only' : '🗂️ Show all POIs'}
+                        </button>
                       </div>
 
                       {/* POI cards */}
@@ -964,9 +972,7 @@ function App() {
         )}
 
         {activeTab === 'ewaybill' && (
-          <div style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
-            <EwayBillHub defaultTab="import" />
-          </div>
+          <EwayBillHub defaultTab="import" />
         )}
 
         {(activeTab === 'unloading-rates' || activeTab === 'bulk-unloading-charges') && (
@@ -994,15 +1000,16 @@ function App() {
             <h2 style={{ color: '#1e293b', fontWeight: 700, fontSize: 28, marginBottom: 16 }}>POI Details (Sorted by Vehicle Count)</h2>
             <ul style={{ listStyle: 'none', padding: 0 }}>
               {pois.sort((poiA, poiB) => {
+                const normVehicles = vehicles.map(v => ({ ...v, latitude: v.latitude ?? v.lat, longitude: v.longitude ?? v.lng }));
                 // Count vehicles for poiA
-                const vehiclesA = vehicles.filter(v => {
+                const vehiclesA = normVehicles.filter(v => {
                   if (!v.latitude || !v.longitude || !poiA.latitude || !poiA.longitude) return false;
                   const dist = haversine(parseFloat(v.latitude), parseFloat(v.longitude), parseFloat(poiA.latitude), parseFloat(poiA.longitude));
                   return dist <= 1500;
                 }).length;
                 
                 // Count vehicles for poiB
-                const vehiclesB = vehicles.filter(v => {
+                const vehiclesB = normVehicles.filter(v => {
                   if (!v.latitude || !v.longitude || !poiB.latitude || !poiB.longitude) return false;
                   const dist = haversine(parseFloat(v.latitude), parseFloat(v.longitude), parseFloat(poiB.latitude), parseFloat(poiB.longitude));
                   return dist <= 1500;
@@ -1011,9 +1018,10 @@ function App() {
                 // Sort descending (highest vehicle count first)
                 return vehiclesB - vehiclesA;
               }).map((poi) => {
+                const normVehicles = vehicles.map(v => ({ ...v, latitude: v.latitude ?? v.lat, longitude: v.longitude ?? v.lng }));
                 // Only show vehicles within POI's radius
                 const poiRadius = poi.radius_meters || 1000; // Use POI's radius, default 1000m
-                const vehiclesAtPoi = vehicles.filter(v => {
+                const vehiclesAtPoi = normVehicles.filter(v => {
                   if (!v.latitude || !v.longitude || !poi.latitude || !poi.longitude) return false;
                   const dist = haversine(
                     parseFloat(v.latitude),

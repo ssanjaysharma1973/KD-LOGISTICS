@@ -277,7 +277,7 @@ function BillsListTab() {
   return (
     <div>
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, alignItems: 'flex-end' }}>
         <input placeholder="🔍 Search EWB no / vehicle / place…" value={filters.search} onChange={e => fld('search', e.target.value)}
           style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, minWidth: 220 }} />
         <select value={filters.movement_type} onChange={e => fld('movement_type', e.target.value)}
@@ -310,7 +310,7 @@ function BillsListTab() {
           <thead>
             <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
               {['EWB No', 'Doc Date', 'Vehicle', 'From', 'To', 'Value', 'Valid Upto', 'Movement', 'Status', 'Munshi', ''].map(h => (
-                <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>{h}</th>
+                <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', fontSize: 12 }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -331,21 +331,21 @@ function BillsListTab() {
                     style={{ background: rowBg, borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
                     onClick={() => setExpanded(expanded === b.id ? null : b.id)}
                   >
-                    <td style={{ padding: '8px 12px', fontWeight: 600, color: '#1d4ed8', fontFamily: 'monospace' }}>{b.ewb_no || '—'}</td>
-                    <td style={{ padding: '8px 12px', color: '#374151' }}>{b.doc_date ? b.doc_date.slice(0, 10) : '—'}</td>
-                    <td style={{ padding: '8px 12px', fontWeight: 600 }}>{b.vehicle_no || '—'}</td>
-                    <td style={{ padding: '8px 12px' }}><div style={{ maxWidth: 130 }}>{b.from_poi_name || b.from_place || '—'}</div></td>
-                    <td style={{ padding: '8px 12px' }}><div style={{ maxWidth: 130 }}>{b.to_poi_name || b.to_place || '—'}</div></td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right' }}>₹{b.total_value ? Number(b.total_value).toLocaleString('en-IN') : '—'}</td>
-                    <td style={{ padding: '8px 12px', color: expired ? '#991b1b' : expiring ? '#92400e' : '#374151' }}>
+                    <td style={{ padding: '5px 10px', fontWeight: 600, color: '#1d4ed8', fontFamily: 'monospace', fontSize: 12 }}>{b.ewb_no || '—'}</td>
+                    <td style={{ padding: '5px 10px', color: '#374151', fontSize: 12 }}>{b.doc_date ? b.doc_date.slice(0, 10) : '—'}</td>
+                    <td style={{ padding: '5px 10px', fontWeight: 600, fontSize: 12 }}>{b.vehicle_no || '—'}</td>
+                    <td style={{ padding: '5px 10px', fontSize: 12 }}>{b.from_poi_name || b.from_place || '—'}</td>
+                    <td style={{ padding: '5px 10px', fontSize: 12 }}>{b.to_poi_name || b.to_place || '—'}</td>
+                    <td style={{ padding: '5px 10px', textAlign: 'right', fontSize: 12 }}>₹{b.total_value ? Number(b.total_value).toLocaleString('en-IN') : '—'}</td>
+                    <td style={{ padding: '5px 10px', color: expired ? '#991b1b' : expiring ? '#92400e' : '#374151', fontSize: 12 }}>
                       {b.valid_upto ? b.valid_upto.slice(0, 10) : '—'}
                       {expired && ' ⚠️'}
                       {expiring && !expired && ' ⏳'}
                     </td>
-                    <td style={{ padding: '8px 12px' }}><Badge text={mv.label} color={mv.color} bg={mv.bg} /></td>
-                    <td style={{ padding: '8px 12px' }}><Badge text={b.status || 'active'} color={sc.color} bg={sc.bg} /></td>
-                    <td style={{ padding: '8px 12px', color: '#374151' }}>{b.munshi_name || '—'}</td>
-                    <td style={{ padding: '8px 12px' }}>
+                    <td style={{ padding: '5px 10px' }}><Badge text={mv.label} color={mv.color} bg={mv.bg} /></td>
+                    <td style={{ padding: '5px 10px' }}><Badge text={b.status || 'active'} color={sc.color} bg={sc.bg} /></td>
+                    <td style={{ padding: '5px 10px', color: '#374151', fontSize: 12 }}>{b.munshi_name || '—'}</td>
+                    <td style={{ padding: '5px 10px' }}>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                         {b.status !== 'delivered' && (
                           <button
@@ -490,12 +490,36 @@ const CHIP_STATUS = {
   unknown:               { bg: '#fff',    color: '#9ca3af', border: '#e5e7eb', dot: '#d1d5db' },
 };
 
+// Colors keyed by vehicle size — cycles through a palette for unknown sizes
+const SIZE_PALETTE = [
+  { bg: '#2563eb', border: '#1d4ed8' }, // blue
+  { bg: '#7c3aed', border: '#6d28d9' }, // purple
+  { bg: '#0891b2', border: '#0e7490' }, // cyan
+  { bg: '#059669', border: '#047857' }, // green
+  { bg: '#d97706', border: '#b45309' }, // amber
+  { bg: '#dc2626', border: '#b91c1c' }, // red
+  { bg: '#db2777', border: '#be185d' }, // pink
+  { bg: '#65a30d', border: '#4d7c0f' }, // lime
+];
+const _sizeColorCache = {};
+let _sizeColorIdx = 0;
+function sizeColor(size) {
+  if (!size) return SIZE_PALETTE[0];
+  if (!_sizeColorCache[size]) {
+    _sizeColorCache[size] = SIZE_PALETTE[_sizeColorIdx % SIZE_PALETTE.length];
+    _sizeColorIdx++;
+  }
+  return _sizeColorCache[size];
+}
+
 function VehicleChip({ v }) {
   const s = CHIP_STATUS[v.load_status] || CHIP_STATUS.unknown;
+  const sc = sizeColor(v.vehicle_size);
   const ewbs = v.active_ewbs?.length || 0;
   const dest = v.active_ewbs?.[0]?.to_poi_name || v.active_ewbs?.[0]?.to_place || '';
   const tip = [
     v.vehicle_no,
+    v.vehicle_size ? `🚛 ${v.vehicle_size}` : '',
     v.current_poi_name ? `📍 ${v.current_poi_name}` : '📍 No POI',
     dest ? `→ ${dest}` : '',
     ewbs ? `📄 ${ewbs} EWB${ewbs > 1 ? 's' : ''}` : 'No active EWBs',
@@ -505,17 +529,17 @@ function VehicleChip({ v }) {
   return (
     <div title={tip} style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
-      background: s.bg, border: `1.5px solid ${s.border}`, color: s.color,
+      background: sc.bg, border: `1.5px solid ${sc.border}`, color: '#fff',
       borderRadius: 7, padding: '4px 10px', fontSize: 12, fontWeight: 700,
       cursor: 'default', whiteSpace: 'nowrap',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+      boxShadow: `0 1px 3px ${sc.bg}55`,
       transition: 'box-shadow 0.15s',
     }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.dot, flexShrink: 0 }} />
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
       {v.vehicle_no}
       {ewbs > 0 && (
         <span style={{
-          background: s.color, color: s.bg,
+          background: '#fff', color: sc.bg,
           borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 800, lineHeight: '16px',
         }}>{ewbs}</span>
       )}
@@ -612,47 +636,43 @@ function VehicleMovementTab() {
 
   return (
     <div>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* Combined toolbar + status bar — single row */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
           placeholder="🔍 Filter vehicle…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, width: 170 }}
+          style={{ padding: '5px 10px', border: '1px solid #d1d5db', borderRadius: 7, fontSize: 12, width: 150 }}
         />
         <select
           value={sizeFilter}
           onChange={e => setSizeFilter(e.target.value)}
-          style={{ padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, color: sizeFilter ? '#111827' : '#9ca3af', background: '#fff' }}
+          style={{ padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 7, fontSize: 12, color: sizeFilter ? '#111827' : '#9ca3af', background: '#fff' }}
         >
           <option value="">All Sizes</option>
           {sizes.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button onClick={fetch_} style={{ padding: '7px 14px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>🔄</button>
-        <span style={{ fontSize: 11, color: '#9ca3af' }}>auto 30s</span>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#374151' }}>{filtered.length} vehicles</span>
-      </div>
-
-      {/* Status bar */}
-      {!loading && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <button onClick={fetch_} style={{ padding: '5px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, cursor: 'pointer', fontSize: 12 }}>🔄</button>
+        <span style={{ fontSize: 10, color: '#9ca3af' }}>auto 30s</span>
+        {/* Status pills inline */}
+        <div style={{ display: 'flex', gap: 6, marginLeft: 4, flexWrap: 'wrap' }}>
           {[
-            { label: '📦 Loading',    val: stats.loading,   bg: '#fffbeb', color: '#92400e', border: '#fde68a' },
-            { label: '🚛 In Transit', val: stats.transit,   bg: '#f0fdf4', color: '#166534', border: '#86efac' },
-            { label: '🔽 Unloading',  val: stats.unloading, bg: '#eff6ff', color: '#1d4ed8', border: '#93c5fd' },
-            { label: '🅿 Parked',     val: stats.parked,    bg: '#f9fafb', color: '#4b5563', border: '#d1d5db' },
+            { label: '📦 Load',    val: stats.loading,   bg: '#fffbeb', color: '#92400e', border: '#fde68a' },
+            { label: '🚛 Transit', val: stats.transit,   bg: '#f0fdf4', color: '#166534', border: '#86efac' },
+            { label: '🔽 Unlod',   val: stats.unloading, bg: '#eff6ff', color: '#1d4ed8', border: '#93c5fd' },
+            { label: '🅿 Park',    val: stats.parked,    bg: '#f9fafb', color: '#4b5563', border: '#d1d5db' },
           ].map(s => (
             <div key={s.label} style={{
-              display: 'flex', alignItems: 'center', gap: 8,
+              display: 'flex', alignItems: 'center', gap: 5,
               background: s.bg, border: `1px solid ${s.border}`, color: s.color,
-              borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600,
+              borderRadius: 7, padding: '4px 10px', fontSize: 11, fontWeight: 700,
             }}>
-              {s.label}
-              <span style={{ fontSize: 16, fontWeight: 800 }}>{s.val}</span>
+              {s.label} <span style={{ fontWeight: 800, fontSize: 13 }}>{s.val}</span>
             </div>
           ))}
         </div>
-      )}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#374151' }}>{filtered.length} veh</span>
+      </div>
 
       {loading ? (
         <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>Loading vehicle positions…</div>
@@ -660,44 +680,67 @@ function VehicleMovementTab() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* Hub groups */}
-          {Object.entries(groups).sort((a, b) => totalAt(b[1]) - totalAt(a[1])).map(([poi, g]) => (
-            <div key={poi} style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          {Object.entries(groups).sort((a, b) => totalAt(b[1]) - totalAt(a[1])).map(([poi, g]) => {
+            const hasLoadUnload = g.loading.length > 0 || g.unloading.length > 0;
+            // If only parked vehicles exist, show them inline on row 1 — no separate park row
+            const inlineParked = !hasLoadUnload && g.parked.length > 0;
+            const separateParked = hasLoadUnload && g.parked.length > 0;
+            return (
+            <div key={poi} style={{ background: '#fff', borderRadius: 10, border: '1px solid #3b82f6', overflow: 'hidden', boxShadow: '0 1px 4px rgba(59,130,246,0.10)' }}>
+              {/* Row 1: POI name + LOAD + UNLOAD chips inline (or PARK chips if no load/unload) */}
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 16px', background: poiTypeBg(g.poi_type), borderBottom: '1px solid #e5e7eb',
+                display: 'flex', alignItems: 'center', gap: 0,
+                background: poiTypeBg(g.poi_type),
+                borderBottom: separateParked ? '1px solid #bfdbfe' : 'none',
               }}>
-                <span style={{ fontSize: 15 }}>{poiTypeIcon(g.poi_type)}</span>
-                <span style={{ fontWeight: 700, fontSize: 13, color: '#111827', flex: 1 }}>{poi}</span>
-                <span style={{ fontSize: 11, background: '#f3f4f6', color: '#6b7280', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>
-                  {totalAt(g)} veh
-                </span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr' }}>
-                <SwimlaneRow
-                  label="LOAD" icon="📦"
-                  labelBg="#fffbeb" labelColor="#92400e" labelBorder="#fde68a"
-                  vehicles={g.loading}
-                  borderBottom={g.unloading.length > 0 || g.parked.length > 0}
-                />
+                {/* POI label */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                  padding: '7px 12px', borderRight: '1px solid #bfdbfe', width: 180, minWidth: 180,
+                }}>
+                  <span style={{ fontSize: 13, flexShrink: 0 }}>{poiTypeIcon(g.poi_type)}</span>
+                  <span style={{ fontWeight: 800, fontSize: 12, color: '#111827', lineHeight: 1.3, wordBreak: 'break-word' }}>{poi}</span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 800, color: '#fff',
+                    background: g.poi_type === 'primary' ? '#2563eb' : g.poi_type === 'secondary' ? '#059669' : '#7c3aed',
+                    border: `1.5px solid ${g.poi_type === 'primary' ? '#1d4ed8' : g.poi_type === 'secondary' ? '#047857' : '#6d28d9'}`,
+                    padding: '1px 7px', borderRadius: 7, flexShrink: 0, marginLeft: 2, whiteSpace: 'nowrap',
+                  }}>
+                    {totalAt(g)}
+                  </span>
+                </div>
+                {/* LOAD chips */}
+                {g.loading.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRight: g.unloading.length > 0 ? '1px solid #fde68a' : 'none', background: '#fffbeb', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#92400e', background: '#fde68a', border: '1.5px solid #f59e0b', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>📦 LOAD</span>
+                    {g.loading.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                  </div>
+                )}
+                {/* UNLOAD chips */}
                 {g.unloading.length > 0 && (
-                  <SwimlaneRow
-                    label="UNLOAD" icon="🔽"
-                    labelBg="#eff6ff" labelColor="#1d4ed8" labelBorder="#bfdbfe"
-                    vehicles={g.unloading}
-                    borderBottom={g.parked.length > 0}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#eff6ff', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8', background: '#bfdbfe', border: '1.5px solid #3b82f6', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🔽 UNLOAD</span>
+                    {g.unloading.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                  </div>
                 )}
-                {g.parked.length > 0 && (
-                  <SwimlaneRow
-                    label="PARK" icon="🅿"
-                    labelBg="#f9fafb" labelColor="#6b7280" labelBorder="#e5e7eb"
-                    vehicles={g.parked}
-                    borderBottom={false}
-                  />
+                {/* If only parked: show inline on row 1 */}
+                {inlineParked && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#f9fafb', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#4b5563', background: '#e5e7eb', border: '1.5px solid #9ca3af', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🅿 PARK</span>
+                    {g.parked.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                  </div>
                 )}
               </div>
+              {/* Row 2: PARK only if there are also LOAD/UNLOAD vehicles */}
+              {separateParked && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', background: '#f9fafb', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#4b5563', background: '#e5e7eb', border: '1.5px solid #9ca3af', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🅿 PARK</span>
+                  {g.parked.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
 
           {/* In Transit */}
           {inTransit.length > 0 && (
@@ -1781,44 +1824,38 @@ export default function EwayBillHub({ defaultTab = 'vehicles' }) {
   };
 
   return (
-    <div style={{ minHeight: '60vh' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#111827' }}>📄 E-Way Bill Hub</h2>
-          {summary && (
-            <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
-              {summary.expiring_soon > 0 && <Badge text={`⏳ ${summary.expiring_soon} Expiring`} color="#92400e" bg="#fef3c7" />}
-              {summary.expired_active > 0 && <Badge text={`🔴 ${summary.expired_active} Expired`} color="#991b1b" bg="#fee2e2" />}
-              {unmatchedCount > 0 && <Badge text={`🔗 ${unmatchedCount} Unmatched`} color="#6d28d9" bg="#ede9fe" />}
-            </div>
-          )}
-        </div>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
-          Import, classify, and track outward/inward movements • Auto-match POIs • Vehicle load status signals
-        </p>
-      </div>
-
-      {/* Tab nav */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid #e5e7eb' }}>
+    <div style={{ minHeight: 0 }}>
+      {/* Header + Tab nav combined row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0, borderBottom: '2px solid #e5e7eb', paddingBottom: 0 }}>
+        <span style={{ fontWeight: 800, fontSize: 14, color: '#111827', whiteSpace: 'nowrap', paddingRight: 8, borderRight: '1px solid #e5e7eb', marginRight: 4 }}>📄 E-Way Bills</span>
+        {summary && (
+          <div style={{ display: 'flex', gap: 4, marginRight: 8 }}>
+            {summary.expiring_soon > 0 && <Badge text={`⏳ ${summary.expiring_soon}`} color="#92400e" bg="#fef3c7" />}
+            {summary.expired_active > 0 && <Badge text={`🔴 ${summary.expired_active}`} color="#991b1b" bg="#fee2e2" />}
+            {unmatchedCount > 0 && <Badge text={`🔗 ${unmatchedCount}`} color="#6d28d9" bg="#ede9fe" />}
+          </div>
+        )}
+      <div style={{ display: 'flex', gap: 2, flex: 1 }}>
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
             style={{
-              padding: '8px 18px', border: 'none', borderBottom: activeTab === t.key ? '2px solid #1d4ed8' : '2px solid transparent',
+              padding: '6px 14px', border: 'none', borderBottom: activeTab === t.key ? '2px solid #1d4ed8' : '2px solid transparent',
               background: 'none', cursor: 'pointer', fontWeight: activeTab === t.key ? 700 : 400,
               color: activeTab === t.key ? '#1d4ed8'
                 : (t.key === 'unmatched' && unmatchedCount > 0 ? '#7c3aed' : '#6b7280'),
-              fontSize: 13, marginBottom: -2, transition: 'all 0.15s',
+              fontSize: 12, marginBottom: -2, transition: 'all 0.15s', whiteSpace: 'nowrap',
             }}
           >
             {tabLabel(t)}
           </button>
         ))}
       </div>
+      </div>
 
       {/* Tab content */}
+      <div style={{ marginTop: 12 }}>
       {activeTab === 'import'    && <ImportTab onImported={() => { fetchSummary(); fetchUnmatchedCount(); }} />}
       {activeTab === 'bills'     && <BillsListTab />}
       {activeTab === 'vehicles'  && <VehicleMovementTab />}
@@ -1826,6 +1863,7 @@ export default function EwayBillHub({ defaultTab = 'vehicles' }) {
       {activeTab === 'summary'   && <SummaryTab />}
       {activeTab === 'unmatched' && <UnmatchedPoisTab onSaved={fetchUnmatchedCount} />}
       {activeTab === 'live'      && <NicLiveTab />}
+      </div>
     </div>
   );
 }
