@@ -2,7 +2,8 @@ import http from 'http';
 import fs from 'fs';
 import url from 'url';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, createRequire } from 'url';
+import { spawnSync } from 'child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -632,7 +633,6 @@ const server = http.createServer(async (req, res) => {
       const to = parsed.query.to || parsed.query.end || null;
       const tenantId = parsed.query.tenantId || req.headers['x-tenant-id'] || null;
       // call Python helper to query sqlite DB (streamlit app DB)
-      const { spawnSync } = require('child_process');
       const py = process.env.PYTHON || 'python';
       const script = './tools/query_track.py';
       // apply server-side clamping for range (safe guard)
@@ -663,7 +663,6 @@ const server = http.createServer(async (req, res) => {
       const from = parsed.query.from || parsed.query.start || null;
       const to = parsed.query.to || parsed.query.end || null;
       const tenantId = parsed.query.tenantId || req.headers['x-tenant-id'] || null;
-      const { spawnSync } = require('child_process');
       const py = process.env.PYTHON || 'python';
       const script = './tools/query_track.py';
       // apply server-side clamping for range (safe guard)
@@ -783,7 +782,6 @@ const server = http.createServer(async (req, res) => {
       
       // Also persist to SQLite database for track history
       try {
-        const { spawnSync } = require('child_process');
         const py = process.env.PYTHON || 'python';
         const dbPath = './fleet_erp_backend_sqlite.db';
         const jsonData = JSON.stringify(normalized);
