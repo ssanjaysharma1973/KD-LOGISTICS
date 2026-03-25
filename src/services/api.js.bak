@@ -1,0 +1,95 @@
+// services/api.js
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+export const fetchVehicles = async ({ tenantId } = {}) => {
+  let url = `${API_BASE_URL}/vehicles`;
+  if (tenantId) url += `?tenantId=${encodeURIComponent(tenantId)}`;
+  const headers = tenantId ? { 'X-Tenant-ID': tenantId } : {};
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error('Failed to fetch vehicles');
+  return response.json();
+};
+
+export const addVehicle = async (vehicleData) => {
+  const response = await fetch(`${API_BASE_URL}/vehicles`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(vehicleData),
+  });
+  if (!response.ok) throw new Error('Failed to add vehicle');
+  return response.json();
+};
+
+export const updateVehicle = async (id, vehicleData) => {
+  const response = await fetch(`${API_BASE_URL}/vehicles/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(vehicleData),
+  });
+  if (!response.ok) throw new Error('Failed to update vehicle');
+  return response.json();
+};
+
+export const fetchRoutePoints = async () => {
+  const response = await fetch(`${API_BASE_URL}/points`);
+  if (!response.ok) throw new Error('Failed to fetch route points');
+  return response.json();
+};
+
+export const addRoutePoint = async (pointData) => {
+  const response = await fetch(`${API_BASE_URL}/points`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(pointData),
+  });
+  if (!response.ok) throw new Error('Failed to add route point');
+  return response.json();
+};
+
+export const fetchVehicleManifest = async (vehicleId, { tenantId } = {}) => {
+  const base = vehicleId
+    ? `${API_BASE_URL}/vehicles/${vehicleId}/manifest`
+    : `${API_BASE_URL}/vehicles/manifest`;
+  const url = tenantId ? `${base}?tenantId=${encodeURIComponent(tenantId)}` : base;
+  const headers = tenantId ? { 'X-Tenant-ID': tenantId } : {};
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error('Failed to fetch vehicle manifest');
+  return response.json();
+};
+
+// utils/validators.js
+export const validateIMEI = (imei) => {
+  return /^[0-9]{15}$/.test(imei);
+};
+
+export const validateLatLng = (lat, lng) => {
+  const latNum = parseFloat(lat);
+  const lngNum = parseFloat(lng);
+  return (
+    !isNaN(latNum) &&
+    !isNaN(lngNum) &&
+    latNum >= -90 &&
+    latNum <= 90 &&
+    lngNum >= -180 &&
+    lngNum <= 180
+  );
+};
+
+const defaultExport = {
+  fetchVehicles,
+  addVehicle,
+  updateVehicle,
+  fetchRoutePoints,
+  addRoutePoint,
+  fetchVehicleManifest,
+  validateIMEI,
+  validateLatLng,
+};
+
+export default defaultExport;

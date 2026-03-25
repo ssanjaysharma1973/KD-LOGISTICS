@@ -1,0 +1,6 @@
+2026-02-07T12:59:16.983689 gps_live_data query failed: database is locked
+2026-02-07T12:59:20.770570 gps_current query failed: database is locked
+2026-02-07T12:59:40.103917 gps_live_data query failed: database is locked
+2026-02-07T12:59:43.967647 gps_current query failed: database is locked
+2026-02-07T13:00:48.327613 locked on query, retry 1: PRAGMA table_info('gps_live_data')
+2026-02-07T13:01:08.167251 locked on query, retry 2: PRAGMA table_info('gps_live_data')

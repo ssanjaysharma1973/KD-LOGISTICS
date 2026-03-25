@@ -1,0 +1,15 @@
+node_modules
+.env
+.env.local
+.git
+.gitignore
+*.db
+*.db.bak*
+*.log
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+build/
+dist/
+.vercel

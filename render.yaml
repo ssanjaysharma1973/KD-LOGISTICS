@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: atul-logistics-api
+    env: python
+    plan: free
+    buildCommand: echo "Building..."
+    startCommand: python app.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: START_SYNC_WORKER
+        value: "true"
+      - key: CLIENT1_SYNC_INTERVAL
+        value: "10"
+      # Set CLIENT1_PROVIDER in Render dashboard (secret)

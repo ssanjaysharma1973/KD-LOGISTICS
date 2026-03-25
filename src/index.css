@@ -1,0 +1,103 @@
+/* --- Dashboard Custom Styles --- */
+.dashboard-bg {
+  background: linear-gradient(120deg, #18191A 60%, #0f2027 100%);
+  min-height: 100vh;
+  width: 100vw;
+}
+
+.dashboard-tabbar {
+  background: linear-gradient(90deg, #0ff 0%, #08f 100%);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px #0008;
+  padding: 8px;
+  margin: 32px auto 32px auto;
+  max-width: 900px;
+  min-width: 320px;
+  width: 90vw;
+  border: 3px solid #fff;
+  position: relative;
+  top: 0;
+  z-index: 10;
+}
+
+.dashboard-card {
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 4px #0001;
+  background: #fff;
+  padding: 1rem 1rem 1rem 1.25rem;
+  transition: box-shadow 0.2s, transform 0.15s;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #3b82f6;
+}
+.dashboard-card:hover {
+  box-shadow: 0 4px 12px #0002;
+  transform: translateY(-1px);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+  padding: 1rem 1.5rem;
+}
+:root {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  color: #1e293b;
+  background-color: #ffffff;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 1.2rem;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+button {
+  border-radius: 5px;
+  border: 1px solid transparent;
+  padding: 0.3em 0.8em;
+  font-size: inherit;
+  font-weight: 600;
+  font-family: inherit;
+  background-color: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+/* Light mode is now always active — no media query needed */

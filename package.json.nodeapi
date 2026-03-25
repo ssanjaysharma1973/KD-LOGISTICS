@@ -1,0 +1,16 @@
+{
+  "name": "atul-logistics-api",
+  "version": "1.0.0",
+  "description": "Node.js API for Atul Logistics GPS tracking",
+  "main": "api.js",
+  "scripts": {
+    "start": "node api.js",
+    "dev": "node api.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

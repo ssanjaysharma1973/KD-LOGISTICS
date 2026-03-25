@@ -1,0 +1,81 @@
+:root{
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --muted: #6b7280;
+  --border: #e6e9ee;
+  --accent: #6366f1;
+  --accent-600: #4f46e5;
+  --success: #10b981;
+  --danger: #ef4444;
+  --glass: rgba(255,255,255,0.6);
+  --radius: 12px;
+}
+
+/* Reset-ish for planner area */
+.route-planner,
+.route-planner * { box-sizing: border-box; }
+.route-planner { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #0f172a; }
+
+/* Layout helpers */
+.rp-grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+@media (min-width: 960px){ .rp-grid{ grid-template-columns: 1fr 360px; } }
+
+/* Modern card */
+.rp-card, .stat-card, .vehicle-management, .recent-activity {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+  padding: 1rem;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.rp-card:hover, .stat-card:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(15,23,42,0.08); }
+
+.stat-card { display:flex; align-items:center; gap:0.75rem; }
+.stat-card .icon{ width:44px; height:44px; display:grid; place-items:center; border-radius:10px; background:linear-gradient(135deg, rgba(99,102,241,0.08), rgba(99,102,241,0.03)); color:var(--accent-600); }
+.stat-card .value{ font-weight:700; font-size:1rem; }
+.stat-card .label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+
+/* Inputs & buttons */
+.route-details input,
+.route-details select,
+.route-details textarea {
+  width:100%; padding:0.6rem 0.75rem; border-radius:8px; border:1px solid var(--border); background:transparent; outline:none;
+  transition: box-shadow .12s ease, border-color .12s ease;
+}
+.route-details input:focus,
+.route-details select:focus,
+.route-details textarea:focus { border-color:var(--accent-600); box-shadow:0 4px 18px rgba(79,70,229,0.08); }
+
+.btn { display:inline-flex; align-items:center; gap:.5rem; padding:.55rem .9rem; border-radius:10px; background:var(--accent-600); color:#fff; font-weight:600; border:0; cursor:pointer; }
+.btn.secondary { background:transparent; color:var(--accent-600); border:1px solid rgba(99,102,241,0.12); }
+.btn:active{ transform:translateY(1px); }
+
+/* Vehicle table responsive */
+.vehicle-management table{ width:100%; border-collapse:collapse; font-size:13px; }
+.vehicle-management thead th{ text-align:left; padding:7px 10px; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+.vehicle-management tbody td{ padding:5px 10px; border-top:1px solid var(--border); font-size:13px; }
+.vehicle-row { transition: background .12s ease; }
+.vehicle-row:hover{ background: linear-gradient(90deg, rgba(99,102,241,0.04), rgba(99,102,241,0.02)); }
+
+/* Compact responsive list fallback */
+@media (max-width:640px){
+  .vehicle-management table{ display:block; }
+  .vehicle-management thead{ display:none; }
+  .vehicle-management tbody tr{ display:block; margin-bottom:.6rem; border-radius:10px; overflow:hidden; border:1px solid var(--border); }
+  .vehicle-management tbody td{ display:flex; justify-content:space-between; padding:.65rem .8rem; }
+}
+
+.recent-activity .item { display:flex; gap:.75rem; align-items:flex-start; padding:.55rem 0; border-bottom:1px dashed rgba(15,23,42,0.04); }
+.recent-activity .item:last-child{ border-bottom:0; }
+.recent-activity .time{ font-size:.75rem; color:var(--muted); }
+
+/* Small utilities */
+.muted{ color:var(--muted); }
+.badge { padding:.25rem .5rem; font-size:.72rem; border-radius:999px; background:var(--glass); color:var(--muted); border:1px solid rgba(15,23,42,0.03); }
+
+/* Map / preview area */
+.map-preview{ width:100%; min-height:280px; border-radius:10px; overflow:hidden; border:1px solid var(--border); background:linear-gradient(180deg,#f8fafc,#ffffff); display:flex; align-items:center; justify-content:center; }
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce){ .rp-card, .stat-card, .btn { transition: none; } }

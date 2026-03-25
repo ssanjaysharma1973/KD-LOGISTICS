@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Fleet Management Application" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <!-- Runtime API base override (helps dev builds pick correct backend without rebuilding) -->
+    <!--
+      If you need to force the frontend to use a specific backend at runtime,
+      set window.__API_BASE in the browser console or add a script like:
+      <script>window.__API_BASE = 'http://localhost:8080';</script>
+      Do NOT set it to a string containing the environment variable name.
+    -->
+    <script>
+      // Increase device offline threshold to 72 hours (ms) for local/dev runs
+      // Override by setting window.__deviceOfflineThresholdMs in browser console if needed.
+      window.__deviceOfflineThresholdMs = window.__deviceOfflineThresholdMs || (72 * 60 * 60 * 1000);
+    </script>
+    
+    <title>Atul Logistics</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
