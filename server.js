@@ -344,20 +344,22 @@ function sendSse(tenantId, payload) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // ── Healthcheck – resolved first, before any async work ──────────────────
+  const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
+  if (rawPath === '/health' || rawPath === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ status: 'ok', ts: Date.now() }));
+  }
+
+  try {
   const parsed = url.parse(req.url, true);
   // normalize pathname by stripping trailing slashes so routes match consistently
-  const pathname = (parsed.pathname || '').replace(/\/+$/g, '') || '/';
+  const pathname = rawPath;
   // enable simple CORS for local dashboard
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-ID');
   if (req.method === 'OPTIONS') return res.end();
-
-  // Health check for Railway
-  if (pathname === '/api/health') {
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ status: 'ok', ts: Date.now() }));
-  }
 
   // Server-Sent Events subscription: clients can connect to receive live updates
   if (pathname === '/api/updates' && req.method === 'GET') {
@@ -1775,6 +1777,14 @@ const server = http.createServer(async (req, res) => {
 
   // fallback
   res.statusCode = 404; res.end(JSON.stringify({ error: 'not found' }));
+
+  } catch (err) {
+    console.error('[server] unhandled request error:', err);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'internal server error' }));
+    }
+  }
 });
 
 const PORT = process.env.PORT || 3000;
