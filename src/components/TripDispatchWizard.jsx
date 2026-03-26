@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { API_BASE } from '../utils/apiBase.js';
 
 // Fix default Leaflet marker icons in Vite
 delete L.Icon.Default.prototype._getIconUrl;
@@ -41,7 +42,7 @@ function InvalidateSize() {
   return null;
 }
 
-const API = 'http://localhost:3000/api';
+const API = `${API_BASE}/api`;
 
 // HERE Flexible Polyline decoder — spec: https://github.com/heremaps/flexible-polyline
 // Structure: [format_version_byte][header_byte][lat_delta][lng_delta]...

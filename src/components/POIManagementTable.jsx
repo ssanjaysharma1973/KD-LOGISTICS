@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../utils/apiBase.js';
 
 const POIManagementTable = () => {
   const [pois, setPois] = useState([]);
@@ -27,7 +28,7 @@ const POIManagementTable = () => {
   });
 
   const CLIENT_ID = 'CLIENT_001';
-  const API_URL = 'http://localhost:3000';
+  const API_URL = API_BASE;
 
   // Fetch all POIs on mount
   useEffect(() => {

@@ -1,5 +1,6 @@
+import { API_BASE } from '../utils/apiBase.js';
 // API Configuration
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+export const API_BASE_URL = process.env.REACT_APP_API_URL || `${API_BASE}/api`;
 export const POI_API_URL = `${API_BASE_URL}/pois`;
 export const VEHICLES_API_URL = `${API_BASE_URL}/vehicles`;
 

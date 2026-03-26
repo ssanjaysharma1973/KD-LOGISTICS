@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import VehicleTracker from '../vehicletracker.jsx';
+import { API_BASE } from '../utils/apiBase.js';
 
 const VehicleTrackerTab = ({ vehicles = [] }) => {
   const [selectedVehicle, setSelectedVehicle] = useState(null);
@@ -82,7 +83,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
 
     // Fetch data range for info display — NEVER auto-fill dates here (avoids race condition
     // where the async response arrives after the user has already set manual custom dates).
-    fetch(`http://localhost:3000/api/gps-data-range?vehicleId=${vehicleId}&clientId=CLIENT_001`)
+    fetch(`${API_BASE}/api/gps-data-range?vehicleId=${vehicleId}&clientId=CLIENT_001`)
       .then(r => r.json())
       .then(d => { if (d.min && d.max) setDataRange(d); })
       .catch(() => {});
@@ -95,7 +96,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
       setTrackLoading(true);
       const id = vehicle.number || vehicle.vehicle_no || vehicle.vehicleNumber || vehicle.id;
       const timeRange = getTimeRange();
-      let url = `http://localhost:3000/api/vehicle-track?vehicleId=${id}&clientId=CLIENT_001`;
+      let url = `${API_BASE}/api/vehicle-track?vehicleId=${id}&clientId=CLIENT_001`;
       if (timeRange.start) url += `&startTime=${timeRange.start}`;
       if (timeRange.end)   url += `&endTime=${timeRange.end}`;
       fetch(url)
@@ -169,7 +170,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
       const promises = vehicles.map(async (vehicle) => {
         try {
           const vehicleIdentifier = vehicle.number || vehicle.vehicle_no || vehicle.id;
-          let url = `http://localhost:3000/api/vehicle-track?vehicleId=${vehicleIdentifier}&clientId=CLIENT_001`;
+          let url = `${API_BASE}/api/vehicle-track?vehicleId=${vehicleIdentifier}&clientId=CLIENT_001`;
           if (timeRange.start) url += `&startTime=${timeRange.start}`;
           if (timeRange.end) url += `&endTime=${timeRange.end}`;
           
@@ -245,7 +246,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
 
       const vehicleIdentifier = vehicle.number || vehicle.vehicle_no || vehicle.vehicleNumber || vehicle.id;
       const timeRange = getTimeRange();
-      let url = `http://localhost:3000/api/vehicle-track?vehicleId=${vehicleIdentifier}&clientId=CLIENT_001`;
+      let url = `${API_BASE}/api/vehicle-track?vehicleId=${vehicleIdentifier}&clientId=CLIENT_001`;
       if (timeRange.start) url += `&startTime=${timeRange.start}`;
       if (timeRange.end) url += `&endTime=${timeRange.end}`;
       
@@ -590,7 +591,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
                     const id = vehicle.number || vehicle.vehicle_no || vehicle.vehicleNumber || vehicle.id;
                     setTrackLoading(true);
                     setTrackError(null);
-                    fetch(`http://localhost:3000/api/vehicle-track?vehicleId=${id}&clientId=CLIENT_001&startTime=${new Date(dataRange.min).toISOString()}&endTime=${new Date(dataRange.max).toISOString()}`)
+                    fetch(`${API_BASE}/api/vehicle-track?vehicleId=${id}&clientId=CLIENT_001&startTime=${new Date(dataRange.min).toISOString()}&endTime=${new Date(dataRange.max).toISOString()}`)
                       .then(r => r.json())
                       .then(data => {
                         if (!Array.isArray(data) || data.length === 0) { setTrackError('No GPS history available for this vehicle'); return; }

@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Bell } from 'lucide-react';
 import { formatDurationSince } from '../utils/date.js';
 import {
+import { API_BASE } from '../utils/apiBase.js';
   getVehicleStatusStyles,
   filterVehiclesBy,
   getVehicleStats,
@@ -31,7 +32,7 @@ export default function DashboardPage({
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/vehicles-status?clientId=CLIENT_001');
+        const response = await fetch(`${API_BASE}/api/vehicles-status?clientId=CLIENT_001`);
         if (response.ok) {
           const data = await response.json();
           setStats({

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { API_BASE } from '../utils/apiBase.js';
 
-const API = 'http://localhost:3000/api';
-const APP_API = 'http://localhost:3000';
+const API = `${API_BASE}/api`;
+const APP_API = API_BASE;
 const CLIENT_ID = 'CLIENT_001';
 
 const CATEGORY_STYLES = {

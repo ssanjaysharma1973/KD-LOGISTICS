@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { API_BASE } from '../utils/apiBase.js';
 
-const API = 'http://localhost:3000/api';
+const API = `${API_BASE}/api`;
 
 const CATEGORY_STYLES = {
   PRIMARY:   { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd', icon: '🏭', label: 'Primary (From Hub)' },

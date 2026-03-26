@@ -3,8 +3,9 @@
  * Admin clients can correct KM values; dispatch system picks from this table.
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { API_BASE } from '../utils/apiBase.js';
 
-const API = 'http://localhost:3000/api';
+const API = `${API_BASE}/api`;
 
 const TAG = {
   highway:   { bg: '#fef3c7', color: '#92400e', text: '🛣️ Highway' },

@@ -145,6 +145,32 @@ def get_vehicles():
     ]
     return jsonify({"vehicles": vehicles}), 200
 
+# Add /api/vehicles-master endpoint (vehicle registry from vehicles table)
+@app.route('/api/vehicles-master', methods=['GET'])  # type: ignore
+def get_vehicles_master():
+    """Return vehicle master list for a client from the vehicles table."""
+    logger.info("[ROUTE] /api/vehicles-master called (real DB)")
+    client_id = request.args.get('clientId', request.args.get('client_id', 'CLIENT_001'))
+    conn = sqlite3.connect('fleet_erp_backend_sqlite.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT * FROM vehicles WHERE client_id = ? ORDER BY vehicle_no",
+            (client_id,)
+        )
+        rows = cursor.fetchall()
+        vehicles = [
+            {**dict(row), "number": row["vehicle_no"], "vehicle_reg_no": row["vehicle_no"]}
+            for row in rows
+        ]
+    except Exception as e:
+        logger.warning(f"[ROUTE] /api/vehicles-master DB error: {e}")
+        vehicles = []
+    finally:
+        conn.close()
+    return jsonify(vehicles), 200
+
 # Add /api/config endpoint after app is defined
 @app.route('/api/config', methods=['GET'])  # type: ignore
 def get_config():

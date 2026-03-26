@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { API_BASE } from '../utils/apiBase.js';
 
-const API = 'http://localhost:3000/api';
+const API = `${API_BASE}/api`;
 
 export default function EwayBillManagement() {
   const [ewaybills, setEwaybills] = useState([]);

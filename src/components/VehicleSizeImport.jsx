@@ -5,8 +5,9 @@
  */
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { API_BASE } from '../utils/apiBase.js';
 
-const API = 'http://localhost:3000/api';
+const API = `${API_BASE}/api`;
 const CLIENT_ID = 'CLIENT_001';
 
 // Map spreadsheet type values → DB category keys

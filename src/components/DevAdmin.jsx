@@ -4,8 +4,9 @@
  * NOT shown in sidebar. NOT visible to clients.
  */
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../utils/apiBase.js';
 
-const API = 'http://localhost:3000/api';
+const API = `${API_BASE}/api`;
 
 const SIZE_DISPLAY = {
   category_1_32ft_34ft: '32/34 Ft',
