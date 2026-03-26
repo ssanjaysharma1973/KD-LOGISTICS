@@ -683,7 +683,7 @@ const server = http.createServer(async (req, res) => {
         });
       }
       console.error('query_track spawn failed', { status: out.status, stderr: out.stderr, stdout: out.stdout });
-      try { const fs = require('fs'); fs.appendFileSync('query_track-debug.log', JSON.stringify({ ts: new Date().toISOString(), args, status: out.status, stderr: out.stderr, stdout: out.stdout }) + '\n'); } catch (e) { }
+      try { fs.appendFileSync('query_track-debug.log', JSON.stringify({ ts: new Date().toISOString(), args, status: out.status, stderr: out.stderr, stdout: out.stdout }) + '\n'); } catch { }
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify([]));
     }

@@ -330,7 +330,7 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
         />
 
         <FitBounds vehicles={uniqueVehicles} trackedPath={displayPath} trackingVehicleId={trackingVehicleId} />
-        {uniqueVehicles.map(v => {
+        {uniqueVehicles.map((v, idx) => {
           const isHighlighted = highlightNumbers.includes(v.number);
           if (isHighlighted) {
             return (
@@ -392,7 +392,7 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
           }
           return (
             <Marker 
-              key={v.id || v.number || Math.random()} 
+              key={v.id || v.number || `v-${idx}`} 
               position={[Number(v.lat), Number(v.lng)]}
               eventHandlers={{
                 dblclick: () => handleCreatePOI(v)
