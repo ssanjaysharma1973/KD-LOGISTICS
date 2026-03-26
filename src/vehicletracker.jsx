@@ -6,6 +6,8 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
+import { useVehicleData } from './context/VehicleDataContext.jsx';
+
 // Fix default marker icon paths for bundlers (CRA/Vite)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -59,8 +61,12 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
     }
   }, [trackedPath]);
   
-  // State for POIs
+  // POIs from shared context — no local fetch needed
+  const { pois: ctxPois, refresh: refreshCtx } = useVehicleData();
   const [pois, setPOIs] = React.useState([]);
+
+  // Sync context POIs into local state for map rendering
+  React.useEffect(() => { setPOIs(ctxPois); }, [ctxPois]);
 
   // Sort by gps_time ascending, then deduplicate points within 50m of previous
   const displayPath = React.useMemo(() => {
@@ -166,14 +172,8 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
 
       const data = await response.json();
       if (data.success) {
-        // Add new POI to state immediately (no delay)
-        setPOIs(prev => [...prev, {
-          id: data.poi_id,
-          poi_name: data.poi_name,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          city: data.city
-        }]);
+        // Refresh context so POI appears everywhere
+        await refreshCtx();
         alert(`✅ POI "${data.poi_name}" created!`);
       } else {
         alert(`❌ Error: ${data.error}`);
@@ -183,21 +183,7 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
     }
   };
 
-  // Function to fetch POIs from API
-  const fetchPOIs = async () => {
-    try {
-      const response = await fetch('/api/pois?clientId=CLIENT_001');
-      const data = await response.json();
-      setPOIs(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Failed to fetch POIs:', err);
-    }
-  };
-
-  // Fetch POIs on component mount
-  React.useEffect(() => {
-    fetchPOIs();
-  }, []);
+  // POIs are synced from context above — no separate fetch needed
 
   // Track if user has manually interacted with map
   const [, setUserInteracting] = React.useState(false);

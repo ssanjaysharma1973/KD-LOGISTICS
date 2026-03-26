@@ -2,8 +2,9 @@
  * RoutesPage.jsx — Modern Routes Management with Live OSRM Road Path Map
  * Dark theme, route cards sidebar, Leaflet map with yellow highway + blue local routes
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
+import { useVehicleData } from '../context/VehicleDataContext.jsx';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -48,10 +49,12 @@ const inp = {
 const sel = { ...inp, cursor: 'pointer' };
 
 export default function RoutesPage({ clientId = 'CLIENT_001' }) {
+  const { pois: ctxPois, munshis: ctxMunshis, refresh: refreshCtx } = useVehicleData();
   const [routes, setRoutes] = useState([]);
-  const [pois, setPois]     = useState([]);
-  const [cities, setCities] = useState([]);
   const [loading, setLoading]           = useState(true);
+
+  // Derive cities list from context POIs
+  const cities = useMemo(() => [...new Set(ctxPois.map(p => p.city).filter(Boolean))].sort(), [ctxPois]);
   const [search, setSearch]             = useState('');
   const [selectedRoute, setSelectedRoute]   = useState(null);
   const [routeGeom, setRouteGeom]           = useState(null);
@@ -62,6 +65,8 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
   const [deleting, setDeleting]             = useState(null);
   const [fromCity, setFromCity]             = useState('');
   const [toCity, setToCity]                 = useState('');
+  // munshis come from context — no local state needed
+  const [selectedMunshiId, setSelectedMunshiId] = useState('');
   const [form, setForm] = useState({
     route_no: '', route_name: '', from_location: '', to_location: '',
     route_km: '', expense_per_km: '', num_points: 0, total_estimated_expense: '', toll_charges: '',
@@ -126,23 +131,29 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
   const [showMapConfirm, setShowMapConfirm]       = useState(false);
 
   // ── Data Fetch ──────────────────────────────────────────────────────────────
-  const fetchRoutes = useCallback(async () => {
+  // munshis provided by VehicleDataContext — no local fetch needed
+  const munshis = ctxMunshis;
+
+  // Helper: get primary POIs assigned to a munshi
+  const getMunshiPrimaryPois = useCallback((munshiId) => {
+    if (!munshiId) return [];
+    const munshi = munshis.find(m => String(m.id) === String(munshiId));
+    if (!munshi?.primary_poi_ids) return [];
     try {
+      const ids = JSON.parse(munshi.primary_poi_ids);
+      return pois.filter(p => ids.includes(p.id) || ids.includes(String(p.id)));
+    } catch { return []; }
+  }, [munshis, pois]);
+
+  const fetchRoutes = useCallback(async () => {    try {
       const res = await fetch(`/api/standard-routes?clientId=${encodeURIComponent(clientId)}`);
       const data = await res.json();
       setRoutes(Array.isArray(data) ? data : []);
     } catch { setRoutes([]); }
   }, [clientId]);
 
-  const fetchPois = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/pois?clientId=${encodeURIComponent(clientId)}`);
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : [];
-      setPois(list);
-      setCities([...new Set(list.map(p => p.city).filter(Boolean))].sort());
-    } catch { setPois([]); }
-  }, [clientId]);
+  // POIs provided by VehicleDataContext — no local fetch needed
+  const pois = ctxPois;
 
   // Auto-fetch live counts for all routes when routes load
   const fetchAllLiveCounts = useCallback(async (routeList) => {
@@ -153,9 +164,9 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchRoutes(), fetchPois()]).finally(() => { if (!cancelled) setLoading(false); });
+    fetchRoutes().finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [fetchRoutes, fetchPois]);
+  }, [fetchRoutes]);
 
   // Once routes arrive, fetch all live counts
   useEffect(() => {
@@ -199,6 +210,7 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
   const openAddForm = () => {
     setEditingRoute(null);
     setFromCity(''); setToCity('');
+    setSelectedMunshiId('');
     setForm({ route_no: '', route_name: '', from_location: '', to_location: '', route_km: '', expense_per_km: '18', num_points: 0, total_estimated_expense: '', toll_charges: '' });
     setMapSelectMode(true);
     setMapFromPoi(null);
@@ -1021,6 +1033,43 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
                 </div>
               </div>
 
+              {/* Munshi Auto-fill */}
+              <div style={{ marginBottom: 14, background: '#0f172a', borderRadius: 8, padding: '10px 14px', border: '1px solid #334155' }}>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#fbbf24', marginBottom: 6, letterSpacing: 1 }}>🧾 AUTO-FILL FROM MUNSHI (optional)</label>
+                <select
+                  value={selectedMunshiId}
+                  onChange={e => {
+                    const mid = e.target.value;
+                    setSelectedMunshiId(mid);
+                    if (!mid) return;
+                    const primaryPois = getMunshiPrimaryPois(mid);
+                    if (primaryPois.length === 1) {
+                      const p = primaryPois[0];
+                      setFromCity(p.city || '');
+                      setForm(f => ({ ...f, from_location: p.poi_name }));
+                    } else if (primaryPois.length > 1) {
+                      // set city from first primary POI, let user pick the specific POI
+                      setFromCity(primaryPois[0].city || '');
+                      setForm(f => ({ ...f, from_location: primaryPois[0].poi_name }));
+                    }
+                  }}
+                  style={{ width: '100%', padding: '7px 10px', background: '#1e293b', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 6, fontSize: 13 }}
+                >
+                  <option value=''>— Select Munshi to auto-fill From POI —</option>
+                  {munshis.map(m => (
+                    <option key={m.id} value={String(m.id)}>{m.name}{m.area ? ` · ${m.area}` : ''}</option>
+                  ))}
+                </select>
+                {selectedMunshiId && getMunshiPrimaryPois(selectedMunshiId).length > 0 && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: '#4ade80' }}>
+                    ✅ Primary POIs: {getMunshiPrimaryPois(selectedMunshiId).map(p => p.poi_name).join(' · ')}
+                  </div>
+                )}
+                {selectedMunshiId && getMunshiPrimaryPois(selectedMunshiId).length === 0 && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: '#f87171' }}>⚠ No primary POIs assigned to this munshi yet.</div>
+                )}
+              </div>
+
               {/* Row 2: From City + From POI */}
               <div style={{ marginBottom: 6 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -1044,11 +1093,16 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
                       required
                       value={form.from_location}
                       onChange={e => setForm(f => ({ ...f, from_location: e.target.value }))}
-                      disabled={!fromCity}
+                      disabled={!fromCity && !selectedMunshiId}
                       style={sel}
                     >
                       <option value="">-- Select POI --</option>
-                      {getPoisForCity(fromCity).map(p => <option key={p.id} value={p.poi_name}>{p.poi_name}</option>)}
+                      {selectedMunshiId && getMunshiPrimaryPois(selectedMunshiId).length > 0
+                        ? getMunshiPrimaryPois(selectedMunshiId).map(p => (
+                            <option key={p.id} value={p.poi_name}>⭐ {p.poi_name}</option>
+                          ))
+                        : getPoisForCity(fromCity).map(p => <option key={p.id} value={p.poi_name}>{p.poi_name}</option>)
+                      }
                     </select>
                   </div>
                 </div>

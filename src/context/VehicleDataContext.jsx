@@ -17,6 +17,7 @@ export function VehicleDataProvider({ children }) {
 
   const [vehicles, setVehicles] = useState([]);
   const [pois, setPois] = useState([]);
+  const [munshis, setMunshis] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Fetch vehicles with GPS data + computed status from backend
@@ -51,12 +52,28 @@ export function VehicleDataProvider({ children }) {
     }
   }, [clientId]);
 
+  // Fetch Munshis (drivers)
+  const fetchMunshis = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/munshis?clientId=${encodeURIComponent(clientId)}`,
+        { headers: { 'X-Tenant-ID': clientId } }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setMunshis(Array.isArray(data) ? data : (data.munshis || []));
+      }
+    } catch (error) {
+      console.error('[VehicleDataContext] Error fetching munshis:', error);
+    }
+  }, [clientId]);
+
   const intervalRef = useRef(null);
 
-  // Initial load + refresh
+  // refresh() = Promise.all of all three fetches
   const refresh = useCallback(async () => {
-    await Promise.all([fetchVehicles(), fetchPois()]);
-  }, [fetchVehicles, fetchPois]);
+    await Promise.all([fetchVehicles(), fetchPois(), fetchMunshis()]);
+  }, [fetchVehicles, fetchPois, fetchMunshis]);
 
   useEffect(() => {
     refresh().finally(() => setLoading(false));
@@ -92,7 +109,7 @@ export function VehicleDataProvider({ children }) {
   }, [vehicles]);
 
   return (
-    <VehicleDataContext.Provider value={{ vehicles, pois, stats, loading, refresh }}>
+    <VehicleDataContext.Provider value={{ vehicles, pois, munshis, stats, loading, refresh }}>
       {children}
     </VehicleDataContext.Provider>
   );
