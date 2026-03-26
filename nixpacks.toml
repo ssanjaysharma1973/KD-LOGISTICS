@@ -9,6 +9,3 @@ cmds = ["npm run build"]
 
 [start]
 cmd = "node server.js"
-
-[staticAssets]
-enabled = false
