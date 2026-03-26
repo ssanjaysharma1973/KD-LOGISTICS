@@ -2,7 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import url from 'url';
 import path from 'path';
-import { fileURLToPath, createRequire } from 'url';
+import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
