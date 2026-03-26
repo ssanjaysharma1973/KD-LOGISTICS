@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 
 const CATEGORY_STYLES = {
   PRIMARY:   { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd', icon: '🏭', label: 'Primary (From Hub)' },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
-const API = 'http://localhost:3000/api/eway-bills-hub';
+const API = '/api/eway-bills-hub';
 
 const MOVEMENT_LABELS = {
   primary_to_secondary:  { label: 'Hub → Distributor',      color: '#1d4ed8', bg: '#dbeafe' },
@@ -1393,7 +1393,7 @@ function UnmatchedPoisTab() {
 
 // ─── ROOT COMPONENT ────────────────────────────────────────────────────────────
 // ─── NIC LIVE EWB TAB ─────────────────────────────────────────────────────────
-const EWB_API = 'http://localhost:3000/api/ewb';
+const EWB_API = '/api/ewb';
 
 const EXTEND_REASONS = [
   { value: '1', label: 'Natural Calamity' },

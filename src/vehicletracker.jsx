@@ -150,7 +150,7 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
     if (!poiName) return;
     
     try {
-      const response = await fetch('http://localhost:3000/api/pois', {
+      const response = await fetch('/api/pois', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -186,7 +186,7 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
   // Function to fetch POIs from API
   const fetchPOIs = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/pois?clientId=CLIENT_001');
+      const response = await fetch('/api/pois?clientId=CLIENT_001');
       const data = await response.json();
       setPOIs(Array.isArray(data) ? data : []);
     } catch (err) {

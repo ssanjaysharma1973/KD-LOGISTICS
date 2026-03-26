@@ -77,7 +77,7 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
   const fetchLiveVehicles = useCallback(async (routeId) => {
     setLiveData(p => ({ ...p, [routeId]: { ...(p[routeId] || {}), loading: true } }));
     try {
-      const res  = await fetch(`http://localhost:3000/api/standard-routes/${routeId}/live-vehicles`);
+      const res  = await fetch(`/api/standard-routes/${routeId}/live-vehicles`);
       const json = await res.json();
       setLiveData(p => ({
         ...p,
@@ -128,7 +128,7 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
   // ── Data Fetch ──────────────────────────────────────────────────────────────
   const fetchRoutes = useCallback(async () => {
     try {
-      const res = await fetch(`http://localhost:3000/api/standard-routes?clientId=${encodeURIComponent(clientId)}`);
+      const res = await fetch(`/api/standard-routes?clientId=${encodeURIComponent(clientId)}`);
       const data = await res.json();
       setRoutes(Array.isArray(data) ? data : []);
     } catch { setRoutes([]); }
@@ -136,7 +136,7 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
 
   const fetchPois = useCallback(async () => {
     try {
-      const res = await fetch(`http://localhost:3000/api/pois?clientId=${encodeURIComponent(clientId)}`);
+      const res = await fetch(`/api/pois?clientId=${encodeURIComponent(clientId)}`);
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
       setPois(list);
@@ -271,7 +271,7 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
     }
     setSaving(true);
     try {
-      const res = await fetch('http://localhost:3000/api/standard-routes', {
+      const res = await fetch('/api/standard-routes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, clientId }),
@@ -314,7 +314,7 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
     }
     setSaving(true);
     try {
-      const url    = editingRoute ? `http://localhost:3000/api/standard-routes/${editingRoute.id}` : 'http://localhost:3000/api/standard-routes';
+      const url    = editingRoute ? `/api/standard-routes/${editingRoute.id}` : '/api/standard-routes';
       const method = editingRoute ? 'PUT' : 'POST';
       const res    = await fetch(url, {
         method,
@@ -331,7 +331,7 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
     if (!window.confirm('Delete this route?')) return;
     setDeleting(id);
     try {
-      await fetch(`http://localhost:3000/api/standard-routes/${id}`, { method: 'DELETE' });
+      await fetch(`/api/standard-routes/${id}`, { method: 'DELETE' });
       fetchRoutes();
       if (selectedRoute?.id === id) { setSelectedRoute(null); setRouteGeom(null); }
     } catch (_e) { /* delete failed */ }
@@ -346,7 +346,7 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
     setBulkSearch('');
     setBulkLoading(true);
     try {
-      const res  = await fetch(`http://localhost:3000/api/vehicles-master?clientId=${encodeURIComponent(clientId)}`);
+      const res  = await fetch(`/api/vehicles-master?clientId=${encodeURIComponent(clientId)}`);
       const list = await res.json();
       const vehicles = Array.isArray(list) ? list : [];
       setBulkVehicles(vehicles);
@@ -390,14 +390,14 @@ export default function RoutesPage({ clientId = 'CLIENT_001' }) {
     await Promise.all(toUpdate.map(async v => {
       let ids; try { ids = JSON.parse(v.primary_poi_ids || '[]'); } catch { ids = []; }
       ids = bulkChecked.has(v.id) ? [...new Set([...ids, poi.id])] : ids.filter(id => id !== poi.id);
-      await fetch(`http://localhost:3000/api/vehicles-master/${v.id}/default-pois`, {
+      await fetch(`/api/vehicles-master/${v.id}/default-pois`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ poi_ids: ids }),
       });
     }));
     // refresh local bulkVehicles so re-open is accurate
-    const res  = await fetch(`http://localhost:3000/api/vehicles-master?clientId=${encodeURIComponent(clientId)}`);
+    const res  = await fetch(`/api/vehicles-master?clientId=${encodeURIComponent(clientId)}`);
     const list = await res.json();
     setBulkVehicles(Array.isArray(list) ? list : []);
     setBulkSaving(false);

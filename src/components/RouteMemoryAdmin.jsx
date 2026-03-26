@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 
 const TAG = {
   highway:   { bg: '#fef3c7', color: '#92400e', text: '🛣️ Highway' },

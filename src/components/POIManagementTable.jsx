@@ -27,7 +27,7 @@ const POIManagementTable = () => {
   });
 
   const CLIENT_ID = 'CLIENT_001';
-  const API_URL = 'http://localhost:3000';
+  const API_URL = '';
 
   // Fetch all POIs on mount
   useEffect(() => {

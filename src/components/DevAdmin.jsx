@@ -5,7 +5,7 @@
  */
 import React, { useState, useEffect } from 'react';
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 
 const SIZE_DISPLAY = {
   category_1_32ft_34ft: '32/34 Ft',

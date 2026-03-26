@@ -9,7 +9,7 @@ import { useTenant } from '../TenantContext.js';
 const VehicleDataContext = createContext(null);
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 export function VehicleDataProvider({ children }) {
   const { tenantKey } = useTenant();

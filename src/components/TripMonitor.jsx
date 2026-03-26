@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 
 // ── Change this PIN to restrict admin access ──────────────────────────────
 const ADMIN_PIN  = 'ATLOG';

@@ -1,6 +1,6 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 const CLIENT_ID = 'CLIENT_001';
 
 export default function BulkUnloadingCharges() {
@@ -152,7 +152,7 @@ export default function BulkUnloadingCharges() {
     return { bg: '#f1f5f9', color: '#475569' };
   };
 
-  const fmtAmt = (v) => v > 0 ? `₹${v.toLocaleString('en-IN')}` : (v === 0 ? '—' : '');
+  const fmtAmt = (v) => v > 0 ? `?${v.toLocaleString('en-IN')}` : (v === 0 ? '�' : '');
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>
@@ -229,21 +229,21 @@ export default function BulkUnloadingCharges() {
 
       {/* Search + Filter bar */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
-        <input type="text" placeholder="🔍 Search by name..."
+        <input type="text" placeholder="?? Search by name..."
           value={search} onChange={e => setSearch(e.target.value)}
           style={{ flex: 2, minWidth: '200px', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px' }} />
 
         {/* City filter */}
         <select value={cityFilter} onChange={e => setCityFilter(e.target.value)}
           style={{ flex: 1, minWidth: '160px', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', background: cityFilter ? '#eff6ff' : '#fff', color: '#1e293b', cursor: 'pointer' }}>
-          <option value="">🏙️ All Cities</option>
+          <option value="">??? All Cities</option>
           {cities.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
         {/* Type filter */}
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
           style={{ minWidth: '150px', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', background: typeFilter ? '#eff6ff' : '#fff', color: '#1e293b', cursor: 'pointer' }}>
-          <option value="">📂 All Types</option>
+          <option value="">?? All Types</option>
           <option value="secondary">Distributor</option>
           <option value="tertiary">Dealer</option>
           <option value="other">Other</option>
@@ -252,7 +252,7 @@ export default function BulkUnloadingCharges() {
         {(cityFilter || typeFilter || search) && (
           <button onClick={() => { setCityFilter(''); setTypeFilter(''); setSearch(''); }}
             style={{ padding: '8px 14px', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            ✕ Clear
+            ? Clear
           </button>
         )}
 

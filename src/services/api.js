@@ -8,7 +8,7 @@ const getApiBase = () => {
   if (typeof window !== 'undefined' && window.__API_BASE) {
     return window.__API_BASE;
   }
-  return 'http://localhost:3000'; // Flask vehicles API
+  return ''; // Flask vehicles API
 };
 
 export const fetchVehicles = async ({ tenantId } = {}) => {

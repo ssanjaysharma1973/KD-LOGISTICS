@@ -41,7 +41,7 @@ function InvalidateSize() {
   return null;
 }
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 
 // HERE Flexible Polyline decoder — spec: https://github.com/heremaps/flexible-polyline
 // Structure: [format_version_byte][header_byte][lat_delta][lng_delta]...

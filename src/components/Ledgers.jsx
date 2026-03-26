@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 
 // ── Admin PIN (same as TripMonitor) ────────────────────────────────────────
 const ADMIN_PIN = 'ATLOG';

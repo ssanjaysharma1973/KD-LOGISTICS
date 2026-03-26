@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 const CLIENT_ID = 'CLIENT_001';
 
 export default function UnloadingRatesManager() {

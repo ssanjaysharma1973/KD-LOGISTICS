@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Edit2, Trash2, Search, MoreVertical, Plus } from 'lucide-react';
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 const EMPTY_FORM = { poi_name: '', city: '', latitude: '', longitude: '', radius_meters: 1500 };
 
 export default function POIListModal({ pois, onClose, onEdit, onDelete, onAdd }) {
