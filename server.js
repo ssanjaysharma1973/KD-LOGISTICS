@@ -413,14 +413,21 @@ function sendSse(tenantId, payload) {
   }
 }
 
-const server = http.createServer(async (req, res) => {
-  // ── Healthcheck – resolved first, before any async work ──────────────────
+const server = http.createServer((req, res) => {
+  // ── Healthcheck – sync, outside async handler ─────────────────────────────
   const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
   if (rawPath === '/health' || rawPath === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ status: 'ok', ts: Date.now() }));
   }
+  // Delegate everything else to async handler
+  handleRequest(req, res, rawPath).catch(err => {
+    console.error('[server] unhandled error:', err.message);
+    if (!res.headersSent) { res.writeHead(500); res.end('Internal Server Error'); }
+  });
+});
 
+async function handleRequest(req, res, rawPath) {
   try {
   const parsed = url.parse(req.url, true);
   // normalize pathname by stripping trailing slashes so routes match consistently
@@ -1900,7 +1907,7 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: 'internal server error' }));
     }
   }
-});
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
