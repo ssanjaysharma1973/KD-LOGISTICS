@@ -5,9 +5,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 
-// Catch any startup crash and log it clearly before dying
-process.on('uncaughtException', (err) => { console.error('[FATAL] uncaughtException:', err.stack || err); process.exit(1); });
-process.on('unhandledRejection', (reason) => { console.error('[FATAL] unhandledRejection:', reason?.stack || reason); });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,17 +34,7 @@ try {
 }
 
 // Simple .env loader (no dotenv required)
-// Ensure process.env exists for environments where process may not be global
-if (typeof process === 'undefined') {
-  var process = { env: {} };
-  if (typeof global !== 'undefined') {
-    global.process = process;
-  } else if (typeof globalThis !== 'undefined') {
-    globalThis.process = process;
-  }
-} else if (!process.env) {
-  process.env = {};
-}
+if (!process.env) process.env = {};
 function loadEnv() {
   const p = './.env';
   if (!fs.existsSync(p)) return;
