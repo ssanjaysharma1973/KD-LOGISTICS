@@ -112,8 +112,12 @@ function seedSqliteIfEmpty() {
       for (const m of (seed.munshis || [])) stmt.run(m.client_id||'CLIENT_001', m.name||'', m.phone||'', m.email||'', m.primary_poi_ids||'[]', m.notes||'', m.balance||0);
       stmt.finalize();
     });
+
+    // Close only after all serialized ops finish
+    db.run('SELECT 1', () => {
+      db.close(() => console.log('[Seed] SQLite seed complete'));
+    });
   });
-  db.close(() => console.log('[Seed] SQLite seed complete'));
 }
 // ── end seed initializer ─────────────────────────────────────────────────
 
