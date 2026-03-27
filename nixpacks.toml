@@ -2,10 +2,10 @@
 NODE_VERSION = "20"
 
 [phases.setup]
-nixPkgs = ["python3", "gnumake", "gcc"]
+nixPkgs = ["python3", "gnumake", "gcc", "nodePackages.node-gyp"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm ci --build-from-source"]
 
 [phases.build]
 cmds = ["npm run build"]
