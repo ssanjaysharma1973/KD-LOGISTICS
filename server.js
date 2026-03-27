@@ -553,6 +553,50 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // Last-resort fallback: if still empty, serve vehicles-master table as NO_GPS
+    // This ensures the dashboard shows the fleet registry even when GPS sync is not configured
+    if ((!list || list.length === 0) && sqlite3 && fs.existsSync(SQLITE_DB_PATH)) {
+      try {
+        const masterVehicles = await new Promise((resolve) => {
+          const db2 = new sqlite3.Database(SQLITE_DB_PATH, sqlite3.OPEN_READONLY);
+          db2.on('error', () => {});
+          const clientFilter = tenantId || parsed.query.clientId || parsed.query.client_id || 'CLIENT_001';
+          db2.all('SELECT * FROM vehicles WHERE client_id=? ORDER BY vehicle_no', [clientFilter], (err, rows) => {
+            db2.close();
+            resolve(err ? [] : (rows || []));
+          });
+        });
+        if (masterVehicles.length > 0) {
+          list = masterVehicles.map(v => ({
+            id: v.id,
+            number: v.vehicle_no || '',
+            vehicle_number: v.vehicle_no || '',
+            vehicle_no: v.vehicle_no || '',
+            type: v.vehicle_type || '',
+            vehicle_type: v.vehicle_type || '',
+            vehicle_size: v.vehicle_size || '',
+            driver: v.driver_name || '',
+            driver_name: v.driver_name || '',
+            owner_name: v.owner_name || '',
+            phone: v.phone || '',
+            lat: null,
+            lng: null,
+            latitude: null,
+            longitude: null,
+            speed: 0,
+            status: 'NO_GPS',
+            lastUpdate: null,
+            gps_time: null,
+            fuel: 0,
+            city: '',
+            stop_poi: '',
+            munshi_name: '',
+            _source: 'vehicles_master',
+          }));
+        }
+      } catch { /* ignore */ }
+    }
+
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify(list));
   }

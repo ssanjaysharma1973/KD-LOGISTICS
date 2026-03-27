@@ -161,7 +161,7 @@ export default function DevAdmin() {
     setAssignLoading(true);
     Promise.all([
       fetch(`${API}/vehicles-master?clientId=${encodeURIComponent(clientId)}`).then(r => r.json()),
-      fetch(`${API}/munshis`).then(r => r.json()),
+      fetch(`${API}/munshis?clientId=${encodeURIComponent(clientId)}`).then(r => r.json()),
     ]).then(([vData, mData]) => {
       const vList = Array.isArray(vData) ? vData : [];
       const mList = Array.isArray(mData) ? mData : (mData.munshis || []);
@@ -200,7 +200,7 @@ export default function DevAdmin() {
 
   function loadMunshis() {
     setMunshiLoading(true);
-    fetch(`${API}/munshis`)
+    fetch(`${API}/munshis?clientId=${encodeURIComponent(clientId)}`)
       .then(r => r.json())
       .then(d => {
         const list = Array.isArray(d) ? d : (d.munshis || []);
