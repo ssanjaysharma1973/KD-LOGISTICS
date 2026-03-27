@@ -1790,4 +1790,50 @@ const server = http.createServer(async (req, res) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Sync server listening on http://localhost:${PORT}`);
+
+  // ── Server-side auto-sync scheduler ────────────────────────────────────
+  // Reads all known tenantIds from the JSON db and from env CLIENT*_ID vars,
+  // then calls the sync logic every 2 minutes so GPS data stays fresh on all pages.
+  const AUTO_SYNC_INTERVAL_MS = parseInt(process.env.AUTO_SYNC_INTERVAL_MS || '120000'); // 2 min default
+  if (PROVIDER_API_URL) {
+    async function runAutoSync() {
+      const db = readDb();
+      // Collect tenant IDs from stored db + env vars
+      const tenantIds = new Set(Object.keys(db.vehiclesByTenant || {}));
+      for (let i = 1; i <= 10; i++) {
+        const id = process.env[`CLIENT${i}_ID`] || process.env[`CLIENT${i}_TENANT_ID`];
+        if (id) tenantIds.add(id);
+      }
+      // Always include CLIENT_001 as fallback
+      tenantIds.add(process.env.CLIENT_ID || process.env.TENANT_ID || 'CLIENT_001');
+
+      for (const tenantId of tenantIds) {
+        try {
+          const sep = PROVIDER_API_URL.includes('?') ? '&' : '?';
+          const fetchUrl = PROVIDER_API_URL + (PROVIDER_API_URL.includes('tenantId') ? '' : `${sep}tenantId=${encodeURIComponent(tenantId)}`);
+          const fetchOpts = { headers: {} };
+          if (PROVIDER_API_KEY) fetchOpts.headers['Authorization'] = `Bearer ${PROVIDER_API_KEY}`;
+          const r = await fetch(fetchUrl, fetchOpts);
+          if (!r.ok) continue;
+          const data = await r.json();
+          const arr = Array.isArray(data) ? data : (data.data || data.vehicles || data.items || []);
+          if (!arr.length) continue;
+          const freshDb = readDb();
+          const key = resolveTenantKey(freshDb, tenantId);
+          if (!freshDb.vehiclesByTenant) freshDb.vehiclesByTenant = {};
+          freshDb.vehiclesByTenant[key] = arr.map(v => ({ ...v, _syncedAt: new Date().toISOString() }));
+          writeDb(freshDb);
+          console.log(`[AutoSync] ${key}: ${arr.length} vehicles`);
+        } catch (e) {
+          console.error(`[AutoSync] ${tenantId}:`, e.message);
+        }
+      }
+    }
+    // Run once at startup and then on interval
+    runAutoSync();
+    setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS);
+    console.log(`[AutoSync] Scheduler started — every ${AUTO_SYNC_INTERVAL_MS / 1000}s`);
+  } else {
+    console.warn('[AutoSync] PROVIDER_API_URL not set — auto-sync disabled');
+  }
 });

@@ -125,7 +125,7 @@ function App() {
     return R * c;
   }
   const { tenantKey } = useTenant();
-  const { vehicles, pois, stats, loading, refresh: refreshVehicleContext } = useVehicleData();
+  const { vehicles, pois, munshis, stats, loading, refresh: refreshVehicleContext } = useVehicleData();
   const [trackModalVehicle, setTrackModalVehicle] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -987,7 +987,7 @@ function App() {
 
         {activeTab === 'route-ops' && <RouteOperations />}
 
-        {activeTab === 'munshi-ops' && <MunshiPage onNavigate={setActiveTab} />}
+        {activeTab === 'munshi-ops' && <MunshiPage munshis={munshis} onRefresh={refreshVehicleContext} onNavigate={setActiveTab} />}
 
         {activeTab === '__dev__' && <DevAdmin />}
 

@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Bell } from 'lucide-react';
 import { formatDurationSince } from '../utils/date.js';
+import { useVehicleData } from '../context/VehicleDataContext.jsx';
 import {
   getVehicleStatusStyles,
   filterVehiclesBy,
@@ -17,43 +18,18 @@ export default function DashboardPage({
   pois,
   onTrackVehicle,
 }) {
+  // Stats come from shared context (already refreshes every 30s globally)
+  const { stats: ctxStats } = useVehicleData();
+  const stats = {
+    total:     ctxStats.total,
+    active:    ctxStats.active,
+    atPOI:     ctxStats.atPOI,
+    offline:   ctxStats.offline,
+    available: ctxStats.total - ctxStats.active - ctxStats.offline,
+  };
+
   const [filterStatus, setFilterStatus] = useState('all');
   const [filteredVehicles, setFilteredVehicles] = useState(vehicles);
-  const [stats, setStats] = useState({
-    total: 0,
-    active: 0,
-    atPOI: 0,
-    offline: 0,
-    available: 0,
-  });
-
-  // Fetch vehicle status statistics from API
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch('/api/vehicles-status?clientId=CLIENT_001');
-        if (response.ok) {
-          const data = await response.json();
-          setStats({
-            total: data.total_vehicles || 0,
-            active: data.active || 0,
-            atPOI: data.at_poi || 0,
-            offline: data.offline || 0,
-            available: data.available || 0,
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching vehicle stats:', error);
-        // Fallback to local calculation
-        setStats(getVehicleStats(vehicles, pois));
-      }
-    };
-    
-    fetchStats();
-    // Refresh stats every 30 seconds
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     if (filterStatus === 'all') {

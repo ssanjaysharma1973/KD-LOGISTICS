@@ -425,21 +425,25 @@ const TABS = [
 
 const LS_KEY = 'munshiPage_activeMunshiId';
 
-export default function MunshiPage({ onNavigate }) {
-  const [munshis,        setMunshis]        = useState([]);
+export default function MunshiPage({ onNavigate, munshis: propMunshis, onRefresh }) {
+  // Use munshis from context (passed as prop) if available, else fetch locally
+  const [localMunshis,   setLocalMunshis]   = useState([]);
   const [selectedId,     setSelectedId]     = useState(() => localStorage.getItem(LS_KEY) || '');
   const [tab,            setTab]            = useState('trips');
-  const [loadingMunshis, setLoadingMunshis] = useState(true);
+  const [loadingMunshis, setLoadingMunshis] = useState(!propMunshis?.length);
 
-  // Load munshi list
+  const munshis = (propMunshis && propMunshis.length > 0) ? propMunshis : localMunshis;
+
+  // Only fetch locally if context didn't provide munshis
   const loadMunshis = useCallback(async () => {
+    if (propMunshis && propMunshis.length > 0) { setLoadingMunshis(false); return; }
     try {
       const res = await fetch(`${API}/munshis`);
       const d = await res.json();
-      setMunshis(Array.isArray(d) ? d : []);
+      setLocalMunshis(Array.isArray(d) ? d : []);
     } catch { /* ignore */ }
     finally { setLoadingMunshis(false); }
-  }, []);
+  }, [propMunshis]);
 
   useEffect(() => { loadMunshis(); }, [loadMunshis]);
 
