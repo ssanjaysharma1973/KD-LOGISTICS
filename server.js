@@ -62,6 +62,61 @@ loadEnv();
 
 const DB_PATH = './sync-db.json';
 const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || './fleet_erp_backend_sqlite.db';
+const SEED_PATH = path.join(__dirname, 'seed_data.json');
+
+// ── SQLite seed initializer ───────────────────────────────────────────────
+// On Railway the DB file is never in git (*.db gitignored).
+// When the DB is missing or the pois table is empty, seed it from seed_data.json.
+function seedSqliteIfEmpty() {
+  if (!sqlite3) return;
+  if (!fs.existsSync(SEED_PATH)) { console.warn('[Seed] seed_data.json not found — skipping'); return; }
+  let seed;
+  try { seed = JSON.parse(fs.readFileSync(SEED_PATH, 'utf8')); } catch { console.error('[Seed] Failed to parse seed_data.json'); return; }
+
+  const db = new sqlite3.Database(SQLITE_DB_PATH);
+  db.serialize(() => {
+    // Ensure tables exist
+    db.run(`CREATE TABLE IF NOT EXISTS pois (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, poi_name TEXT, latitude REAL,
+      longitude REAL, city TEXT, address TEXT, radius_meters INTEGER DEFAULT 500, type TEXT DEFAULT 'primary')`);
+    db.run(`CREATE TABLE IF NOT EXISTS vehicles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, vehicle_no TEXT, vehicle_type TEXT,
+      vehicle_size TEXT, owner_name TEXT, driver_name TEXT, phone TEXT, notes TEXT)`);
+    db.run(`CREATE TABLE IF NOT EXISTS munshis (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, name TEXT, phone TEXT, email TEXT,
+      primary_poi_ids TEXT, notes TEXT, balance REAL DEFAULT 0)`);
+
+    // Seed pois only if empty
+    db.get('SELECT COUNT(1) as c FROM pois', [], (err, row) => {
+      if (err || row?.c > 0) return;
+      console.log(`[Seed] Seeding ${(seed.pois||[]).length} POIs...`);
+      const stmt = db.prepare('INSERT OR IGNORE INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type) VALUES (?,?,?,?,?,?,?,?)');
+      for (const p of (seed.pois || [])) stmt.run(p.client_id||'CLIENT_001', p.poi_name, p.latitude, p.longitude, p.city||'', p.address||'', p.radius_meters||500, p.type||'primary');
+      stmt.finalize();
+    });
+
+    // Seed vehicles only if empty
+    db.get('SELECT COUNT(1) as c FROM vehicles', [], (err, row) => {
+      if (err || row?.c > 0) return;
+      console.log(`[Seed] Seeding ${(seed.vehicles||[]).length} vehicles...`);
+      const stmt = db.prepare('INSERT OR IGNORE INTO vehicles (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes) VALUES (?,?,?,?,?,?,?,?)');
+      for (const v of (seed.vehicles || [])) stmt.run(v.client_id||'CLIENT_001', v.vehicle_no||v.vehicle_number||'', v.vehicle_type||'', v.vehicle_size||'', v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'');
+      stmt.finalize();
+    });
+
+    // Seed munshis only if empty
+    db.get('SELECT COUNT(1) as c FROM munshis', [], (err, row) => {
+      if (err || row?.c > 0) return;
+      console.log(`[Seed] Seeding ${(seed.munshis||[]).length} munshis...`);
+      const stmt = db.prepare('INSERT OR IGNORE INTO munshis (client_id,name,phone,email,primary_poi_ids,notes,balance) VALUES (?,?,?,?,?,?,?)');
+      for (const m of (seed.munshis || [])) stmt.run(m.client_id||'CLIENT_001', m.name||'', m.phone||'', m.email||'', m.primary_poi_ids||'[]', m.notes||'', m.balance||0);
+      stmt.finalize();
+    });
+  });
+  db.close(() => console.log('[Seed] SQLite seed complete'));
+}
+// ── end seed initializer ─────────────────────────────────────────────────
+
 // Maximum track range (hours) enforced server-side to avoid expensive queries
 const MAX_TRACK_RANGE_HOURS = Number(process.env.MAX_TRACK_RANGE_HOURS || 48);
 
@@ -1790,6 +1845,9 @@ const server = http.createServer(async (req, res) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Sync server listening on http://localhost:${PORT}`);
+
+  // Seed SQLite from seed_data.json if DB is empty (Railway ephemeral filesystem)
+  seedSqliteIfEmpty();
 
   // ── Server-side auto-sync scheduler ────────────────────────────────────
   // Reads all known tenantIds from the JSON db and from env CLIENT*_ID vars,
