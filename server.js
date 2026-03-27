@@ -428,7 +428,7 @@ const server = http.createServer((req, res) => {
   const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
   if (rawPath === '/health' || rawPath === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 2 }));
+    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 3, build: 'deploy-test' }));
   }
   // Delegate everything else to async handler
   handleRequest(req, res, rawPath).catch(err => {
