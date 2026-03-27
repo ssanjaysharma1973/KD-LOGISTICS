@@ -1903,8 +1903,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Sync server listening on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Sync server listening on http://0.0.0.0:${PORT}`);
 
   // Seed SQLite from seed_data.json if DB is empty (Railway ephemeral filesystem)
   seedSqliteIfEmpty();
