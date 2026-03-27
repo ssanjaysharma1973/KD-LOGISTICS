@@ -4,6 +4,7 @@ import url from 'url';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
+import { createRequire } from 'module';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,12 +26,21 @@ const MIME = {
   '.ttf':  'font/ttf',
   '.eot':  'application/vnd.ms-fontobject',
 };
+
+// Try require first (faster, works with both nixpacks and Dockerfile), then dynamic import
 let sqlite3;
 try {
-  sqlite3 = (await import('sqlite3')).default.verbose();
-} catch {
-  console.warn('sqlite3 not available - will use JSON database only');
-  sqlite3 = null;
+  const _require = createRequire(import.meta.url);
+  sqlite3 = _require('sqlite3').verbose();
+  console.log('[sqlite3] loaded via require OK');
+} catch (e1) {
+  try {
+    sqlite3 = (await import('sqlite3')).default.verbose();
+    console.log('[sqlite3] loaded via dynamic import OK');
+  } catch (e2) {
+    console.warn('[sqlite3] unavailable:', e2.message);
+    sqlite3 = null;
+  }
 }
 
 // Simple .env loader (no dotenv required)

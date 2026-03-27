@@ -1,8 +1,11 @@
 [variables]
 NODE_VERSION = "20"
 
+[phases.setup]
+nixPkgs = ["python3", "gnumake", "gcc"]
+
 [phases.install]
-cmds = ["npm install"]
+cmds = ["npm ci"]
 
 [phases.build]
 cmds = ["npm run build"]
