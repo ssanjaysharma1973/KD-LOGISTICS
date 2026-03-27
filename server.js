@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { createRequire } from 'module';
+console.log('[SERVER-STARTUP] version=v3-deploy-test build=' + new Date().toISOString());
 
 
 const __filename = fileURLToPath(import.meta.url);
