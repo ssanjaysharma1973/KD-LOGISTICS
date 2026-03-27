@@ -4,6 +4,11 @@ import url from 'url';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
+
+// Catch any startup crash and log it clearly before dying
+process.on('uncaughtException', (err) => { console.error('[FATAL] uncaughtException:', err.stack || err); process.exit(1); });
+process.on('unhandledRejection', (reason) => { console.error('[FATAL] unhandledRejection:', reason?.stack || reason); });
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
