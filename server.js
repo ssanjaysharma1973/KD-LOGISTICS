@@ -66,7 +66,7 @@ const SEED_PATH = path.join(__dirname, 'seed_data.json');
 
 // ── SQLite seed initializer ───────────────────────────────────────────────
 // On Railway the DB file is never in git (*.db gitignored).
-// When the DB is missing or the pois table is empty, seed it from seed_data.json.
+// When the DB is missing or the tables are empty, seed from seed_data.json.
 function seedSqliteIfEmpty() {
   if (!sqlite3) return;
   if (!fs.existsSync(SEED_PATH)) { console.warn('[Seed] seed_data.json not found — skipping'); return; }
@@ -74,50 +74,69 @@ function seedSqliteIfEmpty() {
   try { seed = JSON.parse(fs.readFileSync(SEED_PATH, 'utf8')); } catch { console.error('[Seed] Failed to parse seed_data.json'); return; }
 
   const db = new sqlite3.Database(SQLITE_DB_PATH);
-  db.serialize(() => {
-    // Ensure tables exist
-    db.run(`CREATE TABLE IF NOT EXISTS pois (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, poi_name TEXT, latitude REAL,
-      longitude REAL, city TEXT, address TEXT, radius_meters INTEGER DEFAULT 500, type TEXT DEFAULT 'primary')`);
-    db.run(`CREATE TABLE IF NOT EXISTS vehicles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, vehicle_no TEXT, vehicle_type TEXT,
-      vehicle_size TEXT, owner_name TEXT, driver_name TEXT, phone TEXT, notes TEXT)`);
-    db.run(`CREATE TABLE IF NOT EXISTS munshis (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, name TEXT, phone TEXT, email TEXT,
-      primary_poi_ids TEXT, notes TEXT, balance REAL DEFAULT 0)`);
+  // Prevent any uncaught 'error' events from crashing Node
+  db.on('error', err => console.error('[Seed] DB error (suppressed):', err.message));
 
-    // Seed pois only if empty
-    db.get('SELECT COUNT(1) as c FROM pois', [], (err, row) => {
-      if (err || row?.c > 0) return;
-      console.log(`[Seed] Seeding ${(seed.pois||[]).length} POIs...`);
-      const stmt = db.prepare('INSERT OR IGNORE INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type) VALUES (?,?,?,?,?,?,?,?)');
-      for (const p of (seed.pois || [])) stmt.run(p.client_id||'CLIENT_001', p.poi_name, p.latitude, p.longitude, p.city||'', p.address||'', p.radius_meters||500, p.type||'primary');
-      stmt.finalize();
-    });
+  // Promisified helpers — fully sequential, no callback/serialize races
+  const dbRun = (sql, params = []) => new Promise((resolve, reject) =>
+    db.run(sql, params, function(err) { err ? reject(err) : resolve(this); }));
+  const dbGet = (sql, params = []) => new Promise((resolve, reject) =>
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row)));
+  const dbClose = () => new Promise(resolve => db.close(resolve));
 
-    // Seed vehicles only if empty
-    db.get('SELECT COUNT(1) as c FROM vehicles', [], (err, row) => {
-      if (err || row?.c > 0) return;
-      console.log(`[Seed] Seeding ${(seed.vehicles||[]).length} vehicles...`);
-      const stmt = db.prepare('INSERT OR IGNORE INTO vehicles (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes) VALUES (?,?,?,?,?,?,?,?)');
-      for (const v of (seed.vehicles || [])) stmt.run(v.client_id||'CLIENT_001', v.vehicle_no||v.vehicle_number||'', v.vehicle_type||'', v.vehicle_size||'', v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'');
-      stmt.finalize();
-    });
+  (async () => {
+    try {
+      await dbRun('PRAGMA journal_mode=WAL');
+      await dbRun(`CREATE TABLE IF NOT EXISTS pois (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, poi_name TEXT, latitude REAL,
+        longitude REAL, city TEXT, address TEXT, radius_meters INTEGER DEFAULT 500, type TEXT DEFAULT 'primary')`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS vehicles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, vehicle_no TEXT, vehicle_type TEXT,
+        vehicle_size TEXT, owner_name TEXT, driver_name TEXT, phone TEXT, notes TEXT)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS munshis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, name TEXT, phone TEXT, email TEXT,
+        primary_poi_ids TEXT, notes TEXT, balance REAL DEFAULT 0)`);
 
-    // Seed munshis only if empty
-    db.get('SELECT COUNT(1) as c FROM munshis', [], (err, row) => {
-      if (err || row?.c > 0) return;
-      console.log(`[Seed] Seeding ${(seed.munshis||[]).length} munshis...`);
-      const stmt = db.prepare('INSERT OR IGNORE INTO munshis (client_id,name,phone,email,primary_poi_ids,notes,balance) VALUES (?,?,?,?,?,?,?)');
-      for (const m of (seed.munshis || [])) stmt.run(m.client_id||'CLIENT_001', m.name||'', m.phone||'', m.email||'', m.primary_poi_ids||'[]', m.notes||'', m.balance||0);
-      stmt.finalize();
-    });
+      // Seed pois if empty
+      const poisRow = await dbGet('SELECT COUNT(1) as c FROM pois');
+      if ((poisRow?.c ?? 1) === 0) {
+        console.log(`[Seed] Seeding ${(seed.pois||[]).length} POIs...`);
+        await dbRun('BEGIN');
+        for (const p of (seed.pois || []))
+          await dbRun('INSERT OR IGNORE INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type) VALUES (?,?,?,?,?,?,?,?)',
+            [p.client_id||'CLIENT_001', p.poi_name, p.latitude, p.longitude, p.city||'', p.address||'', p.radius_meters||500, p.type||'primary']);
+        await dbRun('COMMIT');
+      }
 
-    // Close only after all serialized ops finish
-    db.run('SELECT 1', () => {
-      db.close(() => console.log('[Seed] SQLite seed complete'));
-    });
-  });
+      // Seed vehicles if empty
+      const vRow = await dbGet('SELECT COUNT(1) as c FROM vehicles');
+      if ((vRow?.c ?? 1) === 0) {
+        console.log(`[Seed] Seeding ${(seed.vehicles||[]).length} vehicles...`);
+        await dbRun('BEGIN');
+        for (const v of (seed.vehicles || []))
+          await dbRun('INSERT OR IGNORE INTO vehicles (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes) VALUES (?,?,?,?,?,?,?,?)',
+            [v.client_id||'CLIENT_001', v.vehicle_no||v.vehicle_number||'', v.vehicle_type||'', v.vehicle_size||'', v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'']);
+        await dbRun('COMMIT');
+      }
+
+      // Seed munshis if empty
+      const mRow = await dbGet('SELECT COUNT(1) as c FROM munshis');
+      if ((mRow?.c ?? 1) === 0) {
+        console.log(`[Seed] Seeding ${(seed.munshis||[]).length} munshis...`);
+        await dbRun('BEGIN');
+        for (const m of (seed.munshis || []))
+          await dbRun('INSERT OR IGNORE INTO munshis (client_id,name,phone,email,primary_poi_ids,notes,balance) VALUES (?,?,?,?,?,?,?)',
+            [m.client_id||'CLIENT_001', m.name||'', m.phone||'', m.email||'', m.primary_poi_ids||'[]', m.notes||'', m.balance||0]);
+        await dbRun('COMMIT');
+      }
+
+      console.log('[Seed] SQLite seed complete');
+    } catch (err) {
+      console.error('[Seed] Error during seed:', err.message);
+    } finally {
+      await dbClose();
+    }
+  })();
 }
 // ── end seed initializer ─────────────────────────────────────────────────
 
@@ -881,6 +900,7 @@ const server = http.createServer(async (req, res) => {
   function sqliteJson(res, sql, params, transform) {
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.on('error', err => console.error('[sqliteJson] DB error:', err.message));
     db2.all(sql, params, (err, rows) => {
       db2.close();
       if (err) { res.statusCode = 500; return res.end(JSON.stringify({ error: err.message })); }
