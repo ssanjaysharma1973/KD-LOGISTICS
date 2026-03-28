@@ -230,6 +230,35 @@ function seedSqliteIfEmpty() {
       await dbRun(`ALTER TABLE pois ADD COLUMN munshi_name TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE pois ADD COLUMN state TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE pois ADD COLUMN pin_code TEXT DEFAULT ''`).catch(() => {});
+      // ── Munshi Trip Expenses table ───────────────────────────────────────────
+      await dbRun(`CREATE TABLE IF NOT EXISTS munshi_trips (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id TEXT DEFAULT 'CLIENT_001',
+        trip_no TEXT,
+        vehicle_no TEXT,
+        driver_name TEXT,
+        from_poi_id TEXT, from_poi_name TEXT,
+        to_poi_id TEXT,   to_poi_name TEXT,
+        ewb_no TEXT,
+        ewb_is_temp INTEGER DEFAULT 0,
+        trip_date TEXT,
+        km REAL DEFAULT 0,
+        toll REAL DEFAULT 0,
+        exp_admin REAL DEFAULT 0,
+        exp_munshi REAL DEFAULT 0,
+        exp_pump_consignment REAL DEFAULT 0,
+        exp_cash_fuel REAL DEFAULT 0,
+        exp_unloading REAL DEFAULT 0,
+        exp_driver_debit REAL DEFAULT 0,
+        exp_other REAL DEFAULT 0,
+        munshi_id TEXT, munshi_name TEXT,
+        driver_id TEXT,
+        approved_by TEXT,
+        status TEXT DEFAULT 'open',
+        notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`).catch(() => {});
       await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_unloading_v2_unique ON poi_unloading_rates_v2(client_id, poi_id)`).catch(() => {});
 
       // Seed pois if empty
@@ -1528,7 +1557,95 @@ async function handleRequest(req, res, rawPath) {
     return sqliteJson(res, sql, params, rows => ({ trips: rows }));
   }
 
-  // POST /api/trip-dispatches
+  // ── Munshi Trips (expense-based) ─────────────────────────────────────────
+  // GET /api/munshi-trips
+  if (pathname === '/api/munshi-trips' && req.method === 'GET') {
+    const cid      = parsed.query.clientId || 'CLIENT_001';
+    const munshiId = parsed.query.munshiId || '';
+    const vno      = parsed.query.vehicle_no || '';
+    let sql = 'SELECT * FROM munshi_trips WHERE client_id=?';
+    const p = [cid];
+    if (munshiId) { sql += ' AND munshi_id=?'; p.push(munshiId); }
+    if (vno)      { sql += ' AND vehicle_no=?'; p.push(vno); }
+    sql += ' ORDER BY created_at DESC LIMIT 200';
+    return sqliteJson(res, sql, p, null);
+  }
+
+  // POST /api/munshi-trips
+  if (pathname === '/api/munshi-trips' && req.method === 'POST') {
+    const b = await readBody(req);
+    if (!sqlite3) { res.statusCode=503; return res.end(JSON.stringify({error:'db unavailable'})); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    const tripNo = b.trip_no || (() => {
+      const ds = new Date().toISOString().slice(0,10).replace(/-/g,'');
+      return `T${ds}${String(Math.floor(Math.random()*9000)+1000)}`;
+    })();
+    db2.run(`INSERT INTO munshi_trips
+      (client_id,trip_no,vehicle_no,driver_name,from_poi_id,from_poi_name,to_poi_id,to_poi_name,
+       ewb_no,ewb_is_temp,trip_date,km,toll,exp_admin,exp_munshi,exp_pump_consignment,exp_cash_fuel,
+       exp_unloading,exp_driver_debit,exp_other,munshi_id,munshi_name,driver_id,approved_by,status,notes)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [b.client_id||'CLIENT_001', tripNo, b.vehicle_no||'', b.driver_name||'',
+       b.from_poi_id||'', b.from_poi_name||'', b.to_poi_id||'', b.to_poi_name||'',
+       b.ewb_no||'', b.ewb_is_temp||0,
+       b.trip_date||new Date().toISOString().slice(0,10),
+       b.km||0, b.toll||0,
+       b.exp_admin||0, b.exp_munshi||0, b.exp_pump_consignment||0, b.exp_cash_fuel||0,
+       b.exp_unloading||0, b.exp_driver_debit||0, b.exp_other||0,
+       b.munshi_id||'', b.munshi_name||'', b.driver_id||'', b.approved_by||'',
+       b.status||'open', b.notes||''],
+      function(err) {
+        db2.close();
+        if (err) { res.statusCode=500; return res.end(JSON.stringify({error:err.message})); }
+        res.setHeader('Content-Type','application/json');
+        res.end(JSON.stringify({ success:true, id:this.lastID, trip_no:tripNo }));
+      }
+    );
+    return;
+  }
+
+  // PUT /api/munshi-trips/:id
+  if (/^\/api\/munshi-trips\/\d+$/.test(pathname) && req.method === 'PUT') {
+    const id = pathname.split('/').pop();
+    const b  = await readBody(req);
+    if (!sqlite3) { res.statusCode=503; return res.end(JSON.stringify({error:'db unavailable'})); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    const allowed = ['vehicle_no','driver_name','from_poi_id','from_poi_name','to_poi_id','to_poi_name',
+      'ewb_no','ewb_is_temp','trip_date','km','toll','exp_admin','exp_munshi','exp_pump_consignment',
+      'exp_cash_fuel','exp_unloading','exp_driver_debit','exp_other','munshi_name','approved_by','status','notes'];
+    const sets=[], vals=[];
+    allowed.forEach(k => { if (b[k] !== undefined) { sets.push(`${k}=?`); vals.push(b[k]); }});
+    sets.push('updated_at=CURRENT_TIMESTAMP');
+    vals.push(id);
+    db2.run(`UPDATE munshi_trips SET ${sets.join(',')} WHERE id=?`, vals, function(err) {
+      db2.close();
+      res.setHeader('Content-Type','application/json');
+      res.end(JSON.stringify(err ? {error:err.message} : {success:true}));
+    });
+    return;
+  }
+
+  // GET /api/munshi-trips/ewb-search — find active eway bills for a vehicle or munshi POI
+  if (pathname === '/api/munshi-trips/ewb-search' && req.method === 'GET') {
+    const cid    = parsed.query.clientId || 'CLIENT_001';
+    const vno    = parsed.query.vehicle_no || '';
+    const rawPoi = parsed.query.poi_ids || '';
+    const poiIds = rawPoi.split(',').map(s => s.trim()).filter(Boolean);
+    if (poiIds.length > 0) {
+      const ph = poiIds.map(() => '?').join(',');
+      return sqliteJson(res,
+        `SELECT id,ewb_no,vehicle_no,to_place,to_poi_name,from_poi_id,from_poi_name,doc_date,total_value,status
+         FROM eway_bills_master WHERE client_id=? AND from_poi_id IN (${ph}) AND status='active'
+         ORDER BY doc_date DESC LIMIT 50`,
+        [cid, ...poiIds], null);
+    }
+    return sqliteJson(res,
+      `SELECT id,ewb_no,vehicle_no,to_place,to_poi_name,from_poi_name,doc_date,total_value,status
+       FROM eway_bills_master WHERE client_id=? AND vehicle_no=? AND status='active'
+       ORDER BY doc_date DESC LIMIT 30`,
+      [cid, vno], null);
+  }
+
   if (pathname === '/api/trip-dispatches' && req.method === 'POST') {
     const body = await readBody(req);
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
@@ -1641,7 +1758,7 @@ async function handleRequest(req, res, rawPath) {
     const body = await readBody(req);
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.get('SELECT id, name, phone, area, pin FROM munshis WHERE pin=? AND client_id=?',
+    db2.get('SELECT id, name, phone, area, pin, primary_poi_ids FROM munshis WHERE pin=? AND client_id=?',
       [body.pin||'', body.client_id||'CLIENT_001'],
       (err, row) => { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err||!row ? { error: 'Invalid PIN' } : { success: true, munshi: row })); });
     return;

@@ -143,6 +143,7 @@ function TripsTab({ munshi, vehicles, pois }) {
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   // Right panel state
   const [ewbs,     setEwbs]     = useState([]);   // eway bills for selected vehicle
+  const [poiEwbs,  setPoiEwbs]  = useState([]);   // all EWBs issued from munshi's POI(s)
   const [trips,    setTrips]    = useState([]);   // saved munshi_trips
   const [loadingR, setLoadingR] = useState(false);
   // Form state
@@ -152,13 +153,31 @@ function TripsTab({ munshi, vehicles, pois }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg]     = useState('');
 
-  // My vehicles (own + common)
-  const myVehicles = vehicles.filter(v =>
-    (v.munshi_id && String(v.munshi_id) === String(munshi.id)) ||
-    (v.munshi_name || '').toLowerCase() === (munshi.name || '').toLowerCase() ||
-    (v.munshi_name || '').toLowerCase() === 'common' ||
-    (!v.munshi_id && !v.munshi_name)
-  );
+  // Parse munshi's POI IDs
+  const myPoiIds = (() => {
+    try { return JSON.parse(munshi.primary_poi_ids || '[]').map(String); } catch { return []; }
+  })();
+
+  // My vehicles: own + common + POI-overlap vehicles
+  const myVehicles = vehicles.filter(v => {
+    if ((v.munshi_id && String(v.munshi_id) === String(munshi.id)) ||
+        (v.munshi_name || '').toLowerCase() === (munshi.name || '').toLowerCase()) return true;
+    if ((v.munshi_name || '').toLowerCase() === 'common' || (!v.munshi_id && !v.munshi_name)) return true;
+    if (myPoiIds.length > 0) {
+      const vPois = (() => { try { return JSON.parse(v.primary_poi_ids || '[]').map(String); } catch { return []; } })();
+      if (vPois.some(p => myPoiIds.includes(p))) return true;
+    }
+    return false;
+  });
+
+  // Fetch all EWBs issued from munshi's registered POI(s) on mount
+  useEffect(() => {
+    if (myPoiIds.length === 0) return;
+    fetch(`${API}/munshi-trips/ewb-search?clientId=CLIENT_001&poi_ids=${myPoiIds.join(',')}`)
+      .then(r => r.json())
+      .then(d => setPoiEwbs(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, []);
 
   // Load right panel when vehicle selected
   useEffect(() => {
@@ -199,18 +218,20 @@ function TripsTab({ munshi, vehicles, pois }) {
   }
 
   function openNew(ewb, vehicle) {
-    const v = vehicle || selectedVehicle;
+    // For POI-sourced EWBs, vehicle comes from the EWB record itself
+    const ewbVehicle = ewb?.vehicle_no ? vehicles.find(v => v.vehicle_no === ewb.vehicle_no) : null;
+    const v          = ewbVehicle || vehicle || selectedVehicle;
     const tempNo = ewb ? '' : (() => {
       const ds = new Date().toISOString().slice(0,10).replace(/-/g,'');
       return `T${ds}${String(Math.floor(Math.random()*900)+100)}`;
     })();
     setForm({
       ...blankForm(munshi),
-      vehicle_no:   v?.vehicle_no   || '',
-      driver_name:  v?.driver_name  || '',
-      ewb_no:       ewb ? ewb.ewb_no : tempNo,
-      ewb_is_temp:  ewb ? 0 : 1,
-      to_poi_name:  ewb?.to_poi_name || ewb?.to_place || '',
+      vehicle_no:    v?.vehicle_no  || ewb?.vehicle_no || '',
+      driver_name:   v?.driver_name || '',
+      ewb_no:        ewb ? ewb.ewb_no : tempNo,
+      ewb_is_temp:   ewb ? 0 : 1,
+      to_poi_name:   ewb?.to_poi_name || ewb?.to_place || '',
       from_poi_name: ewb?.from_poi_name || '',
     });
     setEditId(null);
@@ -318,12 +339,15 @@ function TripsTab({ munshi, vehicles, pois }) {
     <div style={{ display: 'flex', height: 'calc(100vh - 110px)', overflow: 'hidden' }}>
 
       {/* ── LEFT: Vehicle List ── */}
-      <div style={{ width: 130, flexShrink: 0, borderRight: '1px solid #1e293b', overflowY: 'auto', background: '#0f172a', padding: '8px 0' }}>
-        <div style={{ fontSize: 10, color: '#475569', fontWeight: 800, textTransform: 'uppercase', padding: '4px 10px 8px', letterSpacing: '0.08em' }}>Vehicles</div>
+      <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid #1e293b', overflowY: 'auto', background: '#0f172a', padding: '8px 0' }}>
+        <div style={{ fontSize: 10, color: '#475569', fontWeight: 800, textTransform: 'uppercase', padding: '4px 10px 8px', letterSpacing: '0.08em' }}>Vehicles ({myVehicles.length})</div>
         {myVehicles.length === 0 && <div style={{ fontSize: 11, color: '#334155', padding: '8px 10px' }}>No vehicles</div>}
         {myVehicles.map(v => {
           const sel = selectedVehicle?.vehicle_no === v.vehicle_no;
-          const isCommon = (v.munshi_name || '').toLowerCase() === 'common' || (!v.munshi_id && !v.munshi_name);
+          const isDirect = (v.munshi_id && String(v.munshi_id) === String(munshi.id)) ||
+                           (v.munshi_name || '').toLowerCase() === (munshi.name || '').toLowerCase();
+          const isCommon = !isDirect && ((v.munshi_name || '').toLowerCase() === 'common' || (!v.munshi_id && !v.munshi_name));
+          const isPoi    = !isDirect && !isCommon;
           return (
             <button
               key={v.vehicle_no}
@@ -337,7 +361,9 @@ function TripsTab({ munshi, vehicles, pois }) {
               }}
             >
               <div style={{ fontSize: 11, fontWeight: 900, color: sel ? '#60a5fa' : '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>{v.vehicle_no}</div>
-              {isCommon && <div style={{ fontSize: 9, color: '#475569', marginTop: 2 }}>🔄 common</div>}
+              {isDirect  && <div style={{ fontSize: 9, color: '#4ade80', marginTop: 2 }}>✅ mine</div>}
+              {isCommon  && <div style={{ fontSize: 9, color: '#475569', marginTop: 2 }}>🔄 common</div>}
+              {isPoi     && <div style={{ fontSize: 9, color: '#0ea5e9', marginTop: 2 }}>📍 poi</div>}
               {v.driver_name && <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>{v.driver_name.split(' ')[0]}</div>}
             </button>
           );
@@ -345,11 +371,37 @@ function TripsTab({ munshi, vehicles, pois }) {
       </div>
 
       {/* ── RIGHT: Eway Bills + Trips ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', background: '#0f172a' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px', background: '#0f172a' }}>
+
+        {/* POI-sourced EWBs — shown at top always */}
+        {poiEwbs.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 11, color: '#0ea5e9', fontWeight: 800, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>📍 E-Way Bills from My POI ({poiEwbs.length})</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
+              {poiEwbs.map(ewb => (
+                <div key={ewb.id}
+                  onClick={() => { openNew(ewb, null); setShowForm(true); }}
+                  style={{ background: '#0c1a30', border: '1px solid #0e4163', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</span>
+                      {ewb.vehicle_no && <span style={{ fontSize: 10, color: '#a3e635', fontFamily: 'monospace', background: '#14532d33', padding: '1px 6px', borderRadius: 4 }}>{ewb.vehicle_no}</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>→ {ewb.to_poi_name || ewb.to_place || 'Unknown destination'}</div>
+                    {ewb.total_value > 0 && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>₹{Number(ewb.total_value).toLocaleString('en-IN')}</div>}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#fff', background: '#0284c7', borderRadius: 6, padding: '4px 10px', fontWeight: 700, whiteSpace: 'nowrap', marginLeft: 8 }}>Use →</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!selectedVehicle ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#334155' }}>
-            <div style={{ fontSize: 36, marginBottom: 10 }}>👈</div>
-            <div style={{ fontWeight: 700, color: '#475569' }}>Select a vehicle</div>
+          <div style={{ textAlign: 'center', padding: poiEwbs.length > 0 ? '16px 20px' : '60px 20px', color: '#334155', borderTop: poiEwbs.length > 0 ? '1px solid #1e293b' : 'none', paddingTop: poiEwbs.length > 0 ? 16 : 60 }}>
+            <div style={{ fontSize: 24, marginBottom: 6 }}>👈</div>
+            <div style={{ fontWeight: 700, color: '#475569', fontSize: 13 }}>Select a vehicle for trips</div>
           </div>
         ) : loadingR ? <Spinner /> : (
           <>
@@ -394,7 +446,22 @@ function TripsTab({ munshi, vehicles, pois }) {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
-                  <Field label="Vehicle No" name="vehicle_no" disabled />
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>Vehicle No</label>
+                    <select
+                      value={form.vehicle_no}
+                      onChange={e => {
+                        const v = vehicles.find(x => x.vehicle_no === e.target.value);
+                        setForm(f => ({ ...f, vehicle_no: e.target.value, driver_name: v?.driver_name || f.driver_name }));
+                      }}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
+                    >
+                      <option value="">— Select Vehicle —</option>
+                      {vehicles.filter(v => v.vehicle_no).map(v => (
+                        <option key={v.vehicle_no} value={v.vehicle_no}>{v.vehicle_no}{v.driver_name ? ` · ${v.driver_name}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
                   <Field label="Driver Name" name="driver_name" />
                   <Field label="EWB Number" name="ewb_no" hint={form.ewb_is_temp ? '⚠️ Temporary — replace with real EWB later' : ''} />
                   <Field label="Trip Date" name="trip_date" type="date" />
@@ -681,7 +748,7 @@ export default function MunshiPortal() {
   if (!munshi) return <PinLogin onLogin={handleLogin} />;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9', fontFamily: 'system-ui, sans-serif', maxWidth: 520, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9', fontFamily: 'system-ui, sans-serif', maxWidth: tab === 'trips' ? '100%' : 520, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', padding: '14px 20px', display: 'flex', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ flex: 1 }}>
