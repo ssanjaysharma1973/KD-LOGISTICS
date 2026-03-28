@@ -41,6 +41,7 @@ import RouteOperations from "./components/RouteOperations.jsx";
 import MunshiPage from "./components/MunshiPage.jsx";
 import Ledgers from "./components/Ledgers.jsx";
 import DriverPage from "./components/DriverPage.jsx";
+import MunshiPortal from "./components/MunshiPortal.jsx";
 import EwayBillHub from "./components/EwayBillHub.jsx";
 import DevAdmin from "./components/DevAdmin.jsx";
 import RouteMemoryAdmin from "./components/RouteMemoryAdmin.jsx";
@@ -129,11 +130,15 @@ function App() {
   const { vehicles, pois, munshis, stats, loading, refresh: refreshVehicleContext } = useVehicleData();
   const [trackModalVehicle, setTrackModalVehicle] = useState(null);
   const [activeTab, setActiveTab] = useState(() => {
-    // Allow deep-link to driver portal via ?portal=driver
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('portal') === 'driver') return 'driver-portal';
+    if (urlParams.get('portal') === 'munshi') return 'munshi-portal';
     return 'ewaybill';
   });
+
+  // ── Standalone portals — full-screen, no admin shell ─────────────────────
+  if (activeTab === 'driver-portal') return <DriverPage />;
+  if (activeTab === 'munshi-portal') return <MunshiPortal />;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // const [routes] = useState([]); // unused
   const [poiRadiusMeters] = useState(1000);
