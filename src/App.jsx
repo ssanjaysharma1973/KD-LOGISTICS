@@ -16,22 +16,16 @@ import {
   Package,
   Navigation,
   LayoutGrid,
-  Map,
   MapPinned
 } from 'lucide-react';
-import VehicleTracker from './vehicletracker.jsx';
 import TrackModal from './modals/TrackModal.jsx';
-import FleetMap from './FleetMap.jsx';
+import VehicleTrackerTab from './components/VehicleTrackerTab.jsx';
 import VehicleFormTable from './VehicleFormTable.jsx';
-import VehicleDropdown from './VehicleDropdown.jsx';
 import POIManagement from './components/POIManagement.jsx';
 import UnloadingRatesManager from './components/UnloadingRatesManager.jsx';
 import BulkUnloadingCharges from './components/BulkUnloadingCharges.jsx';
-import VehicleTrackerTab from './components/VehicleTrackerTab.jsx';
 import './RoutPlanner.css';
 import { useVehicleData } from './context/VehicleDataContext.jsx';
-import FleetPreview from "./components/FleetPreview";
-import MapComponent from "./components/MapComponent.jsx";
 import Card, { CardContent, CardHeader, CardTitle } from "./components/ui/card.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import VehicleManagement from "./components/VehicleManagement.jsx";
@@ -583,7 +577,7 @@ function App() {
                     )}
                     <span style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 2px' }} />
                   </>}
-                  {[{ key: 'grid', icon: LayoutGrid, label: 'Grid' }, { key: 'map', icon: Map, label: 'Map' }, { key: 'poi', icon: MapPinned, label: 'POI' }].map(v => (
+                  {[{ key: 'grid', icon: LayoutGrid, label: 'Grid' }, { key: 'poi', icon: MapPinned, label: 'POI' }].map(v => (
                     <button key={v.key}
                       onClick={() => setDashboardView(v.key)}
                       style={{
@@ -736,18 +730,6 @@ function App() {
                   );
                 })}
             </div>
-            ) : dashboardView === 'map' ? (
-              <div style={{ height: 600, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-                <FleetMap
-                  vehicles={vehicles.filter(v => {
-                    if (selectedStatusFilter && v.status !== selectedStatusFilter) return false;
-                    if (selectedPoiFilter === '__NO_POI__') return !v.stop_poi;
-                    if (selectedPoiFilter && v.stop_poi !== selectedPoiFilter) return false;
-                    return true;
-                  })}
-                  setTrackModalVehicle={setTrackModalVehicle}
-                />
-              </div>
             ) : dashboardView === 'poi' ? (
               <div style={{ padding: '0 8px' }}>
                 {(() => {

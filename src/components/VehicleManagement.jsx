@@ -377,6 +377,7 @@ const VehicleManagement = () => {
     setEditVehicleForm({
       vehicle_no: vehicle.vehicle_no || '',
       driver_name: vehicle.driver_name || '',
+      driver_pin: vehicle.driver_pin || '',
       vehicle_size: vehicle.vehicle_size || '',
       fuel_type: vehicle.fuel_type || '',
       kmpl: vehicle.kmpl || '',
@@ -1519,7 +1520,15 @@ const VehicleManagement = () => {
                 />
               </div>
               <div className="form-group">
-                <label>Assign Munshi:</label>
+                <label>🔑 Driver Portal PIN (4–6 digits):</label>
+                <input
+                  type="text" inputMode="numeric" pattern="[0-9]{4,6}" maxLength={6}
+                  value={editVehicleForm.driver_pin || ''}
+                  placeholder="Set a 4–6 digit PIN for driver login"
+                  onChange={e => setEditVehicleForm(prev => ({ ...prev, driver_pin: e.target.value.replace(/\D/g, '').slice(0,6) }))}
+                />
+                <small style={{ color: '#64748b' }}>Driver enters vehicle number + this PIN at <strong>?portal=driver</strong></small>
+              </div>
                 <select
                   value={editVehicleForm.munshi_id || ''}
                   onChange={e => {

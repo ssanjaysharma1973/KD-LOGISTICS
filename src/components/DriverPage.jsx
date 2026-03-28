@@ -226,12 +226,123 @@ function HistoryTab({ trips }) {
   );
 }
 
-// ─── Main DriverPage ──────────────────────────────────────────────────────────
-export default function DriverPage({ embeddedVehicle }) {
-  const [vehicles,  setVehicles]  = useState([]);
-  const [selVehicle, setSelVehicle] = useState(
-    () => embeddedVehicle || new URLSearchParams(window.location.search).get('vehicle') || localStorage.getItem('driverPage_vehicle') || ''
+// ─── PIN Login Screen ─────────────────────────────────────────────────────────
+function DriverPinLogin({ onLogin }) {
+  const [vehicleNo, setVehicleNo] = useState('');
+  const [pin,       setPin]       = useState('');
+  const [error,     setError]     = useState('');
+  const [loading,   setLoading]   = useState(false);
+  const pinRef = useRef(null);
+
+  async function handleLogin() {
+    if (!vehicleNo.trim()) { setError('Enter your vehicle number'); return; }
+    if (pin.length < 4)    { setError('PIN must be at least 4 digits'); return; }
+    setLoading(true); setError('');
+    try {
+      const res  = await fetch(`${API}/vehicles/driver-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicle_no: vehicleNo.trim().toUpperCase(), pin, client_id: 'CLIENT_001' }),
+      });
+      const data = await res.json();
+      if (data.success && data.vehicle) {
+        onLogin(data.vehicle);
+      } else {
+        setError('❌ Wrong vehicle number or PIN');
+        setPin('');
+        pinRef.current?.focus();
+      }
+    } catch { setError('Network error. Try again.'); }
+    finally { setLoading(false); }
+  }
+
+  const digits = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <div style={{ fontSize: 52, marginBottom: 10 }}>🚛</div>
+        <div style={{ fontWeight: 900, fontSize: 22, color: '#fff', letterSpacing: '0.06em' }}>DRIVER PORTAL</div>
+        <div style={{ fontSize: 13, color: '#64748b', marginTop: 6 }}>Atul Logistics — Enter vehicle & PIN</div>
+      </div>
+
+      {/* Vehicle number input */}
+      <input
+        type="text"
+        placeholder="Vehicle Number (e.g. HR69E0353)"
+        value={vehicleNo}
+        onChange={e => { setVehicleNo(e.target.value.toUpperCase()); setError(''); }}
+        onKeyDown={e => e.key === 'Enter' && pinRef.current?.focus()}
+        style={{
+          width: '100%', maxWidth: 280, padding: '14px 16px',
+          background: '#1e293b', border: `2px solid ${vehicleNo ? '#3b82f6' : '#334155'}`,
+          borderRadius: 12, color: '#f1f5f9', fontSize: 16, fontWeight: 700,
+          outline: 'none', textAlign: 'center', letterSpacing: '0.1em',
+          marginBottom: 20, boxSizing: 'border-box',
+        }}
+      />
+
+      {/* PIN dots */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        {[0,1,2,3,4,5].map(i => (
+          <div key={i} style={{
+            width: 14, height: 14, borderRadius: '50%',
+            background: i < pin.length ? '#3b82f6' : '#1e293b',
+            border: `2px solid ${i < pin.length ? '#3b82f6' : '#334155'}`,
+            transition: 'all 0.15s',
+          }} />
+        ))}
+      </div>
+
+      {/* Hidden input for keyboard support */}
+      <input ref={pinRef} type="password" inputMode="numeric" value={pin}
+        onChange={e => { setPin(e.target.value.replace(/\D/g,'').slice(0,6)); setError(''); }}
+        onKeyDown={e => e.key === 'Enter' && handleLogin()}
+        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
+      />
+
+      {/* PIN pad */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 72px)', gap: 10, marginBottom: 16 }}>
+        {digits.map((d, i) => (
+          <button key={i} onClick={() => {
+            if (d === '⌫') { setPin(p => p.slice(0,-1)); setError(''); }
+            else if (d !== '') { setPin(p => p.length < 6 ? p + d : p); setError(''); }
+          }} style={{
+            height: 72, borderRadius: 14,
+            background: d === '' ? 'transparent' : '#1e293b',
+            border: d === '' ? 'none' : '1px solid #334155',
+            color: d === '⌫' ? '#f87171' : '#f1f5f9',
+            fontSize: d === '⌫' ? 22 : 24, fontWeight: 700,
+            cursor: d === '' ? 'default' : 'pointer',
+            visibility: d === '' ? 'hidden' : 'visible',
+          }}
+            onMouseDown={e => { if (d) e.currentTarget.style.background = '#334155'; }}
+            onMouseUp={e => { e.currentTarget.style.background = '#1e293b'; }}
+          >{d}</button>
+        ))}
+      </div>
+
+      {error && <div style={{ color: '#f87171', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{error}</div>}
+
+      <button onClick={handleLogin} disabled={loading || pin.length < 4 || !vehicleNo.trim()} style={{
+        width: '100%', maxWidth: 240, padding: 16,
+        background: (pin.length >= 4 && vehicleNo.trim()) ? 'linear-gradient(135deg,#1d4ed8,#2563eb)' : '#1e293b',
+        border: 'none', borderRadius: 14, color: '#fff',
+        fontSize: 16, fontWeight: 800, cursor: (pin.length >= 4 && vehicleNo.trim()) ? 'pointer' : 'not-allowed',
+        boxShadow: (pin.length >= 4 && vehicleNo.trim()) ? '0 4px 20px #2563eb55' : 'none',
+      }}>{loading ? '⏳ Checking...' : '🔓 Login'}</button>
+    </div>
   );
+}
+
+// ─── Main DriverPage ──────────────────────────────────────────────────────────
+const SESSION_KEY = 'driverPortal_session';
+
+export default function DriverPage() {
+  const [vehicle,   setVehicle]   = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)) || null; }
+    catch { return null; }
+  });
   const [trips,     setTrips]     = useState([]);
   const [stops,     setStops]     = useState([]);
   const [ledger,    setLedger]    = useState([]);
@@ -240,18 +351,18 @@ export default function DriverPage({ embeddedVehicle }) {
   const [tab,       setTab]       = useState('trip');
   const intervalRef = useRef(null);
 
-  // Load vehicle list
-  useEffect(() => {
-    fetch(`${API}/vehicles-master?clientId=CLIENT_001`)
-      .then(r => r.json())
-      .then(d => setVehicles(Array.isArray(d) ? d : (d.vehicles || [])))
-      .catch(() => {});
-  }, []);
+  function handleLogin(v) {
+    setVehicle(v);
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(v));
+    setTab('trip');
+  }
+  function handleLogout() {
+    setVehicle(null);
+    sessionStorage.removeItem(SESSION_KEY);
+    setTrips([]); setStops([]); setLedger([]);
+  }
 
-  // Persist selected vehicle
-  useEffect(() => {
-    if (selVehicle) localStorage.setItem('driverPage_vehicle', selVehicle);
-  }, [selVehicle]);
+  const selVehicle = vehicle?.vehicle_no || '';
 
   const load = useCallback(async (silent = false) => {
     if (!selVehicle) return;
@@ -324,7 +435,6 @@ export default function DriverPage({ embeddedVehicle }) {
   };
 
   const activeTrip  = trips.find(t => t.status !== 'completed' && t.status !== 'cancelled');
-  const vehicleInfo = vehicles.find(v => v.vehicle_no === selVehicle);
 
   const TABS = [
     { key: 'trip',    label: '🚛 Active Trip' },
@@ -332,62 +442,32 @@ export default function DriverPage({ embeddedVehicle }) {
     { key: 'pay',     label: '💰 My Pay'      },
   ];
 
+  // ── Show PIN login if not logged in ────────────────────────────────────────
+  if (!vehicle) return <DriverPinLogin onLogin={handleLogin} />;
+
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9', fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 50 }}>
-        <span style={{ fontSize: 28 }}>🚛</span>
+      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)', padding: '14px 20px', display: 'flex', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 900, fontSize: 17, color: '#fff', letterSpacing: '0.05em' }}>DRIVER PORTAL</div>
-          <div style={{ fontSize: 11, color: '#93c5fd' }}>Atul Logistics — {selVehicle || 'Select Vehicle'}</div>
-        </div>
-        <button
-          onClick={() => load()}
-          style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, padding: '7px 14px', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}
-        >🔄</button>
-      </div>
-
-      {/* Vehicle selector */}
-      <div style={{ background: '#1e293b', padding: '14px 20px', borderBottom: '1px solid #334155' }}>
-        <label style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginBottom: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-          Your Vehicle
-        </label>
-        <select
-          value={selVehicle}
-          onChange={e => { setSelVehicle(e.target.value); setTab('trip'); }}
-          style={{ width: '100%', padding: '12px 14px', background: '#0f172a', color: '#f1f5f9', border: '2px solid #3b82f6', borderRadius: 10, fontSize: 16, fontWeight: 700, outline: 'none' }}
-        >
-          <option value="">— Select Your Vehicle —</option>
-          {vehicles.map(v => (
-            <option key={v.vehicle_no} value={v.vehicle_no}>
-              {v.vehicle_no}{v.driver_name ? ` · ${v.driver_name}` : ''}
-            </option>
-          ))}
-        </select>
-        {vehicleInfo && (
-          <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12 }}>
-            {vehicleInfo.driver_name && <span style={{ color: '#a3e635' }}>👤 {vehicleInfo.driver_name}</span>}
-            {vehicleInfo.munshi_name && <span style={{ color: '#a78bfa' }}>👨‍💼 Munshi: {vehicleInfo.munshi_name}</span>}
-            {vehicleInfo.fuel_type   && <span style={{ color: '#94a3b8' }}>⛽ {vehicleInfo.fuel_type}</span>}
+          <div style={{ fontWeight: 900, fontSize: 17, color: '#fff', letterSpacing: '0.05em' }}>🚛 DRIVER PORTAL</div>
+          <div style={{ fontSize: 11, color: '#93c5fd', marginTop: 2 }}>
+            {selVehicle}{vehicle.driver_name ? ` · ${vehicle.driver_name}` : ''}{vehicle.munshi_name ? ` · 👨‍💼 ${vehicle.munshi_name}` : ''}
           </div>
-        )}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => load()} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, padding: '7px 12px', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>🔄</button>
+          <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, padding: '6px 12px', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>🔒</button>
+        </div>
       </div>
 
-      {!selVehicle && (
-        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#475569' }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>🚛</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Select your vehicle above</div>
-          <div style={{ fontSize: 13, color: '#475569' }}>Your trips and pay details will appear here</div>
-        </div>
-      )}
-
-      {selVehicle && loading && (
+      {loading && (
         <div style={{ padding: 60, textAlign: 'center', color: '#475569' }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>Loading...
         </div>
       )}
 
-      {selVehicle && !loading && (
+      {!loading && (
         <>
           {/* Tab bar */}
           <div style={{ display: 'flex', background: '#1e293b', borderBottom: '2px solid #334155', position: 'sticky', top: 72, zIndex: 40 }}>
@@ -440,11 +520,9 @@ export default function DriverPage({ embeddedVehicle }) {
       )}
 
       {/* Auto-refresh indicator */}
-      {selVehicle && (
-        <div style={{ position: 'fixed', bottom: 12, right: 12, background: '#1e293b', border: '1px solid #334155', borderRadius: 20, padding: '4px 12px', fontSize: 10, color: '#64748b' }}>
-          🔄 Auto-refresh 30s
-        </div>
-      )}
+      <div style={{ position: 'fixed', bottom: 12, right: 12, background: '#1e293b', border: '1px solid #334155', borderRadius: 20, padding: '4px 12px', fontSize: 10, color: '#64748b' }}>
+        🔄 Auto-refresh 30s
+      </div>
     </div>
   );
 }

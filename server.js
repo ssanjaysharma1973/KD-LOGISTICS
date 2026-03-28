@@ -224,6 +224,7 @@ function seedSqliteIfEmpty() {
       await dbRun(`ALTER TABLE munshis ADD COLUMN pin TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE munshis ADD COLUMN monthly_salary REAL DEFAULT 0`).catch(() => {});
       await dbRun(`ALTER TABLE munshis ADD COLUMN approval_limit REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN driver_pin TEXT DEFAULT ''`).catch(() => {}); 
       await dbRun(`ALTER TABLE poi_unloading_rates_v2 ADD COLUMN updated_at TEXT`).catch(() => {});
       await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_unloading_v2_unique ON poi_unloading_rates_v2(client_id, poi_id)`).catch(() => {});
 
@@ -1305,8 +1306,8 @@ async function handleRequest(req, res, rawPath) {
     const body = await readBody(req);
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('UPDATE vehicles SET driver_name=?, vehicle_size=?, driver_id=?, munshi_id=?, munshi_name=?, fuel_type=?, kmpl=?, fuel_cost_per_liter=? WHERE vehicle_no=? OR id=?',
-      [body.driver_name||'', body.type||body.vehicle_size||'', body.driver_id||null, body.munshi_id||null, body.munshi_name||null, body.fuel_type||null, body.kmpl!=null?body.kmpl:null, body.fuel_cost_per_liter!=null?body.fuel_cost_per_liter:null, vId, vId],
+    db2.run('UPDATE vehicles SET driver_name=?, vehicle_size=?, driver_id=?, munshi_id=?, munshi_name=?, fuel_type=?, kmpl=?, fuel_cost_per_liter=?, driver_pin=? WHERE vehicle_no=? OR id=?',
+      [body.driver_name||'', body.type||body.vehicle_size||'', body.driver_id||null, body.munshi_id||null, body.munshi_name||null, body.fuel_type||null, body.kmpl!=null?body.kmpl:null, body.fuel_cost_per_liter!=null?body.fuel_cost_per_liter:null, body.driver_pin||'', vId, vId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
     return;
   }
@@ -1617,6 +1618,17 @@ async function handleRequest(req, res, rawPath) {
       db2.run('DELETE FROM route_job_cards WHERE job_card_number=?', [jc],
         function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
     });
+    return;
+  }
+
+  // POST /api/vehicles/driver-login
+  if (pathname === '/api/vehicles/driver-login' && req.method === 'POST') {
+    const body = await readBody(req);
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.get('SELECT vehicle_no, driver_name, phone, munshi_name, vehicle_size, fuel_type, driver_pin FROM vehicles WHERE vehicle_no=? AND driver_pin=? AND client_id=?',
+      [(body.vehicle_no||'').toUpperCase().trim(), body.pin||'', body.client_id||'CLIENT_001'],
+      (err, row) => { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err||!row ? { error: 'Invalid vehicle number or PIN' } : { success: true, vehicle: row })); });
     return;
   }
 
