@@ -40,6 +40,7 @@ import TripMonitor from "./components/TripMonitor.jsx";
 import RouteOperations from "./components/RouteOperations.jsx";
 import MunshiPage from "./components/MunshiPage.jsx";
 import Ledgers from "./components/Ledgers.jsx";
+import DriverPage from "./components/DriverPage.jsx";
 import EwayBillHub from "./components/EwayBillHub.jsx";
 import DevAdmin from "./components/DevAdmin.jsx";
 import RouteMemoryAdmin from "./components/RouteMemoryAdmin.jsx";
@@ -127,7 +128,12 @@ function App() {
   const { tenantKey } = useTenant();
   const { vehicles, pois, munshis, stats, loading, refresh: refreshVehicleContext } = useVehicleData();
   const [trackModalVehicle, setTrackModalVehicle] = useState(null);
-  const [activeTab, setActiveTab] = useState('ewaybill');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Allow deep-link to driver portal via ?portal=driver
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('portal') === 'driver') return 'driver-portal';
+    return 'ewaybill';
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // const [routes] = useState([]); // unused
   const [poiRadiusMeters] = useState(1000);
@@ -988,6 +994,8 @@ function App() {
         {activeTab === 'route-ops' && <RouteOperations />}
 
         {activeTab === 'munshi-ops' && <MunshiPage munshis={munshis} onRefresh={refreshVehicleContext} onNavigate={setActiveTab} />}
+
+        {activeTab === 'driver-portal' && <DriverPage />}
 
         {activeTab === '__dev__' && <DevAdmin />}
 

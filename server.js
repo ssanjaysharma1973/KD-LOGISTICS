@@ -1555,7 +1555,21 @@ async function handleRequest(req, res, rawPath) {
     return sqliteJson(res, 'SELECT * FROM trip_dispatch_stops WHERE job_card_number=? ORDER BY sequence_order', [jc], rows => ({ stops: rows }));
   }
 
-  // PUT /api/trip-dispatches/:jc/extend
+  // PUT /api/trip-dispatches/:jc/stops/:stopId/arrived  — driver marks a stop as arrived
+  if (/^\/api\/trip-dispatches\/[^/]+\/stops\/\d+\/arrived$/.test(pathname) && req.method === 'PUT') {
+    const parts = pathname.split('/');
+    const stopId = parts[5];
+    const body = await readBody(req);
+    try {
+      await sqRun(
+        'UPDATE trip_dispatch_stops SET stop_status=?, arrived_at=? WHERE id=?',
+        [body.stop_status || 'arrived', body.arrived_at || new Date().toISOString(), stopId]
+      );
+      return jsonResp(res, { success: true });
+    } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ error: e.message })); }
+  }
+
+
   if (/^\/api\/trip-dispatches\/[^/]+\/extend$/.test(pathname) && req.method === 'PUT') {
     const jc = decodeURIComponent(pathname.split('/')[3]);
     const body = await readBody(req);

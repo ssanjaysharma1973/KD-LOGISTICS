@@ -13,6 +13,7 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
     { key: 'trip-dispatch', label: 'Trip Dispatch', emoji: '🚚' },
     { key: 'munshi-ops', label: 'Munshi Hub', emoji: '📋' },
     { key: 'route-ops', label: 'Route Ops', emoji: '🚦' },
+    { key: 'driver-portal', label: 'Driver Portal', emoji: '🚛' },
   ];
 
   const settingsItems = [
