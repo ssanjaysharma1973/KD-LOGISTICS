@@ -110,8 +110,67 @@ function seedSqliteIfEmpty() {
       await dbRun(`CREATE TABLE IF NOT EXISTS expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, vehicle_no TEXT, expense_type TEXT,
         amount REAL DEFAULT 0, notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
-      // Add fuel_type column to vehicles if missing (migration)
+      await dbRun(`CREATE TABLE IF NOT EXISTS eway_bills_master (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, ewb_no TEXT, doc_no TEXT,
+        vehicle_no TEXT, from_place TEXT, to_place TEXT, from_poi_id TEXT, from_poi_name TEXT,
+        to_poi_id TEXT, to_poi_name TEXT, from_trade_name TEXT, to_trade_name TEXT,
+        from_pincode TEXT, to_pincode TEXT, total_value REAL DEFAULT 0, doc_date TEXT,
+        valid_upto TEXT, status TEXT DEFAULT 'active', movement_type TEXT DEFAULT 'unclassified',
+        supply_type TEXT, transport_mode TEXT DEFAULT 'Road', distance_km REAL DEFAULT 0,
+        munshi_id TEXT, munshi_name TEXT, matched_trip_id TEXT, vehicle_status TEXT,
+        delivered_at TEXT, notes TEXT, imported_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        validity_days INTEGER DEFAULT 0, ewb_number TEXT)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS ewb_vehicle_changes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ewb_id TEXT, ewb_number TEXT,
+        old_vehicle TEXT, new_vehicle TEXT, changed_at TEXT DEFAULT CURRENT_TIMESTAMP, notes TEXT)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS gps_current (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, vehicle_number TEXT,
+        latitude REAL, longitude REAL, speed REAL DEFAULT 0, gps_time TEXT,
+        stop_start_time TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS gps_live_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, vehicle_number TEXT,
+        latitude REAL, longitude REAL, speed REAL DEFAULT 0, gps_time TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS standard_routes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, route_name TEXT,
+        from_location TEXT, to_location TEXT, route_km REAL DEFAULT 0, notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS route_job_cards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, route_id TEXT,
+        vehicle_number TEXT, driver_name TEXT, job_card_date TEXT, job_card_number TEXT UNIQUE,
+        status TEXT DEFAULT 'started', munshi_id TEXT, munshi_name TEXT, notes TEXT,
+        trip_type TEXT DEFAULT 'regular', created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS trip_dispatch_stops (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, job_card_number TEXT, poi_id TEXT, poi_name TEXT,
+        poi_lat REAL DEFAULT 0, poi_lon REAL DEFAULT 0, poi_radius REAL DEFAULT 500,
+        sequence_order INTEGER DEFAULT 1, stop_type TEXT DEFAULT 'delivery',
+        stop_status TEXT DEFAULT 'pending', arrived_at TEXT, departed_at TEXT)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS driver_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, driver_id TEXT, driver_name TEXT,
+        trip_date TEXT, settlement REAL DEFAULT 0, notes TEXT,
+        settlement_status TEXT DEFAULT 'salary', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS fuel_rates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, state TEXT, fuel_type TEXT,
+        price REAL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      // Add missing columns to existing tables (migrations — ignore errors if already present)
       await dbRun(`ALTER TABLE vehicles ADD COLUMN fuel_type TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN driver_id TEXT`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN munshi_id TEXT`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN munshi_name TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN primary_poi_ids TEXT`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN standard_route_no TEXT`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN route_from TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN route_to TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN city TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE munshis ADD COLUMN area TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE munshis ADD COLUMN region TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE munshis ADD COLUMN pin TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE munshis ADD COLUMN monthly_salary REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE munshis ADD COLUMN approval_limit REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE poi_unloading_rates_v2 ADD COLUMN updated_at TEXT`).catch(() => {});
+      await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_unloading_v2_unique ON poi_unloading_rates_v2(client_id, poi_id)`).catch(() => {});
 
       // Seed pois if empty
       const poisRow = await dbGet('SELECT COUNT(1) as c FROM pois');
