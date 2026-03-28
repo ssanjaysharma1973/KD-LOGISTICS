@@ -2162,7 +2162,7 @@ async function handleRequest(req, res, rawPath) {
       const body = await readBody(req);
       const cid = body.client_id || 'CLIENT_001';
       const [pois, bills] = await Promise.all([
-        sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE client_id=?`, [cid]),
+        sqAll(`SELECT id, poi_name, city, type FROM pois WHERE client_id=?`, [cid]),
         sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND movement_type='unclassified'`, [cid]),
       ]);
       let updated = 0;
@@ -2188,7 +2188,7 @@ async function handleRequest(req, res, rawPath) {
         ? `SELECT * FROM eway_bills_master WHERE client_id=?`
         : `SELECT * FROM eway_bills_master WHERE client_id=? AND (from_poi_id IS NULL OR to_poi_id IS NULL)`;
       const [pois, bills] = await Promise.all([
-        sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE client_id=?`, [cid]),
+        sqAll(`SELECT id, poi_name, city, type FROM pois WHERE client_id=?`, [cid]),
         sqAll(sql, [cid]),
       ]);
       let updated = 0;
@@ -2395,6 +2395,111 @@ async function handleRequest(req, res, rawPath) {
       const result = Object.values(poiMap).sort((a, b) => b.total - a.total);
       return jsonResp(res, { pois: result, total_bills: bills.length });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // ─── /api/ewb/* — Live EWB management (local DB backed) ─────────────────
+
+  // GET /api/ewb/active-list
+  if (pathname === '/api/ewb/active-list' && req.method === 'GET') {
+    try {
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const rows = await sqAll(`
+        SELECT id, ewb_no, doc_no, doc_date, vehicle_no, from_trade_name, to_trade_name,
+               from_place, to_place, from_poi_name, to_poi_name, valid_upto, status,
+               movement_type, distance_km, total_value, munshi_name, delivered_at,
+               notes, imported_at
+        FROM eway_bills_master WHERE client_id=? AND ewb_no IS NOT NULL AND ewb_no != ''
+        ORDER BY imported_at DESC LIMIT 1000`, [cid]);
+      const now = new Date();
+      const result = rows.map(r => {
+        const validUpto = r.valid_upto ? new Date(r.valid_upto) : null;
+        const hoursLeft = validUpto ? (validUpto - now) / 3600000 : null;
+        const is_expired = validUpto ? validUpto < now : false;
+        const expiring_soon = !is_expired && hoursLeft != null && hoursLeft <= 24;
+        return { ...r, hours_left: hoursLeft != null ? Math.round(hoursLeft) : null, is_expired, expiring_soon };
+      });
+      return jsonResp(res, result);
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/ewb/sync-last-days
+  if (pathname === '/api/ewb/sync-last-days' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const cid = body.client_id || 'CLIENT_001';
+      const days = parseInt(body.days) || 5;
+      const since = new Date(); since.setDate(since.getDate() - days); since.setHours(0,0,0,0);
+      const sinceStr = since.toISOString().slice(0, 10);
+      const rows = await sqAll(`SELECT COUNT(*) as c FROM eway_bills_master WHERE client_id=? AND (doc_date >= ? OR imported_at >= ?)`, [cid, sinceStr, sinceStr]);
+      return jsonResp(res, { synced: rows[0]?.c || 0, since: sinceStr, status: 'ok' });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/ewb/sync-this-month
+  if (pathname === '/api/ewb/sync-this-month' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const cid = body.client_id || 'CLIENT_001';
+      const since = new Date(); since.setDate(1); since.setHours(0,0,0,0);
+      const sinceStr = since.toISOString().slice(0, 10);
+      const rows = await sqAll(`SELECT COUNT(*) as c FROM eway_bills_master WHERE client_id=? AND (doc_date >= ? OR imported_at >= ?)`, [cid, sinceStr, sinceStr]);
+      return jsonResp(res, { synced: rows[0]?.c || 0, since: sinceStr, status: 'ok' });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // GET /api/ewb/details/:no
+  if (pathname.startsWith('/api/ewb/details/') && req.method === 'GET') {
+    try {
+      const ewbNo = decodeURIComponent(pathname.replace('/api/ewb/details/', '').trim());
+      if (!ewbNo) return jsonResp(res, { status: 'error', message: 'EWB number required' }, 400);
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const rows = await sqAll(`SELECT * FROM eway_bills_master WHERE (ewb_no=? OR ewb_number=?) AND client_id=? LIMIT 1`, [ewbNo, ewbNo, cid]);
+      if (!rows.length) return jsonResp(res, { status: 'error', message: `EWB ${ewbNo} not found` });
+      const r = rows[0];
+      const validUpto = r.valid_upto ? new Date(r.valid_upto) : null;
+      const now = new Date();
+      const hoursLeft = validUpto ? (validUpto - now) / 3600000 : null;
+      return jsonResp(res, { status: 'ok', data: { ...r, hours_left: hoursLeft != null ? Math.round(hoursLeft) : null, is_expired: validUpto ? validUpto < now : false } });
+    } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
+  }
+
+  // POST /api/ewb/fetch-from-nic — returns local DB records for given date
+  if (pathname === '/api/ewb/fetch-from-nic' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const cid = body.client_id || 'CLIENT_001';
+      // Accept dd/mm/yyyy or yyyy-mm-dd
+      const rawDate = (body.date || '');
+      const dateStr = rawDate.match(/^\d{2}\/\d{2}\/\d{4}$/)
+        ? rawDate.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')
+        : rawDate;
+      let rows;
+      if (dateStr && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        rows = await sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND doc_date=?`, [cid, dateStr]);
+      } else {
+        rows = await sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC LIMIT 100`, [cid]);
+      }
+      return jsonResp(res, { status: 'ok', fetched: rows.length, new_in_master: 0, message: 'Returned from local DB' });
+    } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
+  }
+
+  // POST /api/ewb/extend-validity — extend EWB validity in local DB
+  if (pathname === '/api/ewb/extend-validity' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { ewb_no, from_place } = body;
+      if (!ewb_no) return jsonResp(res, { status: 'error', message: 'ewb_no required' }, 400);
+      if (!from_place) return jsonResp(res, { status: 'error', message: 'from_place required' }, 400);
+      const km = parseInt(body.remaining_distance) || 100;
+      const extraDays = Math.max(1, Math.ceil(km / 250));
+      const rows = await sqAll(`SELECT valid_upto FROM eway_bills_master WHERE ewb_no=? LIMIT 1`, [ewb_no]);
+      const base = rows.length && rows[0].valid_upto ? new Date(rows[0].valid_upto) : new Date();
+      if (base < new Date()) base.setTime(Date.now());
+      base.setDate(base.getDate() + extraDays);
+      const newValidity = base.toISOString().slice(0, 19).replace('T', ' ');
+      await sqRun(`UPDATE eway_bills_master SET valid_upto=?, updated_at=CURRENT_TIMESTAMP WHERE ewb_no=?`, [newValidity, ewb_no]);
+      return jsonResp(res, { status: 'success', new_validity: newValidity, extended_days: extraDays });
+    } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
   }
 
   // GET /api/fuel-prices/fetch (placeholder — returns cached DB rates)
