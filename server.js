@@ -154,6 +154,8 @@ function seedSqliteIfEmpty() {
       await dbRun(`CREATE TABLE IF NOT EXISTS fuel_rates (
         id INTEGER PRIMARY KEY AUTOINCREMENT, state TEXT, fuel_type TEXT,
         price REAL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      // Unique indexes for upsert support
+      await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_gps_current_vno_cid ON gps_current(vehicle_number, client_id)`).catch(() => {});
       // Add missing columns to existing tables (migrations — ignore errors if already present)
       await dbRun(`ALTER TABLE vehicles ADD COLUMN fuel_type TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE vehicles ADD COLUMN driver_id TEXT`).catch(() => {});
@@ -214,6 +216,55 @@ function seedSqliteIfEmpty() {
   })();
 }
 // ── end seed initializer ─────────────────────────────────────────────────
+
+// ── GPS upsert helper (no Python needed) ────────────────────────────────────
+// Writes raw provider vehicle records (or already-normalized ones) into gps_current.
+function upsertGpsCurrent(arr, clientId) {
+  return new Promise((resolve) => {
+    if (!sqlite3 || !arr || !arr.length) { resolve(0); return; }
+    try {
+      const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+      db2.on('error', err => console.error('[upsertGps] error:', err.message));
+      db2.serialize(() => {
+        db2.run('BEGIN');
+        const stmt = db2.prepare(
+          `INSERT INTO gps_current (client_id, vehicle_number, latitude, longitude, speed, gps_time, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(vehicle_number, client_id) DO UPDATE SET
+             latitude=excluded.latitude, longitude=excluded.longitude,
+             speed=excluded.speed, gps_time=excluded.gps_time, updated_at=excluded.updated_at`
+        );
+        let count = 0;
+        for (const v of arr) {
+          const vno = v.vehicleNumber || v.vehicle_number || v.number || v.vehicleNo || v.vehicle_no || '';
+          if (!vno) continue;
+          const lat = Number(v.latitude || v.lat || 0) || null;
+          const lng = Number(v.longitude || v.lng || 0) || null;
+          const spd = Number(v.speed || 0) || 0;
+          const epoch = v.dttimeInEpoch || v.createdDate || v.timestamp;
+          let gpsTime = v.lastUpdate || v.gps_time || null;
+          if (!gpsTime && epoch) {
+            const e = Number(epoch);
+            gpsTime = new Date(e > 1e12 ? e : e * 1000).toISOString();
+          }
+          if (!gpsTime) gpsTime = new Date().toISOString();
+          stmt.run([clientId, vno, lat, lng, spd, gpsTime]);
+          count++;
+        }
+        stmt.finalize();
+        db2.run('COMMIT', () => {
+          db2.close();
+          console.log(`[upsertGps] ${clientId}: ${count} rows upserted`);
+          resolve(count);
+        });
+      });
+    } catch (e) {
+      console.error('[upsertGps] exception:', e.message);
+      resolve(0);
+    }
+  });
+}
+// ── end GPS upsert ────────────────────────────────────────────────────────────
 
 // Maximum track range (hours) enforced server-side to avoid expensive queries
 const MAX_TRACK_RANGE_HOURS = Number(process.env.MAX_TRACK_RANGE_HOURS || 48);
@@ -986,30 +1037,8 @@ async function handleRequest(req, res, rawPath) {
       db.vehiclesByTenant[tenantId] = normalized;
       writeDb(db);
       
-      // Also persist to SQLite database for track history
-      try {
-        const py = process.env.PYTHON || 'python';
-        const dbPath = './fleet_erp_backend_sqlite.db';
-        const jsonData = JSON.stringify(normalized);
-        const args = ['tools/insert_gps_data.py', dbPath, jsonData, tenantId];
-        console.log('[Sync] Inserting', normalized.length, 'records into SQLite for', tenantId);
-        const out = spawnSync(py, args, { encoding: 'utf8', windowsHide: true, timeout: 30000 });
-        if (out.status === 0 && out.stdout) {
-          try {
-            const result = JSON.parse(out.stdout);
-            console.log('[Sync] SQLite insert result:', result);
-            if (result.error) {
-              console.error('[Sync] SQLite insert error:', result.error);
-            }
-          } catch (e) {
-            console.error('[Sync] Failed to parse insert result:', out.stdout);
-          }
-        } else {
-          console.error('[Sync] SQLite insert failed. Status:', out.status, 'stderr:', out.stderr);
-        }
-      } catch (insertErr) {
-        console.error('[Sync] Exception during SQLite insert:', insertErr.message);
-      }
+      // Persist to SQLite gps_current table directly (no Python needed)
+      await upsertGpsCurrent(rawList, tenantId).catch(e => console.error('[Sync] upsertGps error:', e.message));
       
       // broadcast normalized update to SSE clients subscribed to this tenant
       try { sendSse(tenantId, normalized); } catch (e) { /* ignore */ }
@@ -2037,7 +2066,9 @@ server.listen(PORT, '0.0.0.0', () => {
           if (!freshDb.vehiclesByTenant) freshDb.vehiclesByTenant = {};
           freshDb.vehiclesByTenant[key] = arr.map(v => ({ ...v, _syncedAt: new Date().toISOString() }));
           writeDb(freshDb);
-          console.log(`[AutoSync] ${key}: ${arr.length} vehicles`);
+          // Also write live positions to gps_current table so dashboard shows fresh data
+          await upsertGpsCurrent(arr, tenantId).catch(e => console.error('[AutoSync] upsertGps:', e.message));
+          console.log(`[AutoSync] ${key}: ${arr.length} vehicles → gps_current updated`);
         } catch (e) {
           console.error(`[AutoSync] ${tenantId}:`, e.message);
         }
