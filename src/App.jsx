@@ -127,7 +127,7 @@ function App() {
   const { tenantKey } = useTenant();
   const { vehicles, pois, munshis, stats, loading, refresh: refreshVehicleContext } = useVehicleData();
   const [trackModalVehicle, setTrackModalVehicle] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('ewaybill');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // const [routes] = useState([]); // unused
   const [poiRadiusMeters] = useState(1000);
