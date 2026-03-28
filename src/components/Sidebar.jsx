@@ -9,13 +9,13 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
     { key: 'dashboard', label: 'Dashboard', emoji: '⊞', view: 'grid' },
     { key: 'tracker', label: 'Live Tracker', emoji: '🗺️' },
     { key: 'ewaybill', label: 'E-Way Bill Hub', emoji: '📄' },
-    { key: 'vehicles', label: 'Vehicles', emoji: '🚗' },
     { key: 'trip-dispatch', label: 'Trip Dispatch', emoji: '🚚' },
     { key: 'munshi-ops', label: 'Munshi Hub', emoji: '📋' },
     { key: 'route-ops', label: 'Route Ops', emoji: '🚦' },
   ];
 
   const settingsItems = [
+    { key: 'vehicles', label: 'Vehicles', emoji: '🚗' },
     { key: 'bulk-unloading-charges', label: 'Unloading Charges', emoji: '💰' },
     { key: 'poimanagement', label: 'POI & Discovery', emoji: '📍' },
     { key: 'route-memory', label: 'Learned Routes', emoji: '🧠' },
