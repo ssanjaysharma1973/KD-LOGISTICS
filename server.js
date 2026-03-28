@@ -2074,9 +2074,8 @@ server.listen(PORT, '0.0.0.0', () => {
         }
       }
     }
-    // Run once at startup and then on interval
-    runAutoSync();
-    setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS);
+    // Delay first run by 8s so seed has time to finish, then run on interval
+    setTimeout(() => { runAutoSync(); setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS); }, 8000);
     console.log(`[AutoSync] Scheduler started — every ${AUTO_SYNC_INTERVAL_MS / 1000}s`);
   } else {
     console.warn('[AutoSync] PROVIDER_API_URL not set — auto-sync disabled');
