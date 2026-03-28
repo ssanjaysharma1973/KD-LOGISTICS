@@ -7,6 +7,7 @@ export function MapComponent() {
 export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDashboardView }) {
   const navItems = [
     { key: 'dashboard', label: 'Dashboard', emoji: '⊞', view: 'grid' },
+    { key: 'tracker', label: 'Live Tracker', emoji: '🗺️' },
     { key: 'ewaybill', label: 'E-Way Bill Hub', emoji: '📄' },
     { key: 'vehicles', label: 'Vehicles', emoji: '🚗' },
     { key: 'trip-dispatch', label: 'Trip Dispatch', emoji: '🚚' },

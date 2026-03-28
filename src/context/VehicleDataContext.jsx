@@ -20,51 +20,86 @@ export function VehicleDataProvider({ children }) {
   const [munshis, setMunshis] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch vehicles with GPS data + computed status from backend
+  // Fetch vehicles — retries up to 3x on 503
   const fetchVehicles = useCallback(async () => {
-    try {
-      const response = await fetch(
-        `${API_BASE}/api/vehicles?clientId=${encodeURIComponent(clientId)}`,
-        { headers: { 'X-Tenant-ID': clientId } }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const list = Array.isArray(data) ? data : (data.vehicles || []);
-        setVehicles(list);
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 2000;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/vehicles?clientId=${encodeURIComponent(clientId)}`,
+          { headers: { 'X-Tenant-ID': clientId } }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setVehicles(Array.isArray(data) ? data : (data.vehicles || []));
+          return;
+        } else if (response.status === 503 && attempt < MAX_RETRIES) {
+          console.warn(`[VehicleDataContext] Vehicles 503 — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES})`);
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        } else {
+          console.error(`[VehicleDataContext] Error fetching vehicles: status ${response.status}`);
+          break;
+        }
+      } catch (error) {
+        console.error('[VehicleDataContext] Error fetching vehicles:', error);
+        break;
       }
-    } catch (error) {
-      console.error('[VehicleDataContext] Error fetching vehicles:', error);
     }
   }, [clientId]);
 
-  // Fetch POIs
+  // Fetch POIs — retries up to 3x on 503 (sqlite3 startup delay on Railway)
   const fetchPois = useCallback(async () => {
-    try {
-      const response = await fetch(
-        `${API_BASE}/api/pois?clientId=${encodeURIComponent(clientId)}`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setPois(Array.isArray(data) ? data.map(p => ({ ...p, name: p.poi_name || p.name })) : []);
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 2000;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/pois?clientId=${encodeURIComponent(clientId)}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setPois(Array.isArray(data) ? data.map(p => ({ ...p, name: p.poi_name || p.name })) : []);
+          return;
+        } else if (response.status === 503 && attempt < MAX_RETRIES) {
+          console.warn(`[VehicleDataContext] POIs 503 — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES})`);
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        } else {
+          console.error(`[VehicleDataContext] Error fetching POIs: status ${response.status}`);
+          break;
+        }
+      } catch (error) {
+        console.error('[VehicleDataContext] Error fetching POIs:', error);
+        break;
       }
-    } catch (error) {
-      console.error('[VehicleDataContext] Error fetching POIs:', error);
     }
   }, [clientId]);
 
-  // Fetch Munshis (drivers)
+  // Fetch Munshis (drivers) — retries up to 3x on 503
   const fetchMunshis = useCallback(async () => {
-    try {
-      const response = await fetch(
-        `${API_BASE}/api/munshis?clientId=${encodeURIComponent(clientId)}`,
-        { headers: { 'X-Tenant-ID': clientId } }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setMunshis(Array.isArray(data) ? data : (data.munshis || []));
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 2000;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/munshis?clientId=${encodeURIComponent(clientId)}`,
+          { headers: { 'X-Tenant-ID': clientId } }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setMunshis(Array.isArray(data) ? data : (data.munshis || []));
+          return;
+        } else if (response.status === 503 && attempt < MAX_RETRIES) {
+          console.warn(`[VehicleDataContext] Munshis 503 — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES})`);
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        } else {
+          console.error(`[VehicleDataContext] Error fetching munshis: status ${response.status}`);
+          break;
+        }
+      } catch (error) {
+        console.error('[VehicleDataContext] Error fetching munshis:', error);
+        break;
       }
-    } catch (error) {
-      console.error('[VehicleDataContext] Error fetching munshis:', error);
     }
   }, [clientId]);
 

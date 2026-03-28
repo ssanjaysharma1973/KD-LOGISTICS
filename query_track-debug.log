@@ -1,6 +1,0 @@
-{"ts":"2026-02-06T15:46:19.340Z","args":["./tools/query_track.py","./fleet_erp_backend_sqlite.db","DL1LX0851","2026-02-04T15:46:14.311Z","2026-02-06T15:46:14.304Z","CLIENT_001"],"status":null,"stderr":"","stdout":""}
-{"ts":"2026-02-06T15:51:47.476Z","args":["./tools/query_track.py","./fleet_erp_backend_sqlite.db","DL1LX0851","2026-02-04T15:49:47.380Z","2026-02-06T15:49:47.361Z","CLIENT_001"],"status":null,"stderr":"","stdout":""}
-{"ts":"2026-02-06T16:10:32.330Z","args":["./tools/query_track.py","./fleet_erp_backend_sqlite.db","DL1LX0851","2026-02-04T16:08:32.263Z","2026-02-06T16:08:32.263Z",""],"status":null,"stderr":"","stdout":""}
-{"ts":"2026-02-06T16:12:32.424Z","args":["./tools/query_track.py","./fleet_erp_backend_sqlite.db","DL1LX0851","2026-02-04T16:10:32.366Z","2026-02-06T16:10:32.366Z",""],"status":null,"stderr":"","stdout":""}
-{"ts":"2026-02-07T10:48:43.048Z","args":["./tools/query_track.py","./fleet_erp_backend_sqlite.db","357591100018149","2026-02-03T10:46:00.000Z","2026-02-05T10:46:00.000Z","CLIENT_001"],"status":null,"stderr":"","stdout":""}
-{"ts":"2026-02-07T11:57:19.949Z","args":["./tools/query_track.py","./fleet_erp_backend_sqlite.db","HR69E8323","2026-02-04T11:55:00.000Z","2026-02-06T11:55:00.000Z","CLIENT_001"],"status":null,"stderr":"","stdout":""}

@@ -1756,6 +1756,154 @@ async function handleRequest(req, res, rawPath) {
     res.end(JSON.stringify(data));
   }
 
+  // POST /api/eway-bills-hub/import-excel  (upload sheet001.htm or .xlsx)
+  if (pathname === '/api/eway-bills-hub/import-excel' && req.method === 'POST') {
+    try {
+      const contentType = req.headers['content-type'] || '';
+      const boundary = contentType.split('boundary=')[1];
+      if (!boundary) return jsonResp(res, { error: 'No multipart boundary found' }, 400);
+
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const buf = Buffer.concat(chunks);
+
+      // Extract file content from multipart
+      const boundaryBuf = Buffer.from('--' + boundary);
+      const parts = [];
+      let start = 0;
+      while (true) {
+        const idx = buf.indexOf(boundaryBuf, start);
+        if (idx === -1) break;
+        if (start > 0) parts.push(buf.slice(start, idx - 2));
+        start = idx + boundaryBuf.length + 2;
+      }
+
+      let fileContent = null, fileName = '';
+      for (const part of parts) {
+        const headerEnd = part.indexOf('\r\n\r\n');
+        if (headerEnd === -1) continue;
+        const header = part.slice(0, headerEnd).toString();
+        if (!header.includes('filename=')) continue;
+        const fnMatch = header.match(/filename="([^"]+)"/);
+        if (fnMatch) fileName = fnMatch[1];
+        fileContent = part.slice(headerEnd + 4);
+      }
+      if (!fileContent) return jsonResp(res, { error: 'No file found in upload' }, 400);
+
+      const XLSX = await import('xlsx');
+      let wb;
+      const lname = fileName.toLowerCase();
+      if (lname.endsWith('.htm') || lname.endsWith('.html')) {
+        wb = XLSX.read(fileContent.toString('utf8'), { type: 'string' });
+      } else {
+        wb = XLSX.read(fileContent, { type: 'buffer' });
+      }
+
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      if (!rows.length) return jsonResp(res, { error: 'No data rows found in file' }, 400);
+
+      // Normalize column names
+      const norm = s => (s || '').toString().toLowerCase().replace(/[\s.\-_/]+/g, '');
+      const colMap = key => {
+        const k = norm(key);
+        if (k.includes('ewbno') || k.includes('ewbnumber') || k.includes('ewaybillno')) return 'ewb_no';
+        if (k.includes('docno') || k.includes('documentno')) return 'doc_no';
+        if (k.includes('vehicleno') || k.includes('vehicleregno')) return 'vehicle_no';
+        if (k.includes('fromgstin') || k.includes('fromgst')) return 'from_gstin';
+        if (k.includes('fromtradename') || k.includes('fromparty')) return 'from_trade_name';
+        if (k.includes('fromplace') || k.includes('fromlocation') || k.includes('fromstate')) return 'from_place';
+        if (k.includes('frompincode') || k.includes('frompin')) return 'from_pincode';
+        if (k.includes('togstin') || k.includes('togst')) return 'to_gstin';
+        if (k.includes('totradename') || k.includes('toparty')) return 'to_trade_name';
+        if (k.includes('toplace') || k.includes('tolocation') || k.includes('tostate')) return 'to_place';
+        if (k.includes('topincode') || k.includes('topin')) return 'to_pincode';
+        if (k.includes('totalvalue') || k.includes('totalinvvalue') || k.includes('invoicevalue')) return 'total_value';
+        if (k.includes('docdate') || k.includes('invoicedate')) return 'doc_date';
+        if (k.includes('validupto') || k.includes('expirydate') || k.includes('validtill')) return 'valid_upto';
+        if (k.includes('supplytype') || k.includes('supplytyp')) return 'supply_type';
+        if (k.includes('transportmode') || k.includes('mode')) return 'transport_mode';
+        if (k.includes('distance') || k.includes('approxdist')) return 'distance_km';
+        return null;
+      };
+
+      const pois = await sqAll('SELECT * FROM pois WHERE client_id=?', ['CLIENT_001']);
+      const munshis = await sqAll('SELECT * FROM munshis WHERE client_id=?', ['CLIENT_001']);
+
+      let inserted = 0, updated = 0, skipped = 0;
+      for (const row of rows) {
+        const mapped = {};
+        for (const [k, v] of Object.entries(row)) {
+          const col = colMap(k);
+          if (col) mapped[col] = v;
+        }
+
+        let ewbNo = (mapped.ewb_no || '').toString().replace(/[^0-9]/g, '');
+        if (!ewbNo || ewbNo.length < 6) { skipped++; continue; }
+
+        const vno = (mapped.vehicle_no || '').toString().toUpperCase().replace(/\s/g, '');
+        const fromPlace = (mapped.from_place || '').toString();
+        const fromPin = (mapped.from_pincode || '').toString().replace(/\D/g, '');
+        const toPlace = (mapped.to_place || '').toString();
+        const toPin = (mapped.to_pincode || '').toString().replace(/\D/g, '');
+        const fromTrade = (mapped.from_trade_name || '').toString();
+        const toTrade = (mapped.to_trade_name || '').toString();
+
+        // POI matching
+        const fromPoi = matchPoiByName(fromTrade, fromPlace, fromPin, pois);
+        const toPoi   = matchPoiByName(toTrade, toPlace, toPin, pois);
+        const mvType  = classifyMovement(fromPoi, toPoi, mapped.supply_type);
+
+        // Munshi matching by vehicle
+        const vehicleRow = await sqAll('SELECT munshi_id, munshi_name FROM vehicles WHERE vehicle_no=? AND client_id=?', [vno, 'CLIENT_001']).then(r => r[0] || null);
+        const munshiId   = vehicleRow?.munshi_id || null;
+        const munshiName = vehicleRow?.munshi_name || null;
+
+        const now = new Date().toISOString();
+        const totalVal = parseFloat((mapped.total_value || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+        const distKm   = parseFloat((mapped.distance_km || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+
+        // Parse validity days from valid_upto
+        let validityDays = 0;
+        if (mapped.valid_upto) {
+          const expDate = new Date(mapped.valid_upto);
+          const docDate = mapped.doc_date ? new Date(mapped.doc_date) : new Date();
+          if (!isNaN(expDate) && !isNaN(docDate)) validityDays = Math.round((expDate - docDate) / 86400000);
+        }
+
+        try {
+          await sqRun(
+            `INSERT OR REPLACE INTO eway_bills_master
+              (client_id, ewb_no, ewb_number, doc_no, vehicle_no, from_place, to_place,
+               from_poi_id, from_poi_name, to_poi_id, to_poi_name,
+               from_trade_name, to_trade_name, from_pincode, to_pincode,
+               total_value, doc_date, valid_upto, status, movement_type,
+               supply_type, transport_mode, distance_km,
+               munshi_id, munshi_name, validity_days, imported_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            ['CLIENT_001', ewbNo, ewbNo, mapped.doc_no || '', vno,
+             fromPlace, toPlace,
+             fromPoi?.id || null, fromPoi?.poi_name || null,
+             toPoi?.id || null, toPoi?.poi_name || null,
+             fromTrade, toTrade, fromPin, toPin,
+             totalVal, mapped.doc_date || '', mapped.valid_upto || '',
+             'active', mvType,
+             mapped.supply_type || '', mapped.transport_mode || 'Road', distKm,
+             munshiId, munshiName, validityDays, now, now]
+          );
+          inserted++;
+        } catch (e) {
+          console.error('EWB insert error:', e.message); skipped++;
+        }
+      }
+
+      return jsonResp(res, { success: true, inserted, updated, skipped, total: rows.length, message: `Imported ${inserted} EWBs from ${rows.length} rows` });
+    } catch (e) {
+      console.error('[import-excel]', e);
+      return jsonResp(res, { error: e.message }, 500);
+    }
+  }
+
   // GET /api/eway-bills-hub  (bills list with filters + pagination)
   if (pathname === '/api/eway-bills-hub' && req.method === 'GET') {
     try {
