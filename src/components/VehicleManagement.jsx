@@ -1089,7 +1089,13 @@ const VehicleManagement = () => {
           </thead>
           <tbody>
             {munshis.map((munshi, index) => {
-              const munshiVehicles = vehicles.filter(v => v.munshi_id === munshi.id);
+              const commonCount = vehicles.filter(v =>
+                (v.munshi_name || '').toLowerCase() === 'common' || (!v.munshi_id && !v.munshi_name)
+              ).length;
+              const munshiVehicles = vehicles.filter(v =>
+                v.munshi_id === munshi.id ||
+                (v.munshi_name || '').toLowerCase() === (munshi.name || '').toLowerCase()
+              );
               const vehicleCount = munshiVehicles.length;
               const poiIds = [...new Set(munshiVehicles.flatMap(v => {
                 try { return JSON.parse(v.primary_poi_ids || '[]'); } catch { return []; }
@@ -1104,7 +1110,12 @@ const VehicleManagement = () => {
                   <td><span className="approval-limit">₹{munshi.approval_limit?.toLocaleString() || '—'}</span></td>
                   <td>{munshi.phone || '—'}</td>
                   <td>{munshi.email || '—'}</td>
-                  <td><span className="assigned-vehicles">{vehicleCount}</span></td>
+                  <td>
+                    <span className="assigned-vehicles">{vehicleCount}</span>
+                    {commonCount > 0 && (
+                      <span style={{ fontSize: 11, color: '#64748b', marginLeft: 4 }}>+{commonCount} common</span>
+                    )}
+                  </td>
                   <td>
                     {poiNames.length > 0 ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -1138,6 +1149,27 @@ const VehicleManagement = () => {
                 </tr>
               );
             })}
+            {/* Common / unassigned vehicles row */}
+            {(() => {
+              const commonVehicles = vehicles.filter(v =>
+                (v.munshi_name || '').toLowerCase() === 'common' || (!v.munshi_id && !v.munshi_name)
+              );
+              if (!commonVehicles.length) return null;
+              return (
+                <tr key="common-row" style={{ background: '#f0fdf4', borderTop: '2px solid #bbf7d0' }}>
+                  <td style={{ color: '#64748b' }}>—</td>
+                  <td><span style={{ fontWeight: 700, color: '#16a34a' }}>🔄 Common (All Munshis)</span></td>
+                  <td colSpan={5} style={{ color: '#64748b', fontSize: 12 }}>Visible to every munshi in portal</td>
+                  <td>
+                    <span className="assigned-vehicles" style={{ background: '#dcfce7', color: '#166534' }}>{commonVehicles.length}</span>
+                  </td>
+                  <td colSpan={2} style={{ fontSize: 11, color: '#475569' }}>
+                    {commonVehicles.slice(0, 8).map(v => v.vehicle_no).join(', ')}
+                    {commonVehicles.length > 8 && ` +${commonVehicles.length - 8} more`}
+                  </td>
+                </tr>
+              );
+            })()}
           </tbody>
         </table>
       </div>
