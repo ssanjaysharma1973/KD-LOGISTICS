@@ -8,14 +8,13 @@ import './VehicleManagement.css';
 import { sortVehiclesByTime } from '../utils/vehicle.js';
 import { useVehicleData } from '../context/VehicleDataContext.jsx';
 import VehicleSizeImport from './VehicleSizeImport.jsx';
-import VehicleTrackerTab from './VehicleTrackerTab.jsx';
 
 const VehicleManagement = () => {
   // Shared vehicle data from context (auto-refreshes every 30s)
   const { stats: sharedStats, refresh: refreshContext } = useVehicleData();
 
   // Tab Management
-  const [activeTab, setActiveTab] = useState('vehicles'); // vehicles | tracker | drivers | munshis
+  const [activeTab, setActiveTab] = useState('vehicles'); // vehicles | drivers | munshis
   
   // Vehicle Management
   const [vehicles, setVehicles] = useState([]);
@@ -710,12 +709,6 @@ const VehicleManagement = () => {
           🚗 Vehicles ({vehicles.length})
         </button>
         <button 
-          className={`tab-btn ${activeTab === 'tracker' ? 'active' : ''}`}
-          onClick={() => setActiveTab('tracker')}
-        >
-          📡 Tracker
-        </button>
-        <button 
           className={`tab-btn ${activeTab === 'drivers' ? 'active' : ''}`}
           onClick={() => { setActiveTab('drivers'); }}
         >
@@ -1013,13 +1006,6 @@ const VehicleManagement = () => {
         )}
       </div>
       </>
-      )}
-
-      {/* Tracker Tab */}
-      {activeTab === 'tracker' && (
-        <div style={{ padding: '8px 0' }}>
-          <VehicleTrackerTab vehicles={vehicles.map(v => ({ ...v, id: v.vehicle_no, number: v.vehicle_no }))} />
-        </div>
       )}
 
       {/* Drivers Tab */}
