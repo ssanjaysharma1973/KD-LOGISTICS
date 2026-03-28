@@ -1336,7 +1336,28 @@ async function handleRequest(req, res, rawPath) {
   // GET /api/drivers
   if (pathname === '/api/drivers' && req.method === 'GET') {
     const clientId = parsed.query.clientId || parsed.query.client_id || 'CLIENT_001';
-    return sqliteJson(res, 'SELECT * FROM drivers WHERE client_id=? ORDER BY name', [clientId], null);
+    try {
+      // Fetch explicit driver records with vehicle count
+      const explicit = await sqAll(
+        `SELECT d.*, COUNT(v.id) as vehicle_count
+         FROM drivers d
+         LEFT JOIN vehicles v ON LOWER(TRIM(v.driver_name)) = LOWER(TRIM(d.name)) AND v.client_id = d.client_id
+         WHERE d.client_id = ?
+         GROUP BY d.id
+         ORDER BY d.name`, [clientId]);
+      // Also synthesize drivers from vehicles that have no matching record
+      const synthRows = await sqAll(
+        `SELECT driver_name, driver_id, client_id, COUNT(*) as vehicle_count
+         FROM vehicles
+         WHERE client_id = ? AND driver_name IS NOT NULL AND TRIM(driver_name) != ''
+         GROUP BY LOWER(TRIM(driver_name))`, [clientId]);
+      const explicitNames = new Set(explicit.map(d => (d.name||'').toLowerCase().trim()));
+      const synth = synthRows
+        .filter(r => !explicitNames.has((r.driver_name||'').toLowerCase().trim()))
+        .map(r => ({ id: r.driver_id || null, client_id: r.client_id, name: r.driver_name,
+          phone: '', license: '', notes: '', vehicle_count: r.vehicle_count, _synth: true }));
+      return jsonResp(res, [...explicit, ...synth].sort((a,b) => (a.name||'').localeCompare(b.name||'')));
+    } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ error: e.message })); }
   }
 
   // POST /api/drivers
@@ -1610,9 +1631,13 @@ async function handleRequest(req, res, rawPath) {
     const mId = pathname.split('/').pop();
     const body = await readBody(req);
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    // Serialize primary_poi_ids — accept array or JSON string
+    const poiIds = Array.isArray(body.primary_poi_ids)
+      ? JSON.stringify(body.primary_poi_ids)
+      : (body.primary_poi_ids || '[]');
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('UPDATE munshis SET name=?,phone=?,area=?,region=?,pin=?,monthly_salary=?,approval_limit=? WHERE id=?',
-      [body.name||'', body.phone||'', body.area||'', body.region||'', body.pin||'', body.monthly_salary||0, body.approval_limit||0, mId],
+    db2.run('UPDATE munshis SET name=?,phone=?,area=?,region=?,pin=?,monthly_salary=?,approval_limit=?,primary_poi_ids=?,email=? WHERE id=?',
+      [body.name||'', body.phone||'', body.area||'', body.region||'', body.pin||'', body.monthly_salary||0, body.approval_limit||0, poiIds, body.email||'', mId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
     return;
   }

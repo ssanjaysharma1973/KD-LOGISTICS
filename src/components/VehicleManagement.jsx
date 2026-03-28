@@ -381,6 +381,9 @@ const VehicleManagement = () => {
       fuel_type: vehicle.fuel_type || '',
       kmpl: vehicle.kmpl || '',
       fuel_cost_per_liter: vehicle.fuel_cost_per_liter || '',
+      munshi_id: vehicle.munshi_id || '',
+      munshi_name: vehicle.munshi_name || '',
+      primary_poi_ids: vehicle.primary_poi_ids || '[]',
       notes: vehicle.notes || '',
     });
     setShowEditModal(true);
@@ -1513,6 +1516,34 @@ const VehicleManagement = () => {
                   value={editVehicleForm.driver_name}
                   onChange={e => setEditVehicleForm(prev => ({ ...prev, driver_name: e.target.value }))}
                 />
+              </div>
+              <div className="form-group">
+                <label>Assign Munshi:</label>
+                <select
+                  value={editVehicleForm.munshi_id || ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '__common__') {
+                      setEditVehicleForm(prev => ({ ...prev, munshi_id: '', munshi_name: 'Common' }));
+                    } else if (val === '') {
+                      setEditVehicleForm(prev => ({ ...prev, munshi_id: '', munshi_name: '' }));
+                    } else {
+                      const m = munshis.find(m => String(m.id) === val);
+                      setEditVehicleForm(prev => ({ ...prev, munshi_id: val, munshi_name: m ? m.name : '' }));
+                    }
+                  }}
+                >
+                  <option value="">-- Not Assigned --</option>
+                  <option value="__common__">🔄 Common (All Munshis)</option>
+                  {munshis.map(m => (
+                    <option key={m.id} value={String(m.id)}>{m.name}{m.area ? ` (${m.area})` : ''}</option>
+                  ))}
+                </select>
+                {editVehicleForm.munshi_name && (
+                  <span style={{ fontSize: 11, color: '#16a34a', marginTop: 3, display: 'block' }}>
+                    ✅ Currently: {editVehicleForm.munshi_name}
+                  </span>
+                )}
               </div>
             </section>
 
