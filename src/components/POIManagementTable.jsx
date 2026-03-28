@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 const POIManagementTable = () => {
   const [pois, setPois] = useState([]);
+  const [munshis, setMunshis] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -24,6 +25,8 @@ const POIManagementTable = () => {
     pin_code: '',
     radius_meters: '1500',
     type: 'primary',
+    munshi_id: '',
+    munshi_name: '',
   });
 
   const CLIENT_ID = 'CLIENT_001';
@@ -32,7 +35,15 @@ const POIManagementTable = () => {
   // Fetch all POIs on mount
   useEffect(() => {
     fetchPOIs();
+    fetchMunshis();
   }, []);
+
+  const fetchMunshis = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/munshis?clientId=${CLIENT_ID}`);
+      if (res.ok) setMunshis(await res.json());
+    } catch {}
+  };
 
   const fetchPOIs = async () => {
     setLoading(true);
@@ -122,6 +133,7 @@ const POIManagementTable = () => {
         setFormData({
           poi_name: '', state: '', city: '', address: '',
           latitude: '', longitude: '', pin_code: '', radius_meters: '1500', type: 'primary',
+          munshi_id: '', munshi_name: '',
         });
         fetchPOIs();
       } else {
@@ -144,6 +156,8 @@ const POIManagementTable = () => {
       pin_code: poi.pin_code || '',
       radius_meters: poi.radius_meters || '1500',
       type: poi.type || 'primary',
+      munshi_id: poi.munshi_id || '',
+      munshi_name: poi.munshi_name || '',
     });
     setShowForm(true);
   };
@@ -249,6 +263,7 @@ const POIManagementTable = () => {
             setFormData({
               poi_name: '', state: '', city: '', address: '',
               latitude: '', longitude: '', pin_code: '', radius_meters: '1500',
+              munshi_id: '', munshi_name: '',
             });
             setShowForm(!showForm);
           }}
@@ -394,6 +409,24 @@ const POIManagementTable = () => {
               onChange={handleInputChange}
               style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
             />
+            <select
+              name="munshi_id"
+              value={formData.munshi_id}
+              onChange={(e) => {
+                const m = munshis.find(x => String(x.id) === e.target.value);
+                setFormData(prev => ({
+                  ...prev,
+                  munshi_id: e.target.value,
+                  munshi_name: m ? m.name : (e.target.value === '' ? '' : prev.munshi_name),
+                }));
+              }}
+              style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+            >
+              <option value="">-- No Munshi --</option>
+              {munshis.map(m => (
+                <option key={m.id} value={m.id}>{m.name} ({m.area || 'N/A'})</option>
+              ))}
+            </select>
             <button
               type="submit"
               style={{
@@ -493,6 +526,7 @@ const POIManagementTable = () => {
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd', fontWeight: 'bold' }}>Address</th>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd', fontWeight: 'bold' }}>Pin Code</th>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd', fontWeight: 'bold' }}>Type</th>
+              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd', fontWeight: 'bold' }}>Munshi</th>
               <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd', fontWeight: 'bold' }}>Actions</th>
             </tr>
           </thead>
@@ -506,6 +540,7 @@ const POIManagementTable = () => {
                 <td style={{ padding: '12px', fontSize: '12px', color: '#666' }}>{(poi.address || '').substring(0, 40)}...</td>
                 <td style={{ padding: '12px' }}>{poi.pin_code || '-'}</td>
                 <td style={{ padding: '12px' }}>{poi.type || 'primary'}</td>
+                <td style={{ padding: '12px' }}>{poi.munshi_name || <span style={{ color: '#aaa' }}>—</span>}</td>
                 <td style={{ padding: '12px', textAlign: 'center' }}>
                   <button
                     onClick={() => handleEdit(poi)}

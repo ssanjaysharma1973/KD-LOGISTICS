@@ -226,6 +226,10 @@ function seedSqliteIfEmpty() {
       await dbRun(`ALTER TABLE munshis ADD COLUMN approval_limit REAL DEFAULT 0`).catch(() => {});
       await dbRun(`ALTER TABLE vehicles ADD COLUMN driver_pin TEXT DEFAULT ''`).catch(() => {}); 
       await dbRun(`ALTER TABLE poi_unloading_rates_v2 ADD COLUMN updated_at TEXT`).catch(() => {});
+      await dbRun(`ALTER TABLE pois ADD COLUMN munshi_id TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE pois ADD COLUMN munshi_name TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE pois ADD COLUMN state TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE pois ADD COLUMN pin_code TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_unloading_v2_unique ON poi_unloading_rates_v2(client_id, poi_id)`).catch(() => {});
 
       // Seed pois if empty
@@ -1226,8 +1230,8 @@ async function handleRequest(req, res, rawPath) {
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
     db2.run(
-      'INSERT INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type) VALUES (?,?,?,?,?,?,?,?)',
-      [body.clientId||'CLIENT_001', body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary'],
+      'INSERT INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type,state,pin_code,munshi_id,munshi_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      [body.clientId||'CLIENT_001', body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary', body.state||'', body.pin_code||'', body.munshi_id||'', body.munshi_name||''],
       function(err) {
         db2.close();
         if (err) { res.statusCode = 500; return res.end(JSON.stringify({ error: err.message })); }
@@ -1244,8 +1248,8 @@ async function handleRequest(req, res, rawPath) {
     const body = await readBody(req);
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('UPDATE pois SET poi_name=?,latitude=?,longitude=?,city=?,address=?,radius_meters=?,type=? WHERE id=?',
-      [body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary', poiId],
+    db2.run('UPDATE pois SET poi_name=?,latitude=?,longitude=?,city=?,address=?,radius_meters=?,type=?,state=?,pin_code=?,munshi_id=?,munshi_name=? WHERE id=?',
+      [body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary', body.state||'', body.pin_code||'', body.munshi_id||'', body.munshi_name||'', poiId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
     return;
   }
