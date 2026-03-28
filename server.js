@@ -1805,22 +1805,41 @@ async function handleRequest(req, res, rawPath) {
 
       // Normalize column names
       const norm = s => (s || '').toString().toLowerCase().replace(/[\s.\-_/]+/g, '');
+
+      // Parse NIC's combined "GSTIN Info" field: "TRADE NAME,ADDRESS,CITY,PINCODE"
+      function parseGstinInfo(str) {
+        if (!str) return { trade_name: '', place: '', pincode: '' };
+        const s = String(str).trim();
+        const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+        if (!parts.length) return { trade_name: s, place: '', pincode: '' };
+        const trade_name = parts[0];
+        const lastPart = parts[parts.length - 1];
+        const isPin = /^\d{6}$/.test(lastPart);
+        const pincode = isPin ? lastPart : '';
+        const place = isPin && parts.length >= 3 ? parts[parts.length - 2] : (!isPin ? lastPart : '');
+        return { trade_name, place, pincode };
+      }
+
       const colMap = key => {
         const k = norm(key);
         if (k.includes('ewbno') || k.includes('ewbnumber') || k.includes('ewaybillno')) return 'ewb_no';
         if (k.includes('docno') || k.includes('documentno')) return 'doc_no';
         if (k.includes('vehicleno') || k.includes('vehicleregno')) return 'vehicle_no';
+        // NIC combined format: "From GSTIN Info" / "To GSTIN Info" — must check before plain fromgstin
+        if (k === 'fromgstininfo') return '_from_gstin_info';
+        if (k === 'togstininfo') return '_to_gstin_info';
         if (k.includes('fromgstin') || k.includes('fromgst')) return 'from_gstin';
-        if (k.includes('fromtradename') || k.includes('fromparty')) return 'from_trade_name';
-        if (k.includes('fromplace') || k.includes('fromlocation') || k.includes('fromstate')) return 'from_place';
+        if (k.includes('fromtradename') || k.includes('fromparty') || k.includes('generatorname')) return 'from_trade_name';
+        if (k.includes('fromplace') || k.includes('fromlocation') || k.includes('fromstate') || k.includes('dispatchfrom')) return 'from_place';
         if (k.includes('frompincode') || k.includes('frompin')) return 'from_pincode';
         if (k.includes('togstin') || k.includes('togst')) return 'to_gstin';
-        if (k.includes('totradename') || k.includes('toparty')) return 'to_trade_name';
-        if (k.includes('toplace') || k.includes('tolocation') || k.includes('tostate')) return 'to_place';
+        if (k.includes('totradename') || k.includes('toparty') || k.includes('recipientname')) return 'to_trade_name';
+        if (k.includes('toplace') || k.includes('tolocation') || k.includes('tostate') || k.includes('shipto')) return 'to_place';
         if (k.includes('topincode') || k.includes('topin')) return 'to_pincode';
         if (k.includes('totalvalue') || k.includes('totalinvvalue') || k.includes('invoicevalue')) return 'total_value';
         if (k.includes('docdate') || k.includes('invoicedate')) return 'doc_date';
-        if (k.includes('validupto') || k.includes('expirydate') || k.includes('validtill')) return 'valid_upto';
+        // NIC uses "Valid Untill" (typo) — validuntil matches validuntill as substring
+        if (k.includes('validupto') || k.includes('expirydate') || k.includes('validtill') || k.includes('validuntil')) return 'valid_upto';
         if (k.includes('supplytype') || k.includes('supplytyp')) return 'supply_type';
         if (k.includes('transportmode') || k.includes('mode')) return 'transport_mode';
         if (k.includes('distance') || k.includes('approxdist')) return 'distance_km';
@@ -1838,7 +1857,30 @@ async function handleRequest(req, res, rawPath) {
           if (col) mapped[col] = v;
         }
 
-        let ewbNo = (mapped.ewb_no || '').toString().replace(/[^0-9]/g, '');
+        // Parse NIC's combined GSTIN info fields → from_trade_name, from_place, from_pincode
+        if (mapped._from_gstin_info) {
+          const p = parseGstinInfo(String(mapped._from_gstin_info));
+          if (!mapped.from_trade_name) mapped.from_trade_name = p.trade_name;
+          if (!mapped.from_place)      mapped.from_place      = p.place;
+          if (!mapped.from_pincode)    mapped.from_pincode    = p.pincode;
+        }
+        if (mapped._to_gstin_info) {
+          const p = parseGstinInfo(String(mapped._to_gstin_info));
+          if (!mapped.to_trade_name) mapped.to_trade_name = p.trade_name;
+          if (!mapped.to_place)      mapped.to_place      = p.place;
+          if (!mapped.to_pincode)    mapped.to_pincode    = p.pincode;
+        }
+
+        // EWB number: handle large integers stored as JS floats (avoid scientific notation)
+        let ewbNo = '';
+        const rawEwb = mapped.ewb_no;
+        if (typeof rawEwb === 'number') {
+          ewbNo = Number.isInteger(rawEwb) ? String(rawEwb) : String(Math.round(rawEwb));
+        } else {
+          ewbNo = (rawEwb || '').toString().replace(/[eE][+\-]?\d+/, s => {
+            try { return String(Math.round(parseFloat((rawEwb || '').toString()))); } catch { return ''; }
+          }).replace(/[^0-9]/g, '');
+        }
         if (!ewbNo || ewbNo.length < 6) { skipped++; continue; }
 
         const vno = (mapped.vehicle_no || '').toString().toUpperCase().replace(/\s/g, '');
