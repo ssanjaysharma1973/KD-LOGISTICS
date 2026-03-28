@@ -134,10 +134,14 @@ export default function DevAdmin() {
       .then(d => {
         if (Array.isArray(d) && d.length > 0) {
           setClients(d);
-          setClientId(d[0].client_id);
+          // Prefer CLIENT_001 (primary tenant) as default
+          const primary = d.find(c => c.client_id === 'CLIENT_001') || d[0];
+          setClientId(primary.client_id);
+        } else {
+          setClientId('CLIENT_001');
         }
       })
-      .catch(() => {});
+      .catch(() => { setClientId('CLIENT_001'); });
   }, []);
 
   // Reload DB vehicles when client changes
@@ -657,7 +661,7 @@ export default function DevAdmin() {
                 <input
                   value={clientId}
                   onChange={e => { setClientId(e.target.value.toUpperCase()); setParsed([]); setResult(null); setEditRow(null); }}
-                  placeholder='CLIENT_002'
+                  placeholder='CLIENT_001'
                   style={{ width: 120, background: '#0f172a', color: '#38bdf8', border: '2px solid #3b82f6',
                     borderRadius: 6, padding: '5px 8px', fontSize: 13, fontWeight: 800, fontFamily: 'monospace' }}
                 />
