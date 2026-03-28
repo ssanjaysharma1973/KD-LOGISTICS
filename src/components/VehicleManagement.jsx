@@ -1556,6 +1556,8 @@ const VehicleManagement = () => {
                 />
                 <small style={{ color: '#64748b' }}>Driver enters vehicle number + this PIN at <strong>?portal=driver</strong></small>
               </div>
+              <div className="form-group">
+                <label>👨‍💼 Assign Munshi:</label>
                 <select
                   value={editVehicleForm.munshi_id || ''}
                   onChange={e => {
