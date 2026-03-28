@@ -166,7 +166,30 @@ function seedSqliteIfEmpty() {
       await dbRun(`ALTER TABLE vehicles ADD COLUMN route_from TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE vehicles ADD COLUMN route_to TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE vehicles ADD COLUMN city TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN kmpl REAL`).catch(() => {});
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN fuel_cost_per_liter REAL`).catch(() => {});
       await dbRun(`ALTER TABLE munshis ADD COLUMN area TEXT DEFAULT ''`).catch(() => {});
+
+      // Backfill fuel_type / munshi data for already-seeded vehicles that are missing it
+      if ((seed.vehicles || []).length > 0) {
+        await dbRun('BEGIN');
+        for (const v of seed.vehicles) {
+          if (!v.vehicle_no) continue;
+          await dbRun(`UPDATE vehicles SET
+            fuel_type   = CASE WHEN (fuel_type   IS NULL OR fuel_type   = '') THEN ? ELSE fuel_type   END,
+            munshi_id   = CASE WHEN (munshi_id   IS NULL OR munshi_id   = '') THEN ? ELSE munshi_id   END,
+            munshi_name = CASE WHEN (munshi_name IS NULL OR munshi_name = '') THEN ? ELSE munshi_name END,
+            route_from  = CASE WHEN (route_from  IS NULL OR route_from  = '') THEN ? ELSE route_from  END,
+            route_to    = CASE WHEN (route_to    IS NULL OR route_to    = '') THEN ? ELSE route_to    END,
+            city        = CASE WHEN (city        IS NULL OR city        = '') THEN ? ELSE city        END
+            WHERE vehicle_no = ?`,
+            [v.fuel_type||'', v.munshi_id||null, v.munshi_name||'',
+             v.route_from||'', v.route_to||'', v.city||'', v.vehicle_no]);
+        }
+        await dbRun('COMMIT');
+      }
+
+      await dbRun(`ALTER TABLE munshis ADD COLUMN region TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE munshis ADD COLUMN region TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE munshis ADD COLUMN pin TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE munshis ADD COLUMN monthly_salary REAL DEFAULT 0`).catch(() => {});
@@ -191,8 +214,14 @@ function seedSqliteIfEmpty() {
         console.log(`[Seed] Seeding ${(seed.vehicles||[]).length} vehicles...`);
         await dbRun('BEGIN');
         for (const v of (seed.vehicles || []))
-          await dbRun('INSERT OR IGNORE INTO vehicles (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes) VALUES (?,?,?,?,?,?,?,?)',
-            [v.client_id||'CLIENT_001', v.vehicle_no||v.vehicle_number||'', v.vehicle_type||'', v.vehicle_size||'', v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'']);
+          await dbRun(`INSERT OR IGNORE INTO vehicles
+            (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes,
+             fuel_type,munshi_id,munshi_name,driver_id,primary_poi_ids,standard_route_no,route_from,route_to,city)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [v.client_id||'CLIENT_001', v.vehicle_no||v.vehicle_number||'', v.vehicle_type||'',
+             v.vehicle_size||'', v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'',
+             v.fuel_type||'', v.munshi_id||null, v.munshi_name||'', v.driver_id||null,
+             v.primary_poi_ids||null, v.standard_route_no||null, v.route_from||'', v.route_to||'', v.city||'']);
         await dbRun('COMMIT');
       }
 
@@ -204,6 +233,40 @@ function seedSqliteIfEmpty() {
         for (const m of (seed.munshis || []))
           await dbRun('INSERT OR IGNORE INTO munshis (client_id,name,phone,email,primary_poi_ids,notes,balance) VALUES (?,?,?,?,?,?,?)',
             [m.client_id||'CLIENT_001', m.name||'', m.phone||'', m.email||'', m.primary_poi_ids||'[]', m.notes||'', m.balance||0]);
+        await dbRun('COMMIT');
+      }
+
+      // Seed fuel_type_rates if empty
+      const ftrRow = await dbGet('SELECT COUNT(1) as c FROM fuel_type_rates');
+      if ((ftrRow?.c ?? 1) === 0 && (seed.fuel_type_rates || []).length > 0) {
+        console.log(`[Seed] Seeding ${seed.fuel_type_rates.length} fuel type rates...`);
+        await dbRun('BEGIN');
+        for (const f of seed.fuel_type_rates)
+          await dbRun(`INSERT OR IGNORE INTO fuel_type_rates (client_id, fuel_type, cost_per_liter, updated_at) VALUES (?,?,?,?)`,
+            [f.client_id||'CLIENT_001', f.fuel_type||'', f.cost_per_liter||0, f.updated_at||new Date().toISOString()]);
+        await dbRun('COMMIT');
+      }
+
+      // Seed eway_bills_master if empty
+      const ewbRow = await dbGet('SELECT COUNT(1) as c FROM eway_bills_master');
+      if ((ewbRow?.c ?? 1) === 0 && (seed.eway_bills || []).length > 0) {
+        console.log(`[Seed] Seeding ${seed.eway_bills.length} EWBs...`);
+        await dbRun('BEGIN');
+        for (const e of seed.eway_bills)
+          await dbRun(`INSERT OR IGNORE INTO eway_bills_master
+            (client_id,ewb_no,doc_no,doc_date,vehicle_no,from_place,to_place,from_poi_id,from_poi_name,
+             to_poi_id,to_poi_name,from_trade_name,to_trade_name,from_pincode,to_pincode,total_value,
+             valid_upto,status,movement_type,supply_type,transport_mode,distance_km,
+             munshi_id,munshi_name,matched_trip_id,vehicle_status,delivered_at,notes,imported_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [e.client_id||'CLIENT_001',e.ewb_no||'',e.doc_no||'',e.doc_date||'',e.vehicle_no||'',
+             e.from_place||'',e.to_place||'',e.from_poi_id||null,e.from_poi_name||'',
+             e.to_poi_id||null,e.to_poi_name||'',e.from_trade_name||'',e.to_trade_name||'',
+             e.from_pincode||'',e.to_pincode||'',e.total_value||0,e.valid_upto||'',
+             e.status||'delivered',e.movement_type||'unclassified',e.supply_type||'',
+             e.transport_mode||'Road',e.distance_km||0,e.munshi_id||'',e.munshi_name||'',
+             e.matched_trip_id||null,e.vehicle_status||'',e.delivered_at||null,e.notes||'',
+             e.imported_at||new Date().toISOString()]);
         await dbRun('COMMIT');
       }
 
@@ -1168,11 +1231,25 @@ async function handleRequest(req, res, rawPath) {
   // GET /api/vehicles-master
   if (pathname === '/api/vehicles-master' && req.method === 'GET') {
     const clientId = parsed.query.clientId || parsed.query.client_id || 'CLIENT_001';
-    return sqliteJson(res,
-      'SELECT * FROM vehicles WHERE client_id=? ORDER BY vehicle_no',
-      [clientId],
-      rows => rows.map(r => ({ ...r, number: r.vehicle_no, vehicle_reg_no: r.vehicle_no }))
-    );
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.all('SELECT * FROM fuel_type_rates WHERE client_id=?', [clientId], (err, rates) => {
+      const rateMap = {};
+      (rates || []).forEach(r => { rateMap[(r.fuel_type||'').toUpperCase()] = r.cost_per_liter; });
+      db2.all('SELECT * FROM vehicles WHERE client_id=? ORDER BY vehicle_no', [clientId], (err2, rows) => {
+        db2.close();
+        if (err2) { res.statusCode = 500; return res.end(JSON.stringify({ error: err2.message })); }
+        const result = (rows || []).map(r => ({
+          ...r,
+          number: r.vehicle_no,
+          vehicle_reg_no: r.vehicle_no,
+          fuel_cost_per_liter: r.fuel_cost_per_liter != null ? r.fuel_cost_per_liter : (rateMap[(r.fuel_type||'').toUpperCase()] ?? null),
+        }));
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(result));
+      });
+    });
+    return;
   }
 
   // GET /api/vehicles-master/dropdown
@@ -1198,8 +1275,20 @@ async function handleRequest(req, res, rawPath) {
     const body = await readBody(req);
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('UPDATE vehicles SET driver_name=?, vehicle_size=?, driver_id=?, munshi_id=? WHERE vehicle_no=? OR id=?',
-      [body.driver_name||'', body.type||body.vehicle_size||'', body.driver_id||null, body.munshi_id||null, vId, vId],
+    db2.run('UPDATE vehicles SET driver_name=?, vehicle_size=?, driver_id=?, munshi_id=?, munshi_name=?, fuel_type=?, kmpl=?, fuel_cost_per_liter=? WHERE vehicle_no=? OR id=?',
+      [body.driver_name||'', body.type||body.vehicle_size||'', body.driver_id||null, body.munshi_id||null, body.munshi_name||null, body.fuel_type||null, body.kmpl!=null?body.kmpl:null, body.fuel_cost_per_liter!=null?body.fuel_cost_per_liter:null, vId, vId],
+      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
+    return;
+  }
+
+  // PUT /api/vehicles-master/:id/fuel-rate (bulk fuel rate set)
+  if (/^\/api\/vehicles-master\/[^/]+\/fuel-rate$/.test(pathname) && req.method === 'PUT') {
+    const vId = decodeURIComponent(pathname.split('/').slice(-2)[0]);
+    const body = await readBody(req);
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.run('UPDATE vehicles SET kmpl=?, fuel_cost_per_liter=? WHERE vehicle_no=? OR id=?',
+      [body.kmpl != null ? body.kmpl : null, body.fuel_cost_per_liter != null ? body.fuel_cost_per_liter : null, vId, vId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
     return;
   }
@@ -1796,10 +1885,48 @@ async function handleRequest(req, res, rawPath) {
     } catch(e) { return jsonResp(res, { warnings: [], count: 0, error: e.message }); }
   }
 
+  // GET /api/eway-bills-hub/active-list
+  if (pathname === '/api/eway-bills-hub/active-list' && req.method === 'GET') {
+    try {
+      const cid = parsed.query.clientId || parsed.query.client_id || 'CLIENT_001';
+      const rows = await sqAll(`
+        SELECT ewb_no, doc_no, doc_date, vehicle_no, from_trade_name, to_trade_name,
+               from_place, to_place, from_poi_name, to_poi_name, valid_upto, status,
+               movement_type, distance_km, total_value, munshi_name, delivered_at,
+               notes, imported_at, id
+        FROM eway_bills_master WHERE client_id=?
+        ORDER BY imported_at DESC LIMIT 2000`, [cid]);
+      // Compute expiry flags
+      const now = new Date();
+      const result = rows.map(r => {
+        const validUpto = r.valid_upto ? new Date(r.valid_upto) : null;
+        const hoursLeft = validUpto ? (validUpto - now) / 3600000 : null;
+        const is_expired = validUpto ? validUpto < now : false;
+        const expiring_soon = !is_expired && hoursLeft != null && hoursLeft <= 24;
+        return { ...r, hours_left: hoursLeft ? Math.round(hoursLeft) : null, is_expired, expiring_soon };
+      });
+      return jsonResp(res, result);
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/eway-bills-hub/sync-this-month
+  if (pathname === '/api/eway-bills-hub/sync-this-month' && req.method === 'POST') {
+    // This would normally pull from NIC; for now just return what we have for current month
+    try {
+      const cid = parsed.query.clientId || parsed.query.client_id || 'CLIENT_001';
+      const since = new Date(); since.setDate(1); since.setHours(0,0,0,0);
+      const sinceStr = since.toISOString().slice(0,10);
+      const rows = await sqAll(`SELECT COUNT(*) as c FROM eway_bills_master WHERE client_id=? AND (doc_date >= ? OR imported_at >= ?)`,
+        [cid, sinceStr, sinceStr]);
+      const count = rows[0]?.c || 0;
+      return jsonResp(res, { synced: count, since: sinceStr, message: 'Returned existing records for this month' });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
   // GET /api/eway-bills-hub/vehicle-movement
   if (pathname === '/api/eway-bills-hub/vehicle-movement' && req.method === 'GET') {
     try {
-      const cid = parsed.query.client_id || 'CLIENT_001';
+      const cid = parsed.query.client_id || parsed.query.clientId || 'CLIENT_001';
       const [vehicleRows, pois, activeEwbs] = await Promise.all([
         sqAll(`SELECT v.vehicle_no, v.driver_name, v.munshi_name, v.vehicle_size,
                       g.latitude, g.longitude, g.gps_time, g.speed
@@ -1808,6 +1935,28 @@ async function handleRequest(req, res, rawPath) {
         sqAll(`SELECT id, poi_name, latitude, longitude, radius_meters, type FROM pois WHERE client_id=?`, [cid]),
         sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND status='active'`, [cid]),
       ]);
+
+      // If gps_current has no data, fall back to sync-db.json positions
+      const hasGps = vehicleRows.some(r => r.latitude != null);
+      if (!hasGps) {
+        const fallbackVehicles = await getVehiclesFromSqlite(cid);
+        const fallbackMap = {};
+        // Also try sync-db.json
+        const sdb = readDb();
+        const key = resolveTenantKey(sdb, cid);
+        const jsonVehicles = (sdb.vehiclesByTenant?.[key] || []);
+        for (const jv of jsonVehicles) {
+          const vno = jv.vehicle_number || jv.number || jv.vehicleNo || '';
+          if (vno) fallbackMap[vno] = { latitude: jv.lat || jv.latitude, longitude: jv.lng || jv.longitude, gps_time: jv.lastUpdate || jv.gps_time, speed: jv.speed || 0 };
+        }
+        // Merge fallback GPS into vehicleRows
+        vehicleRows.forEach(r => {
+          if (r.latitude == null && fallbackMap[r.vehicle_no]) {
+            const fb = fallbackMap[r.vehicle_no];
+            r.latitude = fb.latitude; r.longitude = fb.longitude; r.gps_time = fb.gps_time; r.speed = fb.speed;
+          }
+        });
+      }
       const ewbByVehicle = {};
       for (const e of activeEwbs) {
         const vno = (e.vehicle_no || '').trim();
@@ -2175,10 +2324,24 @@ server.listen(PORT, '0.0.0.0', () => {
           const fetchOpts = { headers: {} };
           if (PROVIDER_API_KEY) fetchOpts.headers['Authorization'] = `Bearer ${PROVIDER_API_KEY}`;
           const r = await fetch(fetchUrl, fetchOpts);
-          if (!r.ok) continue;
+          if (!r.ok) { console.error(`[AutoSync] provider ${r.status} for ${tenantId} — url: ${fetchUrl}`); continue; }
           const data = await r.json();
-          const arr = Array.isArray(data) ? data : (data.data || data.vehicles || data.items || []);
-          if (!arr.length) continue;
+          // Robust extraction matching /api/sync extractArray logic
+          function extractAutoArr(obj) {
+            if (!obj) return [];
+            if (Array.isArray(obj)) return obj;
+            if (Array.isArray(obj.list)) return obj.list;
+            if (Array.isArray(obj.vehicles)) return obj.vehicles;
+            if (Array.isArray(obj.data)) return obj.data;
+            if (obj.data && Array.isArray(obj.data.list)) return obj.data.list;
+            if (obj.data && Array.isArray(obj.data.vehicles)) return obj.data.vehicles;
+            if (obj.data && Array.isArray(obj.data.data)) return obj.data.data;
+            if (obj.list && typeof obj.list === 'object') { const vals = Object.values(obj.list); if (vals.length && typeof vals[0] === 'object') return vals; }
+            if (obj.data && typeof obj.data === 'object') { const vals = Object.values(obj.data); if (vals.length && typeof vals[0] === 'object') return vals; }
+            return [];
+          }
+          const arr = extractAutoArr(data);
+          if (!arr.length) { console.warn(`[AutoSync] ${tenantId}: provider returned 0 items — keys:`, Object.keys(data || {})); continue; }
           const freshDb = readDb();
           const key = resolveTenantKey(freshDb, tenantId);
           if (!freshDb.vehiclesByTenant) freshDb.vehiclesByTenant = {};
