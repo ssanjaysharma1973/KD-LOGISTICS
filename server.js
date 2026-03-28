@@ -99,6 +99,19 @@ function seedSqliteIfEmpty() {
       await dbRun(`CREATE TABLE IF NOT EXISTS munshis (
         id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, name TEXT, phone TEXT, email TEXT,
         primary_poi_ids TEXT, notes TEXT, balance REAL DEFAULT 0)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS drivers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, name TEXT, phone TEXT, license TEXT, notes TEXT)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS fuel_type_rates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, fuel_type TEXT, cost_per_liter REAL DEFAULT 0,
+        updated_at TEXT, UNIQUE(client_id, fuel_type))`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS poi_unloading_rates_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, poi_id TEXT, category_1_32ft_34ft REAL DEFAULT 0,
+        category_2_22ft_24ft REAL DEFAULT 0, category_3_small REAL DEFAULT 0, notes TEXT)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, vehicle_no TEXT, expense_type TEXT,
+        amount REAL DEFAULT 0, notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      // Add fuel_type column to vehicles if missing (migration)
+      await dbRun(`ALTER TABLE vehicles ADD COLUMN fuel_type TEXT DEFAULT ''`).catch(() => {});
 
       // Seed pois if empty
       const poisRow = await dbGet('SELECT COUNT(1) as c FROM pois');
@@ -969,6 +982,12 @@ async function handleRequest(req, res, rawPath) {
       req.on('data', chunk => body += chunk);
       req.on('end', () => { try { resolve(JSON.parse(body || '{}')); } catch { resolve({}); } });
     });
+  }
+
+  // GET /api/dev/clients — returns distinct clients from vehicles table
+  if (pathname === '/api/dev/clients' && req.method === 'GET') {
+    return sqliteJson(res, `SELECT DISTINCT client_id FROM vehicles ORDER BY client_id`, [], rows =>
+      rows.map(r => ({ client_id: r.client_id })));
   }
 
   // GET /api/pois
