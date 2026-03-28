@@ -201,8 +201,19 @@ function TripsTab({ munshi, vehicles }) {
 // ─── Vehicles Tab ─────────────────────────────────────────────────────────────
 function VehiclesTab({ munshi, vehicles }) {
   const myVehicles = vehicles.filter(v =>
-    v.munshi_id && String(v.munshi_id) === String(munshi.id) ||
-    (v.munshi_name || '').toLowerCase() === (munshi.name || '').toLowerCase()
+    // Vehicles specifically assigned to this munshi
+    (v.munshi_id && String(v.munshi_id) === String(munshi.id)) ||
+    (v.munshi_name || '').toLowerCase() === (munshi.name || '').toLowerCase() ||
+    // Vehicles assigned as Common (visible to all munshis)
+    (v.munshi_name || '').toLowerCase() === 'common' ||
+    (!v.munshi_id && !v.munshi_name)
+  );
+
+  const commonVehicles = myVehicles.filter(v =>
+    (v.munshi_name || '').toLowerCase() === 'common' || (!v.munshi_id && !v.munshi_name)
+  );
+  const myOwnVehicles = myVehicles.filter(v =>
+    (v.munshi_name || '').toLowerCase() !== 'common' && (v.munshi_id || v.munshi_name)
   );
 
   const STATUS_COLORS = {
@@ -220,27 +231,36 @@ function VehiclesTab({ munshi, vehicles }) {
 
   return (
     <div style={{ padding: '16px 20px' }}>
-      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>{myVehicles.length} vehicles assigned to you</div>
-      {myVehicles.map(v => {
-        const statusKey = Object.keys(STATUS_COLORS).find(k => (v.status || '').includes(k)) || 'Offline';
-        const sc = STATUS_COLORS[statusKey] || STATUS_COLORS.Offline;
-        return (
-          <div key={v.vehicle_no} style={{ background: '#1e293b', borderRadius: 12, padding: '14px 16px', marginBottom: 10, border: '1px solid #334155' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div style={{ fontWeight: 900, fontSize: 17, color: '#60a5fa' }}>{v.vehicle_no}</div>
-              <div style={{ fontSize: 12, color: sc.dot, fontWeight: 600 }}>{sc.label}</div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 14px', fontSize: 12 }}>
-              <Kv label="Size"   val={fmtSize(v.vehicle_size)} />
-              <Kv label="Fuel"   val={v.fuel_type || '—'} color={v.fuel_type === 'Diesel' ? '#f59e0b' : v.fuel_type === 'CNG' ? '#4ade80' : '#94a3b8'} />
-              <Kv label="Driver" val={v.driver_name || '—'} color="#a3e635" />
-              <Kv label="KMPL"   val={v.kmpl ? `${v.kmpl} km/L` : '—'} />
-            </div>
-          </div>
-        );
-      })}
+      {myOwnVehicles.length > 0 && (
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, fontWeight: 700 }}>📋 Your Vehicles ({myOwnVehicles.length})</div>
+      )}
+      {myOwnVehicles.map(v => renderVehicleCard(v, STATUS_COLORS))}
+
+      {commonVehicles.length > 0 && (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, marginTop: myOwnVehicles.length ? 16 : 0, fontWeight: 700 }}>🔄 Common Vehicles ({commonVehicles.length})</div>
+      )}
+      {commonVehicles.map(v => renderVehicleCard(v, STATUS_COLORS))}
     </div>
   );
+
+  function renderVehicleCard(v, STATUS_COLORS) {
+    const statusKey = Object.keys(STATUS_COLORS).find(k => (v.status || '').includes(k)) || 'Offline';
+    const sc = STATUS_COLORS[statusKey] || STATUS_COLORS.Offline;
+    return (
+      <div key={v.vehicle_no} style={{ background: '#1e293b', borderRadius: 12, padding: '14px 16px', marginBottom: 10, border: '1px solid #334155' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontWeight: 900, fontSize: 17, color: '#60a5fa' }}>{v.vehicle_no}</div>
+          <div style={{ fontSize: 12, color: sc.dot, fontWeight: 600 }}>{sc.label}</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 14px', fontSize: 12 }}>
+          <Kv label="Size"   val={fmtSize(v.vehicle_size)} />
+          <Kv label="Fuel"   val={v.fuel_type || '—'} color={v.fuel_type === 'Diesel' ? '#f59e0b' : v.fuel_type === 'CNG' ? '#4ade80' : '#94a3b8'} />
+          <Kv label="Driver" val={v.driver_name || '—'} color="#a3e635" />
+          <Kv label="KMPL"   val={v.kmpl ? `${v.kmpl} km/L` : '—'} />
+        </div>
+      </div>
+    );
+  }
 }
 
 function fmtSize(s) {
