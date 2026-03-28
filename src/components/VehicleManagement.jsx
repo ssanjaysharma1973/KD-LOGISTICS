@@ -1130,6 +1130,7 @@ const VehicleManagement = () => {
                         region: munshi.region || '',
                         phone: munshi.phone || '',
                         email: munshi.email || '',
+                        pin: munshi.pin || '',
                         approval_limit: munshi.approval_limit || '',
                         primary_poi_ids: (() => { try { return JSON.parse(munshi.primary_poi_ids || '[]'); } catch { return []; } })()
                       });
@@ -1736,6 +1737,15 @@ const VehicleManagement = () => {
             <div className="form-group">
               <label>Email Address:</label>
               <input type="email" value={editMunshiForm.email || ''} placeholder="munshi@example.com" onChange={e => setEditMunshiForm(p => ({...p, email: e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>🔑 Portal PIN (4–6 digits):</label>
+              <input type="text" inputMode="numeric" pattern="[0-9]{4,6}" maxLength={6}
+                value={editMunshiForm.pin || ''}
+                placeholder="Set a 4–6 digit PIN for munshi login"
+                onChange={e => setEditMunshiForm(p => ({...p, pin: e.target.value.replace(/\D/g, '').slice(0,6)}))}
+              />
+              <small style={{ color: '#64748b' }}>Munshi uses this PIN to log in at <strong>?portal=munshi</strong></small>
             </div>
 
             {/* ── POI Assignment — 3 sections ── */}
