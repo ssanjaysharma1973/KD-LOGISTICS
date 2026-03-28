@@ -972,7 +972,7 @@ function App() {
         )}
 
         {activeTab === 'ewaybill' && (
-          <EwayBillHub defaultTab="import" />
+          <EwayBillHub defaultTab="vehicles" />
         )}
 
         {(activeTab === 'unloading-rates' || activeTab === 'bulk-unloading-charges') && (
