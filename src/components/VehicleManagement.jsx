@@ -566,25 +566,33 @@ const VehicleManagement = () => {
       return;
     }
     
-    // Find the selected munshi details
-    const munshi = munshis.find(m => String(m.id) === String(selectedBulkMunshi));
-    if (!munshi) {
-      alert('Munshi not found');
-      return;
+    // Resolve munshi details (or Common)
+    let munshiId, munshiName;
+    if (selectedBulkMunshi === '__common__') {
+      munshiId = '';
+      munshiName = 'Common';
+    } else {
+      const munshi = munshis.find(m => String(m.id) === String(selectedBulkMunshi));
+      if (!munshi) {
+        alert('Munshi not found');
+        return;
+      }
+      munshiId = munshi.id;
+      munshiName = munshi.name;
     }
     
     try {
       // Update each selected vehicle with the munshi
       const vehicleIds = Array.from(selectedVehicles);
-      console.log(`Assigning munshi ${munshi.name} to ${vehicleIds.length} vehicles`);
+      console.log(`Assigning munshi ${munshiName} to ${vehicleIds.length} vehicles`);
       
       const updatePromises = vehicleIds.map(vehicleId =>
         fetch(`/api/vehicles-master/${vehicleId}/munshi`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            munshi_id: munshi.id,
-            munshi_name: munshi.name,
+            munshi_id: munshiId,
+            munshi_name: munshiName,
             client_id: 'CLIENT_001'
           })
         })
@@ -594,7 +602,7 @@ const VehicleManagement = () => {
       const allSuccess = results.every(r => r.ok);
       
       if (allSuccess) {
-        alert(`✅ Successfully assigned ${munshi.name} to ${vehicleIds.length} vehicles`);
+        alert(`✅ Successfully assigned ${munshiName} to ${vehicleIds.length} vehicles`);
         setShowBulkMunshiModal(false);
         setSelectedBulkMunshi('');
         setSelectedVehicles(new Set());
@@ -1394,6 +1402,7 @@ const VehicleManagement = () => {
                 onChange={(e) => setSelectedBulkMunshi(e.target.value)}
               >
                 <option value="">-- Select Munshi --</option>
+                <option value="__common__">🔄 Common (All Munshis)</option>
                 {munshis.map(munshi => (
                   <option key={munshi.id} value={munshi.id}>
                     {munshi.name} ({munshi.area || 'N/A'}) — Limit: ₹{munshi.approval_limit || '10,000'}
