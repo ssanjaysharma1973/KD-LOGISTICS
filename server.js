@@ -266,6 +266,47 @@ function upsertGpsCurrent(arr, clientId) {
 }
 // ── end GPS upsert ────────────────────────────────────────────────────────────
 
+// ── GPS live data appender (builds track history, skips duplicates via OR IGNORE) ──────────────
+function appendGpsLiveData(arr, clientId) {
+  return new Promise((resolve) => {
+    if (!sqlite3 || !arr || !arr.length) { resolve(0); return; }
+    try {
+      const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+      db2.on('error', err => console.error('[appendGpsLive] error:', err.message));
+      // Ensure unique index exists so INSERT OR IGNORE deduplicates
+      db2.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_gps_live_vno_time ON gps_live_data(vehicle_number, client_id, gps_time)', () => {
+        db2.serialize(() => {
+          db2.run('BEGIN');
+          const stmt = db2.prepare(
+            `INSERT OR IGNORE INTO gps_live_data (client_id, vehicle_number, latitude, longitude, speed, gps_time)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          );
+          let count = 0;
+          for (const v of arr) {
+            const vno = v.vehicleNumber || v.vehicle_number || v.number || v.vehicleNo || v.vehicle_no || '';
+            if (!vno) continue;
+            const lat = Number(v.latitude || v.lat || 0) || null;
+            const lng = Number(v.longitude || v.lng || 0) || null;
+            const spd = Number(v.speed || 0) || 0;
+            const epoch = v.dttimeInEpoch || v.createdDate || v.timestamp;
+            let gpsTime = v.lastUpdate || v.gps_time || null;
+            if (!gpsTime && epoch) { const e = Number(epoch); gpsTime = new Date(e > 1e12 ? e : e * 1000).toISOString(); }
+            if (!gpsTime) gpsTime = new Date().toISOString();
+            stmt.run([clientId, vno, lat, lng, spd, gpsTime]);
+            count++;
+          }
+          stmt.finalize();
+          db2.run('COMMIT', () => { db2.close(); resolve(count); });
+        });
+      });
+    } catch (e) {
+      console.error('[appendGpsLive] exception:', e.message);
+      resolve(0);
+    }
+  });
+}
+// ── end GPS live appender ─────────────────────────────────────────────────────
+
 // Maximum track range (hours) enforced server-side to avoid expensive queries
 const MAX_TRACK_RANGE_HOURS = Number(process.env.MAX_TRACK_RANGE_HOURS || 48);
 
@@ -1037,8 +1078,9 @@ async function handleRequest(req, res, rawPath) {
       db.vehiclesByTenant[tenantId] = normalized;
       writeDb(db);
       
-      // Persist to SQLite gps_current table directly (no Python needed)
+      // Persist to SQLite: upsert gps_current (latest pos) + append to gps_live_data (history)
       await upsertGpsCurrent(rawList, tenantId).catch(e => console.error('[Sync] upsertGps error:', e.message));
+      await appendGpsLiveData(rawList, tenantId).catch(e => console.error('[Sync] appendGpsLive error:', e.message));
       
       // broadcast normalized update to SSE clients subscribed to this tenant
       try { sendSse(tenantId, normalized); } catch (e) { /* ignore */ }
@@ -1506,19 +1548,55 @@ async function handleRequest(req, res, rawPath) {
   if (pathname === '/api/gps-data-range' && req.method === 'GET') {
     const vehicleId = parsed.query.vehicleId || '';
     const clientId = parsed.query.clientId || 'CLIENT_001';
-    return sqliteJson(res, 'SELECT MIN(gps_time) as min_time, MAX(gps_time) as max_time FROM gps_live_data WHERE vehicle_number=? AND client_id=?', [vehicleId, clientId],
-      rows => ({ min: rows[0]?.min_time, max: rows[0]?.max_time }));
+    // Try gps_live_data first, fall back to gps_current single-point range
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH, sqlite3.OPEN_READONLY);
+    db2.get('SELECT MIN(gps_time) as min_time, MAX(gps_time) as max_time FROM gps_live_data WHERE vehicle_number=? AND client_id=?',
+      [vehicleId, clientId], (err, row) => {
+        if (!err && row && row.min_time) {
+          db2.close();
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({ min: row.min_time, max: row.max_time }));
+        }
+        // fall back to gps_current
+        db2.get('SELECT gps_time FROM gps_current WHERE vehicle_number=? AND client_id=?',
+          [vehicleId, clientId], (err2, row2) => {
+            db2.close();
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ min: row2?.gps_time || null, max: row2?.gps_time || null }));
+          });
+      });
+    return;
   }
 
-  // GET /api/vehicle-track
+  // GET /api/vehicle-track — query gps_live_data with fallback to gps_current
   if (pathname === '/api/vehicle-track' && req.method === 'GET') {
     const vehicleId = parsed.query.vehicleId || '';
     const clientId = parsed.query.clientId || 'CLIENT_001';
     const startTime = parsed.query.startTime || '';
     const endTime = parsed.query.endTime || '';
-    return sqliteJson(res,
-      'SELECT latitude, longitude, gps_time, speed FROM gps_live_data WHERE vehicle_number=? AND client_id=? AND gps_time>=? AND gps_time<=? ORDER BY gps_time',
-      [vehicleId, clientId, startTime, endTime], null);
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH, sqlite3.OPEN_READONLY);
+    const params = [vehicleId, clientId];
+    let sql = 'SELECT latitude, longitude, gps_time, speed FROM gps_live_data WHERE vehicle_number=? AND client_id=?';
+    if (startTime) { sql += ' AND gps_time>=?'; params.push(startTime); }
+    if (endTime)   { sql += ' AND gps_time<=?'; params.push(endTime); }
+    sql += ' ORDER BY gps_time';
+    db2.all(sql, params, (err, rows) => {
+      if (!err && rows && rows.length > 0) {
+        db2.close();
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify(rows));
+      }
+      // Fall back to gps_current so tracker always shows at least current dot
+      db2.get('SELECT latitude, longitude, gps_time, speed FROM gps_current WHERE vehicle_number=? AND client_id=?',
+        [vehicleId, clientId], (err2, row) => {
+          db2.close();
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(row ? [row] : []));
+        });
+    });
+    return;
   }
 
   // ── EWB Hub helpers ───────────────────────────────────────────────────────
@@ -1982,6 +2060,46 @@ async function handleRequest(req, res, rawPath) {
     return;
   }
 
+  // GET /api/eway-bills-hub/delivery-by-poi
+  if (pathname === '/api/eway-bills-hub/delivery-by-poi' && req.method === 'GET') {
+    try {
+      const cid      = parsed.query.client_id || 'CLIENT_001';
+      const statusF  = parsed.query.status   || 'all';
+      const poiTypeF = parsed.query.poi_type || 'all';
+      const VALID_TYPES = new Set(['primary','secondary','tertiary','other','warehouse']);
+      // Build WHERE clauses using parameterised queries only
+      const where = ['e.client_id = ?', 'e.to_poi_id IS NOT NULL'];
+      const params = [cid];
+      if (statusF === 'pending')   { where.push("(e.delivered_at IS NULL OR e.delivered_at = '')"); }
+      else if (statusF === 'delivered') { where.push("e.delivered_at IS NOT NULL AND e.delivered_at != ''"); }
+      if (poiTypeF !== 'all' && VALID_TYPES.has(poiTypeF)) { where.push('tp.type = ?'); params.push(poiTypeF); }
+      const bills = await sqAll(`
+        SELECT e.id, e.ewb_no, e.doc_date, e.vehicle_no, e.total_value,
+               e.delivered_at, e.munshi_name,
+               e.to_poi_id, tp.poi_name as to_poi_name, tp.type as to_poi_type, tp.city as to_city,
+               e.from_poi_id, fp.poi_name as from_poi_name, v.vehicle_size
+        FROM eway_bills_master e
+        LEFT JOIN pois tp ON CAST(tp.id AS TEXT) = CAST(e.to_poi_id AS TEXT)
+        LEFT JOIN pois fp ON CAST(fp.id AS TEXT) = CAST(e.from_poi_id AS TEXT)
+        LEFT JOIN vehicles v ON v.vehicle_no = e.vehicle_no AND v.client_id = e.client_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY e.to_poi_id, e.doc_date DESC`, params);
+      const poiMap = {};
+      for (const b of bills) {
+        const pid = String(b.to_poi_id);
+        if (!poiMap[pid]) poiMap[pid] = { poi_id: pid, poi_name: b.to_poi_name || '(unknown)',
+          poi_type: b.to_poi_type || 'other', city: b.to_city || '', total: 0, delivered: 0, pending: 0, bills: [] };
+        poiMap[pid].total++;
+        if (b.delivered_at) poiMap[pid].delivered++; else poiMap[pid].pending++;
+        poiMap[pid].bills.push({ id: b.id, ewb_no: b.ewb_no, doc_date: b.doc_date,
+          vehicle_no: b.vehicle_no, vehicle_size: b.vehicle_size, munshi_name: b.munshi_name,
+          total_value: b.total_value, delivered_at: b.delivered_at, from_poi_name: b.from_poi_name || '' });
+      }
+      const result = Object.values(poiMap).sort((a, b) => b.total - a.total);
+      return jsonResp(res, { pois: result, total_bills: bills.length });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
   // GET /api/fuel-prices/fetch (placeholder — returns cached DB rates)
   if (pathname === '/api/fuel-prices/fetch' && req.method === 'GET') {
     const state = parsed.query.state || '';
@@ -2068,6 +2186,7 @@ server.listen(PORT, '0.0.0.0', () => {
           writeDb(freshDb);
           // Also write live positions to gps_current table so dashboard shows fresh data
           await upsertGpsCurrent(arr, tenantId).catch(e => console.error('[AutoSync] upsertGps:', e.message));
+          await appendGpsLiveData(arr, tenantId).catch(e => console.error('[AutoSync] appendGpsLive:', e.message));
           console.log(`[AutoSync] ${key}: ${arr.length} vehicles → gps_current updated`);
         } catch (e) {
           console.error(`[AutoSync] ${tenantId}:`, e.message);
