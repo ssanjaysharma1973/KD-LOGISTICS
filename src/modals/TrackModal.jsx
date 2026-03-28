@@ -29,40 +29,42 @@ export const TrackModal = ({ vehicle, onClose, onTrack, maxHours = 48 }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="bg-white rounded-xl p-6 z-[10000] w-96 shadow-lg">
-        <h3 className="font-bold mb-3">Track {vehicle?.number || 'vehicle'}</h3>
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position: 'relative', background: '#fff', borderRadius: 12, padding: 24, width: 380, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', zIndex: 10000 }}>
+        <h3 style={{ fontWeight: 700, marginBottom: 12, fontSize: 16 }}>Track {vehicle?.number || vehicle?.vehicle_no || 'vehicle'}</h3>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label className="text-xs font-medium">From</label>
-            <input type="datetime-local" value={from} onChange={e => setFrom(e.target.value)} className="w-full mt-1 p-2 border rounded" />
+            <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>From</label>
+            <input type="datetime-local" value={from} onChange={e => setFrom(e.target.value)} style={{ width: '100%', padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
           </div>
           <div>
-            <label className="text-xs font-medium">To</label>
-            <input type="datetime-local" value={to} onChange={e => setTo(e.target.value)} className="w-full mt-1 p-2 border rounded" />
+            <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>To</label>
+            <input type="datetime-local" value={to} onChange={e => setTo(e.target.value)} style={{ width: '100%', padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
           </div>
 
-          <div className="flex items-center gap-2 p-2 bg-amber-50 rounded border border-amber-200">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#fffbeb', borderRadius: 6, border: '1px solid #fde68a' }}>
             <input 
               type="checkbox" 
               id="reverse-points"
               checked={reversePoints} 
               onChange={e => setReversePoints(e.target.checked)}
-              className="w-4 h-4 cursor-pointer"
+              style={{ width: 14, height: 14, cursor: 'pointer' }}
             />
-            <label htmlFor="reverse-points" className="text-xs font-medium cursor-pointer text-slate-700">
+            <label htmlFor="reverse-points" style={{ fontSize: 12, fontWeight: 500, cursor: 'pointer', color: '#44403c' }}>
               Reverse geopoints (draw path backwards)
             </label>
           </div>
 
           {rangeInvalid && (
-            <div className="text-sm text-rose-600 bg-rose-50 p-2 rounded">Selected range exceeds maximum allowed of {humanMax}. Please choose a shorter range.</div>
+            <div style={{ fontSize: 13, color: '#dc2626', background: '#fef2f2', padding: '8px 10px', borderRadius: 6 }}>
+              Selected range exceeds maximum allowed of {humanMax}. Please choose a shorter range.
+            </div>
           )}
 
-          <div className="flex gap-2 justify-end">
-            <button type="button" onClick={onClose} className="px-3 py-2 rounded bg-gray-100">Cancel</button>
-            <button type="submit" disabled={rangeInvalid} className={`px-3 py-2 rounded text-black ${rangeInvalid ? 'bg-gray-300 cursor-not-allowed' : 'bg-indigo-600'}`}>Show Path</button>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#f1f5f9', cursor: 'pointer', fontWeight: 500 }}>Cancel</button>
+            <button type="submit" disabled={rangeInvalid} style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: rangeInvalid ? '#cbd5e1' : '#4f46e5', color: rangeInvalid ? '#94a3b8' : '#fff', cursor: rangeInvalid ? 'not-allowed' : 'pointer', fontWeight: 600 }}>Show Path</button>
           </div>
         </form>
       </div>
