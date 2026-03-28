@@ -151,6 +151,36 @@ function seedSqliteIfEmpty() {
         id INTEGER PRIMARY KEY AUTOINCREMENT, driver_id TEXT, driver_name TEXT,
         trip_date TEXT, settlement REAL DEFAULT 0, notes TEXT,
         settlement_status TEXT DEFAULT 'salary', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS munshi_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, munshi_id TEXT, munshi_name TEXT,
+        trip_id TEXT, trip_date TEXT, vehicle_number TEXT,
+        from_location TEXT DEFAULT '', to_location TEXT DEFAULT '',
+        advance_given REAL DEFAULT 0, fuel_cost REAL DEFAULT 0,
+        toll_charges REAL DEFAULT 0, unloading_charges REAL DEFAULT 0,
+        total_expense REAL DEFAULT 0, settlement REAL DEFAULT 0,
+        settlement_status TEXT DEFAULT 'pending', notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      await dbRun(`CREATE TABLE IF NOT EXISTS vehicle_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, vehicle_number TEXT, trip_id TEXT,
+        trip_date TEXT, driver_name TEXT DEFAULT '', munshi_name TEXT DEFAULT '',
+        from_location TEXT DEFAULT '', to_location TEXT DEFAULT '',
+        actual_km REAL DEFAULT 0, fuel_cost REAL DEFAULT 0,
+        advance_given REAL DEFAULT 0, toll_charges REAL DEFAULT 0,
+        unloading_charges REAL DEFAULT 0, other_charges REAL DEFAULT 0,
+        total_expense REAL DEFAULT 0, notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      // Add missing columns to driver_ledger for trip-based entries
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN trip_id TEXT`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN vehicle_number TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN from_location TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN to_location TEXT DEFAULT ''`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN advance_given REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN fuel_cost REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN toll_charges REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN unloading_charges REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN other_charges REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN total_deducted REAL DEFAULT 0`).catch(() => {});
+      await dbRun(`ALTER TABLE driver_ledger ADD COLUMN total_expense REAL DEFAULT 0`).catch(() => {});
       await dbRun(`CREATE TABLE IF NOT EXISTS fuel_rates (
         id INTEGER PRIMARY KEY AUTOINCREMENT, state TEXT, fuel_type TEXT,
         price REAL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
@@ -2399,7 +2429,68 @@ async function handleRequest(req, res, rawPath) {
     return;
   }
 
-  // GET /api/eway-bills-hub/delivery-by-poi
+  // POST /api/ledger/munshi/:id/salary
+  if (/^\/api\/ledger\/munshi\/\d+\/salary$/.test(pathname) && req.method === 'POST') {
+    const mId = pathname.split('/')[4];
+    const body = await readBody(req);
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.run('INSERT INTO munshi_ledger (munshi_id, munshi_name, trip_date, settlement, notes, settlement_status) VALUES (?,?,?,?,?,?)',
+      [mId, body.munshi_name||'', body.entry_date||new Date().toISOString().split('T')[0], body.amount||0, body.notes||'', body.entry_type||'salary'],
+      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true, id: this.lastID })); });
+    return;
+  }
+
+  // GET /api/ledger/driver
+  if (pathname === '/api/ledger/driver' && req.method === 'GET') {
+    try {
+      const rows = await sqAll('SELECT * FROM driver_ledger ORDER BY trip_date DESC, created_at DESC', []);
+      return jsonResp(res, rows);
+    } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ error: e.message })); }
+  }
+
+  // DELETE /api/ledger/driver/entry/:id
+  if (/^\/api\/ledger\/driver\/entry\/\d+$/.test(pathname) && req.method === 'DELETE') {
+    const entryId = pathname.split('/').pop();
+    try {
+      const rows = await sqAll('SELECT * FROM driver_ledger WHERE id=?', [entryId]);
+      if (!rows.length) { res.statusCode = 404; return res.end(JSON.stringify({ error: 'Entry not found' })); }
+      await sqRun('DELETE FROM driver_ledger WHERE id=?', [entryId]);
+      return jsonResp(res, { success: true, deleted_trips: rows[0].trip_id ? [rows[0].trip_id] : [] });
+    } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ error: e.message })); }
+  }
+
+  // GET /api/ledger/munshi  (optionally ?munshiId=N)
+  if (pathname === '/api/ledger/munshi' && req.method === 'GET') {
+    try {
+      const munshiId = parsed.query.munshiId || parsed.query.munshi_id;
+      const rows = munshiId
+        ? await sqAll('SELECT * FROM munshi_ledger WHERE munshi_id=? ORDER BY trip_date DESC, created_at DESC', [munshiId])
+        : await sqAll('SELECT * FROM munshi_ledger ORDER BY trip_date DESC, created_at DESC', []);
+      return jsonResp(res, rows);
+    } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ error: e.message })); }
+  }
+
+  // DELETE /api/ledger/munshi/entry/:id
+  if (/^\/api\/ledger\/munshi\/entry\/\d+$/.test(pathname) && req.method === 'DELETE') {
+    const entryId = pathname.split('/').pop();
+    try {
+      const rows = await sqAll('SELECT * FROM munshi_ledger WHERE id=?', [entryId]);
+      if (!rows.length) { res.statusCode = 404; return res.end(JSON.stringify({ error: 'Entry not found' })); }
+      await sqRun('DELETE FROM munshi_ledger WHERE id=?', [entryId]);
+      return jsonResp(res, { success: true, deleted_trips: rows[0].trip_id ? [rows[0].trip_id] : [] });
+    } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ error: e.message })); }
+  }
+
+  // GET /api/ledger/vehicle
+  if (pathname === '/api/ledger/vehicle' && req.method === 'GET') {
+    try {
+      const rows = await sqAll('SELECT * FROM vehicle_ledger ORDER BY trip_date DESC, created_at DESC', []);
+      return jsonResp(res, rows);
+    } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ error: e.message })); }
+  }
+
+
   if (pathname === '/api/eway-bills-hub/delivery-by-poi' && req.method === 'GET') {
     try {
       const cid      = parsed.query.client_id || 'CLIENT_001';
