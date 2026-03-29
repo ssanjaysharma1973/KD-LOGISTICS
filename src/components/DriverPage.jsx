@@ -2,14 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API = '/api';
 
-const STATUS_CFG = {
-  started:    { label: 'Dispatched',    color: '#2563eb', bg: '#dbeafe',  icon: '🔵', btnLabel: '🚀 Start Journey',    btnColor: '#2563eb', next: 'in_transit' },
-  in_transit: { label: 'En Route',      color: '#d97706', bg: '#fef3c7',  icon: '🟡', btnLabel: '📦 Mark Unloading',   btnColor: '#d97706', next: 'unloading'  },
-  unloading:  { label: 'Unloading',     color: '#7c3aed', bg: '#ede9fe',  icon: '🟣', btnLabel: '✅ Mark Completed',   btnColor: '#16a34a', next: 'completed'  },
-  completed:  { label: 'Completed',     color: '#16a34a', bg: '#dcfce7',  icon: '🟢', btnLabel: null, next: null },
-  cancelled:  { label: 'Cancelled',     color: '#dc2626', bg: '#fee2e2',  icon: '🔴', btnLabel: null, next: null },
-};
-
 function num(v) { return parseFloat(v) || 0; }
 function fmt(v) { return '₹' + num(v).toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
 function fmtDate(s) {
@@ -58,31 +50,51 @@ function StopRow({ stop, index, tripActive, onArrived }) {
   );
 }
 
-// ─── Trip card ────────────────────────────────────────────────────────────────
-function ActiveTripCard({ trip, stops, onStatusUpdate, onStopArrived, updating }) {
-  const cfg = STATUS_CFG[trip.status] || STATUS_CFG.started;
+// Status colour helper (no STATUS_CFG dependency)
+function statusChip(status) {
+  const MAP = {
+    started:    { label: 'Dispatched', color: '#60a5fa', bg: '#1e3a8a33' },
+    in_transit: { label: 'En Route',   color: '#fbbf24', bg: '#78350f33' },
+    unloading:  { label: 'Unloading',  color: '#c084fc', bg: '#4c1d9533' },
+    completed:  { label: 'Completed',  color: '#4ade80', bg: '#14532d33' },
+    cancelled:  { label: 'Cancelled',  color: '#f87171', bg: '#7f1d1d33' },
+  };
+  return MAP[status] || MAP.started;
+}
+
+// ─── Current trip card (clean, no status progression buttons) ─────────────────
+function CurrentTripCard({ trip, stops, onStopArrived }) {
   const tripActive = trip.status !== 'completed' && trip.status !== 'cancelled';
-  const doneStops = stops.filter(s => s.stop_status === 'arrived' || s.stop_status === 'completed').length;
+  const doneStops  = stops.filter(s => s.stop_status === 'arrived' || s.stop_status === 'completed').length;
+  const chip       = statusChip(trip.status);
 
   return (
-    <div style={{ paddingBottom: 100 }}>
-      {/* Status banner */}
-      <div style={{
-        background: cfg.bg, border: `2px solid ${cfg.color}`,
-        borderRadius: 16, padding: '18px 20px', marginBottom: 16, textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 36, marginBottom: 6 }}>{cfg.icon}</div>
-        <div style={{ fontWeight: 900, fontSize: 22, color: cfg.color, letterSpacing: '0.04em' }}>{cfg.label}</div>
-        <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>#{trip.job_card_number}</div>
+    <div style={{ paddingBottom: 80 }}>
+      {/* Job card header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ fontWeight: 900, fontSize: 16, color: '#f1f5f9' }}>#{trip.job_card_number}</div>
+        <span style={{ background: chip.bg, color: chip.color, borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 700, border: `1px solid ${chip.color}44` }}>
+          {chip.label}
+        </span>
       </div>
 
       {/* Info grid */}
       <div style={{ background: '#1e293b', borderRadius: 14, padding: '16px 18px', marginBottom: 14, border: '1px solid #334155' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <Info label="Date" val={fmtDate(trip.job_card_date || trip.created_at)} />
+          <Info label="Date"    val={fmtDate(trip.job_card_date || trip.created_at)} />
           <Info label="Vehicle" val={trip.vehicle_number} color="#60a5fa" />
-          <Info label="Driver" val={trip.driver_name || '—'} color="#a3e635" />
-          <Info label="Munshi" val={trip.munshi_name || '—'} color="#a78bfa" />
+          <Info label="Driver"  val={trip.driver_name || '—'} color="#a3e635" />
+          <Info label="Munshi"  val={trip.munshi_name || '—'} color="#a78bfa" />
+          {(trip.from_city || trip.to_city) && (
+            <div style={{ gridColumn: '1/-1' }}>
+              <Info label="Route" val={[trip.from_city, trip.to_city].filter(Boolean).join(' → ')} color="#38bdf8" />
+            </div>
+          )}
+          {trip.ewb_number && (
+            <div style={{ gridColumn: '1/-1' }}>
+              <Info label="E-Way Bill" val={trip.ewb_number} color="#fb923c" />
+            </div>
+          )}
           {stops.length > 0 && (
             <div style={{ gridColumn: '1/-1' }}>
               <Info label="Stops Done" val={`${doneStops} / ${stops.length}`} color={doneStops === stops.length ? '#4ade80' : '#f59e0b'} />
@@ -90,7 +102,7 @@ function ActiveTripCard({ trip, stops, onStatusUpdate, onStopArrived, updating }
           )}
           {trip.notes && (
             <div style={{ gridColumn: '1/-1', background: '#0f172a', borderRadius: 8, padding: '10px 12px' }}>
-              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>📝 Notes from Munshi</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>📝 Notes</div>
               <div style={{ fontSize: 13, color: '#cbd5e1', lineHeight: 1.5 }}>{trip.notes}</div>
             </div>
           )}
@@ -109,26 +121,8 @@ function ActiveTripCard({ trip, stops, onStatusUpdate, onStopArrived, updating }
         </div>
       )}
 
-      {/* Big action button */}
-      {cfg.btnLabel && (
-        <button
-          onClick={() => onStatusUpdate(cfg.next)}
-          disabled={updating}
-          style={{
-            width: '100%', padding: '20px', marginBottom: 12,
-            background: updating ? '#334155' : `linear-gradient(135deg, ${cfg.btnColor} 0%, ${cfg.btnColor}cc 100%)`,
-            border: 'none', borderRadius: 16, color: '#fff',
-            fontSize: 18, fontWeight: 900, cursor: updating ? 'not-allowed' : 'pointer',
-            boxShadow: updating ? 'none' : `0 6px 24px ${cfg.btnColor}55`,
-            transition: 'all 0.2s', letterSpacing: '0.04em',
-          }}
-        >
-          {updating ? '⏳ Updating...' : cfg.btnLabel}
-        </button>
-      )}
-
       {trip.status === 'completed' && (
-        <div style={{ textAlign: 'center', padding: 24, color: '#4ade80', fontWeight: 900, fontSize: 20 }}>
+        <div style={{ textAlign: 'center', padding: 24, color: '#4ade80', fontWeight: 900, fontSize: 18, background: '#14532d22', borderRadius: 14, border: '1px solid #16a34a44' }}>
           🎉 Trip Completed — Great work!
         </div>
       )}
@@ -344,13 +338,13 @@ function HistoryTab({ trips }) {
     <div style={{ padding: '16px 20px' }}>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>{trips.length} total trips</div>
       {trips.map(trip => {
-        const cfg = STATUS_CFG[trip.status] || STATUS_CFG.started;
+        const chip = statusChip(trip.status);
         return (
           <div key={trip.id} style={{ background: '#1e293b', borderRadius: 10, padding: '14px 16px', marginBottom: 10, border: '1px solid #334155' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: '#60a5fa' }}>{trip.job_card_number}</div>
-              <span style={{ background: cfg.bg, color: cfg.color, borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>
-                {cfg.icon} {cfg.label}
+              <span style={{ background: chip.bg, color: chip.color, borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, border: `1px solid ${chip.color}44` }}>
+                {chip.label}
               </span>
             </div>
             <div style={{ fontSize: 12, color: '#94a3b8' }}>📅 {fmtDate(trip.job_card_date || trip.created_at)}</div>
@@ -483,7 +477,6 @@ export default function DriverPage() {
   const [stops,     setStops]     = useState([]);
   const [ledger,    setLedger]    = useState([]);
   const [loading,   setLoading]   = useState(false);
-  const [updating,  setUpdating]  = useState(false);
   const [tab,       setTab]       = useState('trip');
   const intervalRef = useRef(null);
 
@@ -538,21 +531,6 @@ export default function DriverPage() {
     intervalRef.current = setInterval(() => load(true), 30000);
     return () => clearInterval(intervalRef.current);
   }, [load]);
-
-  const updateTripStatus = async (newStatus) => {
-    const active = trips.find(t => t.status !== 'completed' && t.status !== 'cancelled');
-    if (!active) return;
-    setUpdating(true);
-    try {
-      await fetch(`${API}/trip-dispatches/${encodeURIComponent(active.job_card_number)}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      await load();
-    } catch (e) { alert('Error: ' + e.message); }
-    finally { setUpdating(false); }
-  };
 
   const markStopArrived = async (stop) => {
     const active = trips.find(t => t.status !== 'completed' && t.status !== 'cancelled');
@@ -640,11 +618,9 @@ export default function DriverPage() {
                   )}
                 </div>
               ) : (
-                <ActiveTripCard
+                <CurrentTripCard
                   trip={activeTrip}
                   stops={stops}
-                  updating={updating}
-                  onStatusUpdate={updateTripStatus}
                   onStopArrived={markStopArrived}
                 />
               )}
