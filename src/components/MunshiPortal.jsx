@@ -551,8 +551,9 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
   const [msg, setMsg]     = useState('');
   const [ewbFilter, setEwbFilter] = useState('all'); // 'all'|'dealer'|'return'|'inbound'
   const [deliverEwb, setDeliverEwb] = useState(null); // EWB open in MunshiDeliverModal
-  const [formEwbs,   setFormEwbs]   = useState([]);   // real EWBs for the vehicle selected in form
-  const [ewbManual,  setEwbManual]  = useState(false); // user chose to type EWB manually
+  const [formEwbs,      setFormEwbs]      = useState([]);   // real EWBs for the vehicle selected in form
+  const [ewbManual,     setEwbManual]     = useState(false); // user chose to type EWB manually
+  const [ewbManualInput, setEwbManualInput] = useState(''); // text buffer for manual EWB entry
 
   const MOV_CFG = {
     primary_to_secondary: { label: 'Hub→Dist',   badge: '#1d4ed8' },
@@ -600,10 +601,12 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
       driver_name:   v?.driver_name || '',
       from_poi_id:   tripPrefill.from_poi_id,
       from_poi_name: tripPrefill.from_poi_name,
+      ewb_nos:       tripPrefill.ewb_no ? [tripPrefill.ewb_no] : [],
       ewb_no:        tripPrefill.ewb_no || '',
       ewb_is_temp:   0,
     }));
     setEwbManual(false);
+    setEwbManualInput('');
     setEditId(null);
     setShowForm(true);
     setMsg('');
@@ -656,6 +659,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
       driver_name: '',
       from_poi_id: '', from_poi_name: '',
       to_poi_id:   '', to_poi_name:   '',
+      ewb_nos: [],
       ewb_no: '', ewb_is_temp: 0,
       trip_date: new Date().toISOString().slice(0, 10),
       km: '', toll: '',
@@ -682,12 +686,14 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
       ...blankForm(munshi),
       vehicle_no:    v?.vehicle_no  || ewb?.vehicle_no || '',
       driver_name:   v?.driver_name || '',
+      ewb_nos:       ewb?.ewb_no ? [ewb.ewb_no] : [],
       ewb_no:        ewb?.ewb_no || '',
       ewb_is_temp:   0,
       to_poi_name:   ewb?.to_poi_name || ewb?.to_place || '',
       from_poi_name: ewb?.from_poi_name || '',
     });
     setEwbManual(false);
+    setEwbManualInput('');
     setEditId(null);
     setShowForm(true);
     setMsg('');
@@ -701,6 +707,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
       from_poi_name:        trip.from_poi_name || '',
       to_poi_id:            trip.to_poi_id || '',
       to_poi_name:          trip.to_poi_name || '',
+      ewb_nos:              (() => { try { const a=JSON.parse(trip.ewb_nos||'[]'); return a.length>0?a:(trip.ewb_no?[trip.ewb_no]:[]); } catch{return trip.ewb_no?[trip.ewb_no]:[];} })(),
       ewb_no:               trip.ewb_no || '',
       ewb_is_temp:          trip.ewb_is_temp || 0,
       trip_date:            trip.trip_date || '',
@@ -730,10 +737,13 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
     try {
       const url    = editId ? `${API}/munshi-trips/${editId}` : `${API}/munshi-trips`;
       const method = editId ? 'PUT' : 'POST';
+      // Derive primary ewb_no from ewb_nos array for backward compat
+      const ewb_nos = Array.isArray(form.ewb_nos) ? form.ewb_nos : [];
+      const ewb_no  = ewb_nos[0] || form.ewb_no || '';
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, client_id: 'CLIENT_001' }),
+        body: JSON.stringify({ ...form, ewb_nos, ewb_no, client_id: 'CLIENT_001' }),
       });
       const d = await res.json();
       if (d.error) { setMsg('❌ ' + d.error); return; }
@@ -814,9 +824,17 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
 
       {/* ── LEFT: Vehicle List ── */}
       <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid #1e293b', overflowY: 'auto', background: '#0f172a', padding: '8px 0' }}>
-        <div style={{ fontSize: 10, color: '#475569', fontWeight: 800, textTransform: 'uppercase', padding: '4px 10px 8px', letterSpacing: '0.08em' }}>Vehicles ({myVehicles.length})</div>
+        <div style={{ padding: '4px 10px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 10, color: '#475569', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {selectedVehicle ? '🚛 Selected' : `Vehicles (${myVehicles.length})`}
+          </span>
+          {selectedVehicle && (
+            <button onClick={() => { setSelectedVehicle(null); setShowForm(false); }}
+              style={{ fontSize: 10, color: '#60a5fa', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontWeight: 700 }}>← All</button>
+          )}
+        </div>
         {myVehicles.length === 0 && <div style={{ fontSize: 11, color: '#334155', padding: '8px 10px' }}>No vehicles</div>}
-        {myVehicles.map(v => {
+        {myVehicles.filter(v => !selectedVehicle || v.vehicle_no === selectedVehicle.vehicle_no).map(v => {
           const sel = selectedVehicle?.vehicle_no === v.vehicle_no;
           const isDirect = (v.munshi_id && String(v.munshi_id) === String(munshi.id)) ||
                            (v.munshi_name || '').toLowerCase() === (munshi.name || '').toLowerCase();
@@ -914,43 +932,67 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                 </select>
               </div>
               <Field label="Driver Name" name="driver_name" />
-              {/* EWB selector: dropdown if vehicle has EWBs, text input otherwise */}
-              <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>EWB Number</label>
-                {formEwbs.length > 0 && !ewbManual ? (
-                  <select
-                    value={form.ewb_no}
-                    onChange={e => {
-                      if (e.target.value === '__manual__') {
-                        setEwbManual(true);
-                        setForm(f => ({ ...f, ewb_no: '', ewb_is_temp: 0 }));
-                      } else {
-                        setForm(f => ({ ...f, ewb_no: e.target.value, ewb_is_temp: 0 }));
-                      }
-                    }}
-                    style={{ width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
-                  >
-                    <option value="">— Select EWB —</option>
-                    {formEwbs.map(e => (
-                      <option key={e.id || e.ewb_no} value={e.ewb_no}>
-                        {e.ewb_no}{e.from_place ? ` · ${e.from_place}→${e.to_place || ''}` : ''}{e.movement_type ? ` [${e.movement_type.replace(/_/g, ' ')}]` : ''}
-                      </option>
+              {/* Multi-EWB selector */}
+              <div style={{ marginBottom: 10, gridColumn: '1/-1' }}>
+                <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>
+                  EWB Numbers {form.ewb_nos.length > 0 && <span style={{ color: '#4ade80' }}>({form.ewb_nos.length} selected)</span>}
+                </label>
+                {/* Selected EWB chips */}
+                {form.ewb_nos.length > 0 && (
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                    {form.ewb_nos.map(n => (
+                      <span key={n} style={{ background: '#1d4ed8', color: '#fff', borderRadius: 12, padding: '2px 10px', fontSize: 11, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {n}
+                        <button onClick={() => setForm(f => ({ ...f, ewb_nos: f.ewb_nos.filter(x => x !== n) }))}
+                          style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+                      </span>
                     ))}
-                    <option value="__manual__">⌨️ Enter manually…</option>
-                  </select>
+                  </div>
+                )}
+                {/* EWB list (checkboxes) or manual input */}
+                {formEwbs.length > 0 && !ewbManual ? (
+                  <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid #334155', borderRadius: 6, background: '#0f172a' }}>
+                    {formEwbs.map(e => {
+                      const checked = form.ewb_nos.includes(e.ewb_no);
+                      return (
+                        <label key={e.id || e.ewb_no} style={{ display: 'flex', alignItems: 'flex-start', padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #1e293b', gap: 8, background: checked ? '#0d2e1f' : 'transparent' }}>
+                          <input type="checkbox" checked={checked}
+                            onChange={() => setForm(f => ({
+                              ...f,
+                              ewb_nos: checked ? f.ewb_nos.filter(x => x !== e.ewb_no) : [...f.ewb_nos, e.ewb_no],
+                            }))}
+                            style={{ marginTop: 1 }}
+                          />
+                          <div>
+                            <span style={{ fontFamily: 'monospace', fontSize: 11, color: checked ? '#4ade80' : '#60a5fa', fontWeight: 700 }}>{e.ewb_no}</span>
+                            {(e.to_poi_name || e.to_place) && <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6 }}>→ {e.to_poi_name || e.to_place}</span>}
+                            {e.movement_type && <span style={{ fontSize: 9, color: '#475569', marginLeft: 4 }}>[{e.movement_type.replace(/_/g,' ')}]</span>}
+                          </div>
+                        </label>
+                      );
+                    })}
+                    <div onClick={() => { setEwbManual(true); }} style={{ padding: '6px 10px', fontSize: 10, color: '#475569', cursor: 'pointer' }}>⌨️ Enter manually…</div>
+                  </div>
                 ) : (
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input
-                      value={form.ewb_no}
-                      onChange={e => setForm(f => ({ ...f, ewb_no: e.target.value, ewb_is_temp: 0 }))}
-                      placeholder="Enter EWB number"
+                      value={ewbManualInput}
+                      onChange={e => setEwbManualInput(e.target.value)}
+                      onKeyDown={e => {
+                        if ((e.key === 'Enter' || e.key === ',') && ewbManualInput.trim()) {
+                          e.preventDefault();
+                          const val = ewbManualInput.trim().replace(/,/g,'');
+                          if (val && !form.ewb_nos.includes(val))
+                            setForm(f => ({ ...f, ewb_nos: [...f.ewb_nos, val] }));
+                          setEwbManualInput('');
+                        }
+                      }}
+                      placeholder="Type EWB number, press Enter to add"
                       style={{ flex: 1, padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
                     />
-                    {formEwbs.length > 0 && ewbManual && (
-                      <button onClick={() => { setEwbManual(false); setForm(f => ({ ...f, ewb_no: '', ewb_is_temp: 0 })); }}
-                        style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#94a3b8', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        ← List
-                      </button>
+                    {formEwbs.length > 0 && (
+                      <button onClick={() => { setEwbManual(false); setEwbManualInput(''); }}
+                        style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#94a3b8', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>← List</button>
                     )}
                   </div>
                 )}
@@ -1048,7 +1090,14 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                           <span style={{ fontSize: 10, color: '#64748b' }}>{trip.trip_date}</span>
                         </div>
                         <div style={{ fontSize: 11, color: '#a3e635' }}>{trip.from_poi_name || '?'} → {trip.to_poi_name || '?'}</div>
-                        {trip.ewb_no && <div style={{ fontSize: 10, color: trip.ewb_is_temp ? '#fbbf24' : '#64748b', marginTop: 2 }}>{trip.ewb_is_temp ? '⚠️ TEMP: ' : '📄 '}{trip.ewb_no}</div>}
+                        {(() => {
+                          const ewbList = (() => { try { const a=JSON.parse(trip.ewb_nos||'[]'); return a.length>0?a:(trip.ewb_no?[trip.ewb_no]:[]); } catch{return trip.ewb_no?[trip.ewb_no]:[];} })();
+                          return ewbList.length > 0 ? (
+                            <div style={{ marginTop: 2, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {ewbList.map(n => <span key={n} style={{ fontSize: 10, color: trip.ewb_is_temp ? '#fbbf24' : '#64748b', background: '#0f172a', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>📄 {n}</span>)}
+                            </div>
+                          ) : null;
+                        })()}
                         {total > 0 && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4, fontWeight: 700 }}>Total Exp: ₹{total.toLocaleString('en-IN')}</div>}
                       </div>
                     );

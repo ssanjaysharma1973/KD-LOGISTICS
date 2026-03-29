@@ -285,7 +285,8 @@ function seedSqliteIfEmpty() {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`).catch(() => {});
-      await dbRun(`CREATE TABLE IF NOT EXISTS driver_reports (
+      await dbRun(`ALTER TABLE munshi_trips ADD COLUMN ewb_nos TEXT DEFAULT '[]'`).catch(() => {});
+      await dbRun(`CREATE TABLE IF NOT EXISTS driver_reports (`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT DEFAULT 'CLIENT_001',
         vehicle_no TEXT,
@@ -1738,20 +1739,23 @@ async function handleRequest(req, res, rawPath) {
       const ds = new Date().toISOString().slice(0,10).replace(/-/g,'');
       return `T${ds}${String(Math.floor(Math.random()*9000)+1000)}`;
     })();
+    const _ewbNosArr = Array.isArray(b.ewb_nos) ? b.ewb_nos : [];
+    const _ewbNo     = _ewbNosArr[0] || b.ewb_no || '';
+    const _ewbNosJson = JSON.stringify(_ewbNosArr.length > 0 ? _ewbNosArr : (_ewbNo ? [_ewbNo] : []));
     db2.run(`INSERT INTO munshi_trips
       (client_id,trip_no,vehicle_no,driver_name,from_poi_id,from_poi_name,to_poi_id,to_poi_name,
        ewb_no,ewb_is_temp,trip_date,km,toll,exp_admin,exp_munshi,exp_pump_consignment,exp_cash_fuel,
-       exp_unloading,exp_driver_debit,exp_other,munshi_id,munshi_name,driver_id,approved_by,status,notes)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       exp_unloading,exp_driver_debit,exp_other,munshi_id,munshi_name,driver_id,approved_by,status,notes,ewb_nos)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [b.client_id||'CLIENT_001', tripNo, b.vehicle_no||'', b.driver_name||'',
        b.from_poi_id||'', b.from_poi_name||'', b.to_poi_id||'', b.to_poi_name||'',
-       b.ewb_no||'', b.ewb_is_temp||0,
+       _ewbNo, b.ewb_is_temp||0,
        b.trip_date||new Date().toISOString().slice(0,10),
        b.km||0, b.toll||0,
        b.exp_admin||0, b.exp_munshi||0, b.exp_pump_consignment||0, b.exp_cash_fuel||0,
        b.exp_unloading||0, b.exp_driver_debit||0, b.exp_other||0,
        b.munshi_id||'', b.munshi_name||'', b.driver_id||'', b.approved_by||'',
-       b.status||'open', b.notes||''],
+       b.status||'open', b.notes||'', _ewbNosJson],
       function(err) {
         db2.close();
         if (err) { res.statusCode=500; return res.end(JSON.stringify({error:err.message})); }
@@ -1773,6 +1777,11 @@ async function handleRequest(req, res, rawPath) {
       'exp_cash_fuel','exp_unloading','exp_driver_debit','exp_other','munshi_name','approved_by','status','notes'];
     const sets=[], vals=[];
     allowed.forEach(k => { if (b[k] !== undefined) { sets.push(`${k}=?`); vals.push(b[k]); }});
+    if (b.ewb_nos !== undefined) {
+      const _arr = Array.isArray(b.ewb_nos) ? b.ewb_nos : [];
+      sets.push('ewb_nos=?'); vals.push(JSON.stringify(_arr));
+      if (_arr.length > 0 && b.ewb_no === undefined) { sets.push('ewb_no=?'); vals.push(_arr[0]); }
+    }
     sets.push('updated_at=CURRENT_TIMESTAMP');
     vals.push(id);
     db2.run(`UPDATE munshi_trips SET ${sets.join(',')} WHERE id=?`, vals, function(err) {
