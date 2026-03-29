@@ -452,6 +452,95 @@ function RoutingTab({ munshi, vehicles, pois, onGoToTrip }) {
   );
 }
 
+// ─── Munshi Deliver Modal ─────────────────────────────────────────────────────
+function MunshiDeliverModal({ ewb, munshi, onClose, onDone }) {
+  const [exp, setExp] = useState({ km: '', toll: '', exp_munshi: '', exp_cash_fuel: '', exp_unloading: '', exp_other: '' });
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState(false);
+  const sE = (k, v) => setExp(e => ({ ...e, [k]: v }));
+
+  const iS = { width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' };
+  const lS = { fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 };
+
+  const handleSave = async () => {
+    setSaving(true); setErr('');
+    try {
+      // 1. Mark EWB delivered
+      if (ewb.id) {
+        const pr = await fetch(`/api/eway-bills-hub/${ewb.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'delivered', munshi_id: String(munshi.id), munshi_name: munshi.name }),
+        });
+        const pd = await pr.json();
+        if (pd.error) throw new Error(pd.error);
+      }
+      // 2. Create munshi trip with expenses
+      await fetch('/api/munshi-trips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicle_no: ewb.vehicle_no || '',
+          ewb_no: ewb.ewb_no,
+          from_poi_name: ewb.from_poi_name || '',
+          to_poi_name: ewb.to_poi_name || ewb.to_place || '',
+          trip_date: new Date().toISOString().slice(0, 10),
+          munshi_id: String(munshi.id),
+          munshi_name: munshi.name,
+          km: parseFloat(exp.km) || 0,
+          toll: parseFloat(exp.toll) || 0,
+          exp_munshi: parseFloat(exp.exp_munshi) || 0,
+          exp_cash_fuel: parseFloat(exp.exp_cash_fuel) || 0,
+          exp_unloading: parseFloat(exp.exp_unloading) || 0,
+          exp_other: parseFloat(exp.exp_other) || 0,
+          notes,
+          status: 'open',
+        }),
+      });
+      setDone(true);
+      setTimeout(() => onDone && onDone(ewb.ewb_no), 1200);
+    } catch (e) { setErr(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#1e293b', borderRadius: 12, padding: 24, width: 460, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.5)', border: '1px solid #334155', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <span style={{ fontWeight: 800, fontSize: 14, color: '#f1f5f9' }}>✅ Mark Delivered — {ewb.ewb_no}</span>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', color: '#64748b', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+        <div style={{ background: '#0f172a', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 11, color: '#94a3b8' }}>
+          <b style={{ color: '#60a5fa' }}>{ewb.vehicle_no || '—'}</b> &nbsp;→&nbsp; <b style={{ color: '#a3e635' }}>{ewb.to_poi_name || ewb.to_place || '—'}</b>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+          {[['km','KM'],['toll','Toll (₹)'],['exp_munshi','Munshi Exp (₹)'],['exp_cash_fuel','Cash Fuel (₹)'],['exp_unloading','Unloading (₹)'],['exp_other','Other (₹)']].map(([k, lbl]) => (
+            <div key={k} style={{ marginBottom: 10 }}>
+              <label style={lS}>{lbl}</label>
+              <input type="number" min="0" step="0.01" placeholder="0" value={exp[k]} onChange={e => sE(k, e.target.value)} style={iS} />
+            </div>
+          ))}
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={lS}>Notes</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional" style={iS} />
+        </div>
+        {err && <div style={{ color: '#f87171', fontSize: 12, marginBottom: 8 }}>❌ {err}</div>}
+        {done && <div style={{ color: '#4ade80', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>✅ Delivered & trip saved!</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '7px 16px', borderRadius: 7, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || done}
+            style={{ padding: '7px 18px', borderRadius: 7, border: 'none', background: done ? '#166534' : '#16a34a', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+            {saving ? '⏳ Saving…' : done ? '✅ Done' : '✅ Save & Deliver'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Trips Tab ────────────────────────────────────────────────────────────────
 function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
   // Left panel state
@@ -468,6 +557,9 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg]     = useState('');
   const [ewbFilter, setEwbFilter] = useState('all'); // 'all'|'dealer'|'return'|'inbound'
+  const [deliverEwb, setDeliverEwb] = useState(null); // EWB open in MunshiDeliverModal
+  const [formEwbs,   setFormEwbs]   = useState([]);   // real EWBs for the vehicle selected in form
+  const [ewbManual,  setEwbManual]  = useState(false); // user chose to type EWB manually
 
   const MOV_CFG = {
     primary_to_secondary: { label: 'Hub→Dist',   badge: '#1d4ed8' },
@@ -509,24 +601,33 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
     if (!tripPrefill) return;
     const v = vehicles.find(x => x.vehicle_no === tripPrefill.vehicle_no);
     setSelectedVehicle(v || null);
-    const tempNo = tripPrefill.ewb_no || (() => {
-      const ds = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      return `T${ds}${String(Math.floor(Math.random() * 900) + 100)}`;
-    })();
     setForm(f => ({
       ...f,
       vehicle_no:    tripPrefill.vehicle_no,
       driver_name:   v?.driver_name || '',
       from_poi_id:   tripPrefill.from_poi_id,
       from_poi_name: tripPrefill.from_poi_name,
-      ewb_no:        tempNo,
-      ewb_is_temp:   tripPrefill.ewb_no ? 0 : 1,
+      ewb_no:        tripPrefill.ewb_no || '',
+      ewb_is_temp:   0,
     }));
+    setEwbManual(false);
     setEditId(null);
     setShowForm(true);
     setMsg('');
     if (onPrefillDone) onPrefillDone();
   }, [tripPrefill]);
+
+  // Whenever form vehicle changes, load real EWBs for the dropdown
+  useEffect(() => {
+    if (!form.vehicle_no) { setFormEwbs([]); setEwbManual(false); return; }
+    fetch(`${API}/munshi-trips/ewb-search?clientId=CLIENT_001&vehicle_no=${encodeURIComponent(form.vehicle_no)}`)
+      .then(r => r.json())
+      .then(d => {
+        const list = Array.isArray(d) ? d.filter(e => e.status !== 'delivered' && e.status !== 'cancelled') : [];
+        setFormEwbs(list);
+      })
+      .catch(() => {});
+  }, [form.vehicle_no]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load right panel when vehicle selected
   useEffect(() => {
@@ -570,19 +671,16 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
     // For POI-sourced EWBs, vehicle comes from the EWB record itself
     const ewbVehicle = ewb?.vehicle_no ? vehicles.find(v => v.vehicle_no === ewb.vehicle_no) : null;
     const v          = ewbVehicle || vehicle || selectedVehicle;
-    const tempNo = ewb ? '' : (() => {
-      const ds = new Date().toISOString().slice(0,10).replace(/-/g,'');
-      return `T${ds}${String(Math.floor(Math.random()*900)+100)}`;
-    })();
     setForm({
       ...blankForm(munshi),
       vehicle_no:    v?.vehicle_no  || ewb?.vehicle_no || '',
       driver_name:   v?.driver_name || '',
-      ewb_no:        ewb ? ewb.ewb_no : tempNo,
-      ewb_is_temp:   ewb ? 0 : 1,
+      ewb_no:        ewb?.ewb_no || '',
+      ewb_is_temp:   0,
       to_poi_name:   ewb?.to_poi_name || ewb?.to_place || '',
       from_poi_name: ewb?.from_poi_name || '',
     });
+    setEwbManual(false);
     setEditId(null);
     setShowForm(true);
     setMsg('');
@@ -704,6 +802,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
     : poiEwbs;
 
   return (
+    <>
     <div style={{ display: 'flex', height: 'calc(100vh - 110px)', overflow: 'hidden' }}>
 
       {/* ── LEFT: Vehicle List ── */}
@@ -757,10 +856,11 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                 const mc   = MOV_CFG[ewb.movement_type] || {};
                 const isIn = ewb.direction === 'inbound';
                 return (
-                  <div key={ewb.id + (ewb.direction||'')} style={{ background: '#0c1a30', border: isIn ? '1px solid #713f12' : '1px solid #0e4163', borderRadius: 8, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div key={ewb.id + (ewb.direction||'')} style={{ background: ewb.status === 'at_destination' ? '#0d2e1f' : '#0c1a30', border: ewb.status === 'at_destination' ? '1px solid #14532d' : isIn ? '1px solid #713f12' : '1px solid #0e4163', borderRadius: 8, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                     <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => { openNew(ewb, null); setShowForm(true); }}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</span>
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, color: ewb.status === 'at_destination' ? '#4ade80' : '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</span>
+                        {ewb.status === 'at_destination' && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: '#14532d', color: '#4ade80', fontWeight: 800 }}>📍 ARRIVED</span>}
                         {ewb.vehicle_no && <span style={{ fontSize: 10, color: '#a3e635', fontFamily: 'monospace', background: '#14532d33', padding: '1px 6px', borderRadius: 4 }}>{ewb.vehicle_no}</span>}
                         {mc.label && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: (mc.badge||'#64748b')+'22', color: mc.badge||'#64748b', fontWeight: 700 }}>{mc.label}</span>}
                         {isIn && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: '#78350f55', color: '#fbbf24', fontWeight: 700 }}>⬅ Inbound</span>}
@@ -771,6 +871,8 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
                       <button onClick={() => { openNew(ewb, null); setShowForm(true); }}
                         style={{ fontSize: 10, color: '#fff', background: '#0284c7', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>Use →</button>
+                      <button onClick={() => setDeliverEwb(ewb)}
+                        style={{ fontSize: 10, color: '#fff', background: ewb.status === 'at_destination' ? '#16a34a' : '#166534', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>✅ Deliver</button>
                       <button onClick={() => closeEwb(ewb.id)}
                         style={{ fontSize: 10, color: '#f87171', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>🔒 Close</button>
                     </div>
@@ -786,7 +888,6 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
           <div style={{ background: '#1e293b', borderRadius: 10, padding: '14px 14px', marginBottom: 14, border: '1px solid #334155' }}>
             <div style={{ fontWeight: 800, fontSize: 13, color: '#f1f5f9', marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
               <span>{editId ? '✏️ Edit Trip' : '➕ New Trip'}</span>
-              {form.ewb_is_temp ? <span style={{ fontSize: 10, background: '#78350f', color: '#fbbf24', borderRadius: 6, padding: '2px 8px' }}>TEMP EWB</span> : null}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
               <div style={{ marginBottom: 10 }}>
@@ -806,7 +907,47 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                 </select>
               </div>
               <Field label="Driver Name" name="driver_name" />
-              <Field label="EWB Number" name="ewb_no" hint={form.ewb_is_temp ? '⚠️ Temporary — replace with real EWB later' : ''} />
+              {/* EWB selector: dropdown if vehicle has EWBs, text input otherwise */}
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>EWB Number</label>
+                {formEwbs.length > 0 && !ewbManual ? (
+                  <select
+                    value={form.ewb_no}
+                    onChange={e => {
+                      if (e.target.value === '__manual__') {
+                        setEwbManual(true);
+                        setForm(f => ({ ...f, ewb_no: '', ewb_is_temp: 0 }));
+                      } else {
+                        setForm(f => ({ ...f, ewb_no: e.target.value, ewb_is_temp: 0 }));
+                      }
+                    }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
+                  >
+                    <option value="">— Select EWB —</option>
+                    {formEwbs.map(e => (
+                      <option key={e.id || e.ewb_no} value={e.ewb_no}>
+                        {e.ewb_no}{e.from_place ? ` · ${e.from_place}→${e.to_place || ''}` : ''}{e.movement_type ? ` [${e.movement_type.replace(/_/g, ' ')}]` : ''}
+                      </option>
+                    ))}
+                    <option value="__manual__">⌨️ Enter manually…</option>
+                  </select>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      value={form.ewb_no}
+                      onChange={e => setForm(f => ({ ...f, ewb_no: e.target.value, ewb_is_temp: 0 }))}
+                      placeholder="Enter EWB number"
+                      style={{ flex: 1, padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
+                    />
+                    {formEwbs.length > 0 && ewbManual && (
+                      <button onClick={() => { setEwbManual(false); setForm(f => ({ ...f, ewb_no: '', ewb_is_temp: 0 })); }}
+                        style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#94a3b8', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        ← List
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               <Field label="Trip Date" name="trip_date" type="date" />
               <PoiSelect label="From POI" nameId="from_poi_id" nameName="from_poi_name" />
               <PoiSelect label="To POI" nameId="to_poi_id" nameName="to_poi_name" />
@@ -863,15 +1004,23 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ fontSize: 11, color: '#64748b', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>📄 Active E-Way Bills</div>
                   {ewbs.map(ewb => (
-                    <div key={ewb.id} onClick={() => openNew(ewb, selectedVehicle)}
-                      style={{ background: '#0c1a30', border: '1px solid #1e3a8a', borderRadius: 8, padding: '10px 12px', marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    <div key={ewb.id}
+                      style={{ background: ewb.status === 'at_destination' ? '#0d2e1f' : '#0c1a30', border: `1px solid ${ewb.status === 'at_destination' ? '#14532d' : '#1e3a8a'}`, borderRadius: 8, padding: '10px 12px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
                     >
-                      <div>
-                        <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</div>
+                      <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => openNew(ewb, selectedVehicle)}>
+                        {ewb.status === 'at_destination' && (
+                          <div style={{ fontSize: 10, color: '#4ade80', fontWeight: 800, marginBottom: 3 }}>📍 VEHICLE ARRIVED AT DESTINATION</div>
+                        )}
+                        <div style={{ fontFamily: 'monospace', fontSize: 12, color: ewb.status === 'at_destination' ? '#4ade80' : '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</div>
                         <div style={{ fontSize: 11, color: '#a3e635', marginTop: 2 }}>→ {ewb.to_poi_name || ewb.to_place || 'Unknown destination'}</div>
                         {ewb.total_value > 0 && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>₹{Number(ewb.total_value).toLocaleString('en-IN')}</div>}
                       </div>
-                      <div style={{ fontSize: 10, color: '#fff', background: '#1d4ed8', borderRadius: 6, padding: '3px 8px', fontWeight: 700 }}>Use →</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                        <button onClick={() => openNew(ewb, selectedVehicle)}
+                          style={{ fontSize: 10, color: '#fff', background: '#1d4ed8', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>Use →</button>
+                        <button onClick={(ev) => { ev.stopPropagation(); setDeliverEwb(ewb); }}
+                          style={{ fontSize: 10, color: '#fff', background: ewb.status === 'at_destination' ? '#16a34a' : '#166534', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>✅ Deliver</button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -905,6 +1054,15 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
         )}
       </div>
     </div>
+    {deliverEwb && (
+      <MunshiDeliverModal ewb={deliverEwb} munshi={munshi} onClose={() => setDeliverEwb(null)}
+        onDone={(ewbNo) => {
+          setDeliverEwb(null);
+          setEwbs(prev => prev.filter(e => e.ewb_no !== ewbNo));
+          setPoiEwbs(prev => prev.filter(e => e.ewb_no !== ewbNo));
+        }} />
+    )}
+    </>
   );
 }
 
