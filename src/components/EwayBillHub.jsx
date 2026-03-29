@@ -512,12 +512,24 @@ function sizeColor(size) {
   return _sizeColorCache[size];
 }
 
-function VehicleChip({ v }) {
-  const s = CHIP_STATUS[v.load_status] || CHIP_STATUS.unknown;
-  const sc = sizeColor(v.vehicle_size);
+function VehicleChip({ v, pois = [] }) {
+  const [open, setOpen]       = useState(false);
+  const [selCity, setSelCity] = useState('');
+  const [orgQ, setOrgQ]       = useState('');
+  const [fwding, setFwding]   = useState(null);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const sc   = sizeColor(v.vehicle_size);
   const ewbs = v.active_ewbs?.length || 0;
   const dest = v.active_ewbs?.[0]?.to_poi_name || v.active_ewbs?.[0]?.to_place || '';
-  const tip = [
+  const tip  = [
     v.vehicle_no,
     v.vehicle_size ? `🚛 ${v.vehicle_size}` : '',
     v.current_poi_name ? `📍 ${v.current_poi_name}` : '📍 No POI',
@@ -526,28 +538,121 @@ function VehicleChip({ v }) {
     v.last_seen ? `🕐 ${new Date(v.last_seen).toLocaleString('en-IN')}` : '',
   ].filter(Boolean).join('\n');
 
+  const cities    = [...new Set(pois.map(p => p.city).filter(Boolean))].sort();
+  const cityPois  = selCity ? pois.filter(p => p.city === selCity) : [];
+  const matchPois = orgQ.trim()
+    ? cityPois.filter(p => (p.poi_name || '').toLowerCase().includes(orgQ.toLowerCase()))
+    : cityPois;
+
+  const forward = async (poi) => {
+    const activeEwbs = v.active_ewbs || [];
+    if (!activeEwbs.length) return;
+    setFwding(poi.id);
+    try {
+      await Promise.all(activeEwbs.map(ewb =>
+        fetch(`/api/eway-bills-hub/${ewb.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to_poi_id: String(poi.id), to_poi_name: poi.poi_name }),
+        })
+      ));
+      setOpen(false); setSelCity(''); setOrgQ('');
+    } finally { setFwding(null); }
+  };
+
   return (
-    <div title={tip} style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      background: sc.bg, border: `1.5px solid ${sc.border}`, color: '#fff',
-      borderRadius: 7, padding: '4px 10px', fontSize: 12, fontWeight: 700,
-      cursor: 'default', whiteSpace: 'nowrap',
-      boxShadow: `0 1px 3px ${sc.bg}55`,
-      transition: 'box-shadow 0.15s',
-    }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
-      {v.vehicle_no}
-      {ewbs > 0 && (
-        <span style={{
-          background: '#fff', color: sc.bg,
-          borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 800, lineHeight: '16px',
-        }}>{ewbs}</span>
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        title={tip}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          background: sc.bg, border: `1.5px solid ${open ? '#fff' : sc.border}`, color: '#fff',
+          borderRadius: 7, padding: '4px 10px', fontSize: 12, fontWeight: 700,
+          cursor: 'pointer', whiteSpace: 'nowrap',
+          boxShadow: open ? `0 0 0 2px ${sc.bg}, 0 4px 12px ${sc.bg}88` : `0 1px 3px ${sc.bg}55`,
+          transition: 'box-shadow 0.15s',
+        }}
+      >
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
+        {v.vehicle_no}
+        {ewbs > 0 && (
+          <span style={{
+            background: '#fff', color: sc.bg,
+            borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 800, lineHeight: '16px',
+          }}>{ewbs}</span>
+        )}
+        <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1000,
+          background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
+          boxShadow: '0 8px 28px rgba(0,0,0,0.18)', padding: 12, minWidth: 280,
+        }}>
+          <div style={{ fontWeight: 800, fontSize: 12, color: '#111827', marginBottom: 10 }}>
+            🚛 {v.vehicle_no} <span style={{ color: '#6b7280', fontWeight: 500 }}>→ Route to</span>
+          </div>
+
+          {/* Step 1: City */}
+          <select
+            value={selCity}
+            onChange={e => { setSelCity(e.target.value); setOrgQ(''); }}
+            style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, marginBottom: 8, color: selCity ? '#111827' : '#9ca3af', background: '#fff', boxSizing: 'border-box' }}
+          >
+            <option value="">📍 Select City…</option>
+            {cities.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          {/* Step 2: Org name filter */}
+          {selCity && (
+            <input
+              autoFocus
+              value={orgQ}
+              onChange={e => setOrgQ(e.target.value)}
+              placeholder="🔍 Filter by org name (e.g. Haier)"
+              style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, marginBottom: 8, boxSizing: 'border-box', outline: 'none' }}
+            />
+          )}
+
+          {/* POI list */}
+          {matchPois.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 210, overflowY: 'auto' }}>
+              {matchPois.map(poi => (
+                <div key={poi.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 7, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0c4a6e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{poi.poi_name}</div>
+                    <div style={{ fontSize: 10, color: '#6b7280' }}>{poi.city}{poi.pin_code ? ` · ${poi.pin_code}` : ''}</div>
+                  </div>
+                  <button
+                    onClick={() => forward(poi)}
+                    disabled={fwding != null}
+                    style={{ padding: '5px 12px', background: fwding === poi.id ? '#d1d5db' : '#2563eb', color: '#fff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: fwding == null ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', flexShrink: 0 }}
+                  >
+                    {fwding === poi.id ? '⏳' : '→ Forward'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {selCity && cityPois.length === 0 && (
+            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: 8 }}>No POIs in {selCity}</div>
+          )}
+          {selCity && cityPois.length > 0 && matchPois.length === 0 && orgQ && (
+            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: 8 }}>No match — try a different name</div>
+          )}
+          {selCity && !v.active_ewbs?.length && (
+            <div style={{ fontSize: 11, color: '#f59e0b', textAlign: 'center', padding: '6px 4px', marginTop: 4, borderTop: '1px solid #fef3c7' }}>⚠️ No active EWBs on this vehicle</div>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-function SwimlaneRow({ label, labelBg, labelColor, labelBorder, icon, vehicles: vList, borderBottom }) {
+function SwimlaneRow({ label, labelBg, labelColor, labelBorder, icon, vehicles: vList, borderBottom, pois = [] }) {
   return (
     <>
       <div style={{
@@ -570,7 +675,7 @@ function SwimlaneRow({ label, labelBg, labelColor, labelBorder, icon, vehicles: 
       }}>
         {vList.length === 0
           ? <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>
-          : vList.map(v => <VehicleChip key={v.vehicle_no} v={v} />)
+          : vList.map(v => <VehicleChip key={v.vehicle_no} v={v} pois={pois} />)
         }
       </div>
     </>
@@ -582,6 +687,11 @@ function VehicleMovementTab() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sizeFilter, setSizeFilter] = useState('');
+  const [pois, setPois] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/pois?clientId=CLIENT_001').then(r => r.json()).then(d => setPois(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
 
   const fetch_ = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -713,21 +823,21 @@ function VehicleMovementTab() {
                 {g.loading.length > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRight: g.unloading.length > 0 ? '1px solid #fde68a' : 'none', background: '#fffbeb', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontWeight: 800, color: '#92400e', background: '#fde68a', border: '1.5px solid #f59e0b', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>📦 LOAD</span>
-                    {g.loading.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                    {g.loading.map(v => <VehicleChip key={v.vehicle_no} v={v} pois={pois} />)}
                   </div>
                 )}
                 {/* UNLOAD chips */}
                 {g.unloading.length > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#eff6ff', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8', background: '#bfdbfe', border: '1.5px solid #3b82f6', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🔽 UNLOAD</span>
-                    {g.unloading.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                    {g.unloading.map(v => <VehicleChip key={v.vehicle_no} v={v} pois={pois} />)}
                   </div>
                 )}
                 {/* If only parked: show inline on row 1 */}
                 {inlineParked && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#f9fafb', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontWeight: 800, color: '#4b5563', background: '#e5e7eb', border: '1.5px solid #9ca3af', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🅿 PARK</span>
-                    {g.parked.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                    {g.parked.map(v => <VehicleChip key={v.vehicle_no} v={v} pois={pois} />)}
                   </div>
                 )}
               </div>
@@ -735,7 +845,7 @@ function VehicleMovementTab() {
               {separateParked && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', background: '#f9fafb', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, fontWeight: 800, color: '#4b5563', background: '#e5e7eb', border: '1.5px solid #9ca3af', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🅿 PARK</span>
-                  {g.parked.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                  {g.parked.map(v => <VehicleChip key={v.vehicle_no} v={v} pois={pois} />)}
                 </div>
               )}
             </div>
@@ -758,6 +868,7 @@ function VehicleMovementTab() {
                   labelBg="#f0fdf4" labelColor="#166534" labelBorder="#86efac"
                   vehicles={inTransit.filter(v => v.load_status === 'in_transit_loaded')}
                   borderBottom={inTransit.some(v => v.load_status === 'in_transit_empty')}
+                  pois={pois}
                 />
                 {inTransit.some(v => v.load_status === 'in_transit_empty') && (
                   <SwimlaneRow
@@ -765,6 +876,7 @@ function VehicleMovementTab() {
                     labelBg="#fafafa" labelColor="#6b7280" labelBorder="#e5e7eb"
                     vehicles={inTransit.filter(v => v.load_status === 'in_transit_empty')}
                     borderBottom={false}
+                    pois={pois}
                   />
                 )}
               </div>
@@ -779,7 +891,7 @@ function VehicleMovementTab() {
                 <span style={{ fontSize: 11, color: '#9ca3af' }}>{noGps.length} veh</span>
               </div>
               <div style={{ padding: '12px 16px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {noGps.map(v => <VehicleChip key={v.vehicle_no} v={v} />)}
+                {noGps.map(v => <VehicleChip key={v.vehicle_no} v={v} pois={pois} />)}
               </div>
             </div>
           )}
