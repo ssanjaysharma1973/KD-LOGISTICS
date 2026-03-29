@@ -71,6 +71,18 @@ const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH
 try { require('fs').mkdirSync(require('path').dirname(SQLITE_DB_PATH), { recursive: true }); } catch(_) {}
 console.log('[DB] SQLite path:', SQLITE_DB_PATH);
 const SEED_PATH = path.join(__dirname, 'seed_data.json');
+// Persistent EWB backup — survives redeploys if /data volume exists
+const EWB_BACKUP_PATH = fs.existsSync('/data') ? '/data/ewb_backup.json' : null;
+
+// Write all EWBs from DB to /data/ewb_backup.json (called after every import)
+async function writeEwbBackup() {
+  if (!EWB_BACKUP_PATH || !sqlite3) return;
+  try {
+    const rows = await sqAll('SELECT * FROM eway_bills_master WHERE client_id=?', ['CLIENT_001']);
+    fs.writeFileSync(EWB_BACKUP_PATH, JSON.stringify(rows));
+    console.log(`[EWB Backup] Wrote ${rows.length} EWBs to ${EWB_BACKUP_PATH}`);
+  } catch(e) { console.warn('[EWB Backup] Write failed:', e.message); }
+}
 
 // ── SQLite seed initializer ───────────────────────────────────────────────
 // On Railway the DB file is never in git (*.db gitignored).
@@ -381,6 +393,38 @@ function seedSqliteIfEmpty() {
              e.client_id||'CLIENT_001',e.ewb_no||'']
           ).catch(() => {});
         await dbRun('COMMIT');
+      }
+
+      // Restore from /data/ewb_backup.json if it exists (safety net for redeploys before volume was set up)
+      const ewbBackupPath = '/data/ewb_backup.json';
+      if (fs.existsSync(ewbBackupPath)) {
+        try {
+          const backupEwbs = JSON.parse(fs.readFileSync(ewbBackupPath, 'utf8'));
+          if (Array.isArray(backupEwbs) && backupEwbs.length > 0) {
+            console.log(`[Seed] Restoring ${backupEwbs.length} EWBs from /data/ewb_backup.json...`);
+            await dbRun('BEGIN');
+            for (const e of backupEwbs) {
+              await dbRun(
+                `INSERT OR IGNORE INTO eway_bills_master
+                  (client_id,ewb_no,ewb_number,doc_no,vehicle_no,from_place,to_place,from_poi_id,from_poi_name,
+                   to_poi_id,to_poi_name,from_trade_name,to_trade_name,from_pincode,to_pincode,total_value,
+                   doc_date,valid_upto,status,movement_type,supply_type,transport_mode,distance_km,
+                   munshi_id,munshi_name,validity_days,imported_at,updated_at)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                [e.client_id||'CLIENT_001',e.ewb_no||'',e.ewb_number||e.ewb_no||'',e.doc_no||'',
+                 e.vehicle_no||'',e.from_place||'',e.to_place||'',
+                 e.from_poi_id||null,e.from_poi_name||'',e.to_poi_id||null,e.to_poi_name||'',
+                 e.from_trade_name||'',e.to_trade_name||'',e.from_pincode||'',e.to_pincode||'',
+                 e.total_value||0,e.doc_date||'',e.valid_upto||'',e.status||'active',
+                 e.movement_type||'unclassified',e.supply_type||'',e.transport_mode||'Road',e.distance_km||0,
+                 e.munshi_id||'',e.munshi_name||'',e.validity_days||0,
+                 e.imported_at||new Date().toISOString(),e.updated_at||new Date().toISOString()]
+              ).catch(() => {});
+            }
+            await dbRun('COMMIT');
+            console.log('[Seed] EWB backup restore complete');
+          }
+        } catch(e) { console.warn('[Seed] EWB backup restore failed:', e.message); }
       }
 
       // Seed munshi_trips — always upsert by (client_id, trip_no)
@@ -2316,6 +2360,9 @@ async function handleRequest(req, res, rawPath) {
           console.error('EWB insert error:', e.message); skipped++;
         }
       }
+
+      // Auto-backup all EWBs to /data/ewb_backup.json so they survive redeploys
+      if (inserted > 0) writeEwbBackup().catch(() => {});
 
       return jsonResp(res, { success: true, inserted, updated, skipped, total: rows.length, message: `Imported ${inserted} EWBs from ${rows.length} rows. New POIs auto-created are visible in the Unmatched POIs tab if any needed review.` });
     } catch (e) {
