@@ -144,6 +144,7 @@ function App() {
   const [dashboardView, setDashboardView] = useState('poi');
   const [showAllPois, setShowAllPois] = useState(false);
   const [ewbVehicleMap, setEwbVehicleMap] = useState({}); // vehicle_no → ewb movement data
+  const [ewbAlerts, setEwbAlerts] = useState({ expired: 0, expiring48: 0, expiring24: 0 });
 
   // Fetch EWB vehicle-movement for dashboard cards
   const fetchEwbMovement = useCallback(async () => {
@@ -157,13 +158,32 @@ function App() {
     } catch { /* ignore — EWB may not be available */ }
   }, []);
 
+  const fetchEwbAlerts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ewb/active-list');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data)) return;
+      const now = new Date();
+      let expired = 0, expiring24 = 0, expiring48 = 0;
+      data.forEach(e => {
+        if (e.status === 'DEL' || e.status === 'delivered') return;
+        if (e.is_expired) { expired++; return; }
+        if (e.hours_left != null && e.hours_left <= 24) expiring24++;
+        else if (e.hours_left != null && e.hours_left <= 48) expiring48++;
+      });
+      setEwbAlerts({ expired, expiring24, expiring48 });
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'dashboard') {
       fetchEwbMovement();
-      const t = setInterval(fetchEwbMovement, 60000);
+      fetchEwbAlerts();
+      const t = setInterval(() => { fetchEwbMovement(); fetchEwbAlerts(); }, 60000);
       return () => clearInterval(t);
     }
-  }, [activeTab, fetchEwbMovement]);
+  }, [activeTab, fetchEwbMovement, fetchEwbAlerts]);
 
   // Radius threshold settings
   const [minRadius, setMinRadius] = useState(1000);
@@ -450,6 +470,28 @@ function App() {
 
         {activeTab === 'dashboard' && (
           <>
+            {/* ── EWB Expiry Alert Banner ── */}
+            {(ewbAlerts.expired > 0 || ewbAlerts.expiring24 > 0 || ewbAlerts.expiring48 > 0) && (
+              <div
+                onClick={() => setActiveTab('ewaybill')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  background: ewbAlerts.expired > 0 ? '#fef2f2' : '#fefce8',
+                  border: `2px solid ${ewbAlerts.expired > 0 ? '#ef4444' : '#f59e0b'}`,
+                  borderRadius: 10, padding: '10px 16px', marginBottom: 10,
+                  cursor: 'pointer', transition: 'opacity 0.15s',
+                }}
+                title="Click to open EWB Hub"
+              >
+                <span style={{ fontSize: 20 }}>{ewbAlerts.expired > 0 ? '🚨' : '⚠️'}</span>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: ewbAlerts.expired > 0 ? '#991b1b' : '#78350f' }}>
+                  {ewbAlerts.expired > 0 && <span style={{ marginRight: 12 }}>🔴 {ewbAlerts.expired} EWB{ewbAlerts.expired > 1 ? 's' : ''} EXPIRED</span>}
+                  {ewbAlerts.expiring24 > 0 && <span style={{ marginRight: 12, color: '#dc2626' }}>🟠 {ewbAlerts.expiring24} expiring within 24h</span>}
+                  {ewbAlerts.expiring48 > 0 && <span style={{ color: '#b45309' }}>🟡 {ewbAlerts.expiring48} expiring within 48h</span>}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>Click to manage →</span>
+              </div>
+            )}
             {/* ── Summary Stats Bar ── */}
             <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 6, padding: '0 8px 10px 8px', overflowX: 'auto' }}>
               {summaryCards.map(card => {

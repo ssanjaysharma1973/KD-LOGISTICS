@@ -196,6 +196,142 @@ function PayTab({ ledger }) {
   );
 }
 
+// ─── Report tab ──────────────────────────────────────────────────────────────
+const ISSUE_TYPES = [
+  'Breakdown / Engine Failure',
+  'Tyre Puncture',
+  'Accident',
+  'Route Blocked / Diversion',
+  'Delivery Dispute at Party',
+  'Vehicle Not Moving / Stuck',
+  'Other',
+];
+
+function ReportTab({ vehicle }) {
+  const [issueType, setIssueType] = useState(ISSUE_TYPES[0]);
+  const [desc,      setDesc]      = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [msg,       setMsg]       = useState(null);
+  const [reports,   setReports]   = useState([]);
+  const [loadingR,  setLoadingR]  = useState(false);
+
+  const vno = vehicle?.vehicle_no || '';
+
+  const loadReports = useCallback(async () => {
+    if (!vno) return;
+    setLoadingR(true);
+    try {
+      const res = await fetch(`${API}/driver/reports?vehicle_no=${encodeURIComponent(vno)}`);
+      const d = await res.json();
+      setReports(Array.isArray(d) ? d : []);
+    } catch { setReports([]); }
+    setLoadingR(false);
+  }, [vno]);
+
+  useEffect(() => { loadReports(); }, [loadReports]);
+
+  const submit = async () => {
+    if (!desc.trim()) { setMsg({ ok: false, text: 'Please describe the issue' }); return; }
+    setSubmitting(true); setMsg(null);
+    try {
+      const res = await fetch(`${API}/driver/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicle_no: vno,
+          driver_name: vehicle?.driver_name || '',
+          issue_type: issueType,
+          description: desc.trim(),
+          client_id: 'CLIENT_001',
+        }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setMsg({ ok: true, text: '✅ Report submitted! Admin will be notified.' });
+        setDesc('');
+        setIssueType(ISSUE_TYPES[0]);
+        await loadReports();
+      } else {
+        setMsg({ ok: false, text: '❌ Failed: ' + (d.error || 'Unknown error') });
+      }
+    } catch (e) { setMsg({ ok: false, text: '❌ Network error' }); }
+    setSubmitting(false);
+  };
+
+  return (
+    <div style={{ padding: '16px 20px' }}>
+      {/* Submit form */}
+      <div style={{ background: '#1e293b', borderRadius: 14, padding: '18px 18px', marginBottom: 20, border: '1px solid #334155' }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9', marginBottom: 14 }}>🚨 Report an Issue</div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Issue Type</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {ISSUE_TYPES.map(t => (
+              <button key={t} onClick={() => setIssueType(t)} style={{
+                padding: '8px 12px', fontSize: 12, fontWeight: 700,
+                borderRadius: 10, cursor: 'pointer', border: 'none',
+                background: issueType === t ? '#3b82f6' : '#0f172a',
+                color: issueType === t ? '#fff' : '#94a3b8',
+                boxShadow: issueType === t ? '0 2px 8px #3b82f655' : 'none',
+              }}>{t}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Description</div>
+          <textarea
+            value={desc}
+            onChange={e => { setDesc(e.target.value); setMsg(null); }}
+            placeholder="Describe the issue in detail..."
+            rows={4}
+            style={{
+              width: '100%', background: '#0f172a', border: '1px solid #334155',
+              borderRadius: 10, padding: '12px', color: '#f1f5f9', fontSize: 14,
+              resize: 'none', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit',
+            }}
+          />
+        </div>
+
+        {msg && (
+          <div style={{ fontSize: 13, fontWeight: 700, color: msg.ok ? '#4ade80' : '#f87171', marginBottom: 10 }}>{msg.text}</div>
+        )}
+
+        <button onClick={submit} disabled={submitting || !desc.trim()} style={{
+          width: '100%', padding: '16px', borderRadius: 12, border: 'none',
+          background: (!desc.trim() || submitting) ? '#1e3a8a' : 'linear-gradient(135deg,#dc2626,#ef4444)',
+          color: '#fff', fontSize: 16, fontWeight: 900, cursor: (desc.trim() && !submitting) ? 'pointer' : 'not-allowed',
+          boxShadow: (desc.trim() && !submitting) ? '0 4px 16px #dc262655' : 'none',
+        }}>
+          {submitting ? '⏳ Submitting...' : '🚨 Submit Report'}
+        </button>
+      </div>
+
+      {/* Past reports */}
+      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Past Reports</div>
+      {loadingR ? (
+        <div style={{ textAlign: 'center', color: '#475569', padding: 20 }}>Loading...</div>
+      ) : reports.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#475569', padding: 20, fontSize: 13 }}>No reports yet</div>
+      ) : reports.map((r, i) => (
+        <div key={r.id || i} style={{ background: '#1e293b', borderRadius: 10, padding: '12px 14px', marginBottom: 8, border: '1px solid #334155' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#f87171' }}>{r.issue_type}</span>
+            <span style={{ fontSize: 11, color: '#475569' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'}</span>
+          </div>
+          <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>{r.description}</div>
+          {r.admin_reply && (
+            <div style={{ marginTop: 8, background: '#0f172a', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: '#4ade80' }}>
+              📋 Admin: {r.admin_reply}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── History tab ──────────────────────────────────────────────────────────────
 function HistoryTab({ trips }) {
   if (!trips.length) return (
@@ -437,9 +573,10 @@ export default function DriverPage() {
   const activeTrip  = trips.find(t => t.status !== 'completed' && t.status !== 'cancelled');
 
   const TABS = [
-    { key: 'trip',    label: '🚛 Active Trip' },
-    { key: 'history', label: '📋 History'     },
-    { key: 'pay',     label: '💰 My Pay'      },
+    { key: 'trip',    label: '🚛 Trip'    },
+    { key: 'report',  label: '🚨 Report'  },
+    { key: 'history', label: '📋 History' },
+    { key: 'pay',     label: '💰 Pay'     },
   ];
 
   // ── Show PIN login if not logged in ────────────────────────────────────────
@@ -514,6 +651,7 @@ export default function DriverPage() {
             </div>
           )}
 
+          {tab === 'report'  && <ReportTab vehicle={vehicle} />}
           {tab === 'history' && <HistoryTab trips={trips} />}
           {tab === 'pay'     && <PayTab ledger={ledger} />}
         </>

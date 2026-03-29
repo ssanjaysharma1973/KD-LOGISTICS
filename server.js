@@ -271,6 +271,18 @@ function seedSqliteIfEmpty() {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`).catch(() => {});
+      await dbRun(`CREATE TABLE IF NOT EXISTS driver_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id TEXT DEFAULT 'CLIENT_001',
+        vehicle_no TEXT,
+        driver_name TEXT,
+        issue_type TEXT,
+        description TEXT,
+        status TEXT DEFAULT 'open',
+        admin_reply TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`).catch(() => {});
       await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_unloading_v2_unique ON poi_unloading_rates_v2(client_id, poi_id)`).catch(() => {});
 
       // Seed pois if empty
@@ -1856,6 +1868,45 @@ async function handleRequest(req, res, rawPath) {
       [(body.vehicle_no||'').toUpperCase().trim(), body.pin||'', body.client_id||'CLIENT_001'],
       (err, row) => { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err||!row ? { error: 'Invalid vehicle number or PIN' } : { success: true, vehicle: row })); });
     return;
+  }
+
+  // POST /api/driver/report
+  if (pathname === '/api/driver/report' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const vno = (body.vehicle_no || '').toUpperCase().trim();
+      if (!vno) return jsonResp(res, { error: 'vehicle_no required' }, 400);
+      if (!body.description || !body.description.trim()) return jsonResp(res, { error: 'description required' }, 400);
+      const now = new Date().toISOString();
+      await sqRun(
+        `INSERT INTO driver_reports (client_id, vehicle_no, driver_name, issue_type, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`,
+        [body.client_id||'CLIENT_001', vno, body.driver_name||'', body.issue_type||'Other', body.description.trim(), 'open', now, now]
+      );
+      return jsonResp(res, { success: true });
+    } catch (e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // GET /api/driver/reports
+  if (pathname === '/api/driver/reports' && req.method === 'GET') {
+    try {
+      const vno = (parsed.query.vehicle_no || '').toUpperCase().trim();
+      const cid = parsed.query.client_id || 'CLIENT_001';
+      const rows = vno
+        ? await sqAll('SELECT * FROM driver_reports WHERE client_id=? AND vehicle_no=? ORDER BY created_at DESC LIMIT 50', [cid, vno])
+        : await sqAll('SELECT * FROM driver_reports WHERE client_id=? ORDER BY created_at DESC LIMIT 200', [cid]);
+      return jsonResp(res, rows);
+    } catch (e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // PUT /api/driver/reports/:id/reply — admin reply
+  if (/^\/api\/driver\/reports\/\d+\/reply$/.test(pathname) && req.method === 'PUT') {
+    try {
+      const rId = pathname.split('/')[4];
+      const body = await readBody(req);
+      await sqRun('UPDATE driver_reports SET admin_reply=?, status=?, updated_at=? WHERE id=?',
+        [body.admin_reply||'', body.status||'resolved', new Date().toISOString(), rId]);
+      return jsonResp(res, { success: true });
+    } catch (e) { return jsonResp(res, { error: e.message }, 500); }
   }
 
   // POST /api/munshis/login
