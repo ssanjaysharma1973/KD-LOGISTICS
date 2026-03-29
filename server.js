@@ -64,7 +64,12 @@ function loadEnv() {
 loadEnv();
 
 const DB_PATH = './sync-db.json';
-const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || './fleet_erp_backend_sqlite.db';
+// Use /data/ directory on Railway (persistent Volume) — fallback to ./ for local dev
+const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH
+  || (fs.existsSync('/data') ? '/data/fleet_erp_backend_sqlite.db' : './fleet_erp_backend_sqlite.db');
+// Ensure the directory exists (Railway Volume or local)
+try { require('fs').mkdirSync(require('path').dirname(SQLITE_DB_PATH), { recursive: true }); } catch(_) {}
+console.log('[DB] SQLite path:', SQLITE_DB_PATH);
 const SEED_PATH = path.join(__dirname, 'seed_data.json');
 
 // ── SQLite seed initializer ───────────────────────────────────────────────
@@ -92,7 +97,14 @@ function seedSqliteIfEmpty() {
       await dbRun('PRAGMA journal_mode=WAL');
       await dbRun(`CREATE TABLE IF NOT EXISTS pois (
         id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, poi_name TEXT, latitude REAL,
-        longitude REAL, city TEXT, address TEXT, radius_meters INTEGER DEFAULT 500, type TEXT DEFAULT 'primary')`);
+        longitude REAL, city TEXT, address TEXT, radius_meters INTEGER DEFAULT 500, type TEXT DEFAULT 'primary',
+        pin_code TEXT, state TEXT, munshi_id INTEGER, munshi_name TEXT)`);
+      // Migrate existing pois tables that are missing the newer columns
+      for (const col of [
+        'pin_code TEXT', 'state TEXT', 'munshi_id INTEGER', 'munshi_name TEXT',
+      ]) {
+        await dbRun(`ALTER TABLE pois ADD COLUMN ${col}`).catch(() => {});
+      }
       await dbRun(`CREATE TABLE IF NOT EXISTS vehicles (
         id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, vehicle_no TEXT, vehicle_type TEXT,
         vehicle_size TEXT, owner_name TEXT, driver_name TEXT, phone TEXT, notes TEXT)`);
