@@ -274,75 +274,126 @@ function seedSqliteIfEmpty() {
       await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_unloading_v2_unique ON poi_unloading_rates_v2(client_id, poi_id)`).catch(() => {});
 
       // Seed pois if empty
-      const poisRow = await dbGet('SELECT COUNT(1) as c FROM pois');
-      if ((poisRow?.c ?? 1) === 0) {
-        console.log(`[Seed] Seeding ${(seed.pois||[]).length} POIs...`);
+      // Seed POIs — always upsert by (client_id, poi_name) so new entries from export survive redeploy
+      const seedPois = seed.pois || [];
+      if (seedPois.length > 0) {
+        console.log(`[Seed] Upserting ${seedPois.length} seed POIs...`);
         await dbRun('BEGIN');
-        for (const p of (seed.pois || []))
-          await dbRun('INSERT OR IGNORE INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type) VALUES (?,?,?,?,?,?,?,?)',
-            [p.client_id||'CLIENT_001', p.poi_name, p.latitude, p.longitude, p.city||'', p.address||'', p.radius_meters||500, p.type||'primary']);
+        for (const p of seedPois)
+          await dbRun(
+            `INSERT INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type,pin_code,state,munshi_id,munshi_name)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
+               (SELECT 1 FROM pois WHERE client_id=? AND LOWER(TRIM(poi_name))=LOWER(TRIM(?)))`,
+            [p.client_id||'CLIENT_001', p.poi_name, p.latitude||0, p.longitude||0,
+             p.city||'', p.address||'', p.radius_meters||500, p.type||'primary',
+             p.pin_code||'', p.state||'', p.munshi_id||null, p.munshi_name||'',
+             p.client_id||'CLIENT_001', p.poi_name]
+          ).catch(() => {});
         await dbRun('COMMIT');
       }
 
-      // Seed vehicles if empty
-      const vRow = await dbGet('SELECT COUNT(1) as c FROM vehicles');
-      if ((vRow?.c ?? 1) === 0) {
-        console.log(`[Seed] Seeding ${(seed.vehicles||[]).length} vehicles...`);
+      // Seed vehicles — always upsert by (client_id, vehicle_no)
+      const seedVehicles = seed.vehicles || [];
+      if (seedVehicles.length > 0) {
+        console.log(`[Seed] Upserting ${seedVehicles.length} seed vehicles...`);
         await dbRun('BEGIN');
-        for (const v of (seed.vehicles || []))
-          await dbRun(`INSERT OR IGNORE INTO vehicles
-            (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes,
-             fuel_type,munshi_id,munshi_name,driver_id,primary_poi_ids,standard_route_no,route_from,route_to,city)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-            [v.client_id||'CLIENT_001', v.vehicle_no||v.vehicle_number||'', v.vehicle_type||'',
-             v.vehicle_size||'', v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'',
+        for (const v of seedVehicles) {
+          const vno = (v.vehicle_no||v.vehicle_number||'').toUpperCase().replace(/\s/g,'');
+          if (!vno) continue;
+          await dbRun(
+            `INSERT INTO vehicles (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes,
+               fuel_type,munshi_id,munshi_name,driver_id,primary_poi_ids,standard_route_no,route_from,route_to,city)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
+               (SELECT 1 FROM vehicles WHERE client_id=? AND vehicle_no=?)`,
+            [v.client_id||'CLIENT_001', vno, v.vehicle_type||'', v.vehicle_size||'',
+             v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'',
              v.fuel_type||'', v.munshi_id||null, v.munshi_name||'', v.driver_id||null,
-             v.primary_poi_ids||null, v.standard_route_no||null, v.route_from||'', v.route_to||'', v.city||'']);
+             v.primary_poi_ids||null, v.standard_route_no||null, v.route_from||'', v.route_to||'', v.city||'',
+             v.client_id||'CLIENT_001', vno]
+          ).catch(() => {});
+        }
         await dbRun('COMMIT');
       }
 
-      // Seed munshis if empty
-      const mRow = await dbGet('SELECT COUNT(1) as c FROM munshis');
-      if ((mRow?.c ?? 1) === 0) {
-        console.log(`[Seed] Seeding ${(seed.munshis||[]).length} munshis...`);
+      // Seed munshis — always upsert by (client_id, name)
+      const seedMunshis = seed.munshis || [];
+      if (seedMunshis.length > 0) {
+        console.log(`[Seed] Upserting ${seedMunshis.length} seed munshis...`);
         await dbRun('BEGIN');
-        for (const m of (seed.munshis || []))
-          await dbRun('INSERT OR IGNORE INTO munshis (client_id,name,phone,email,primary_poi_ids,notes,balance) VALUES (?,?,?,?,?,?,?)',
-            [m.client_id||'CLIENT_001', m.name||'', m.phone||'', m.email||'', m.primary_poi_ids||'[]', m.notes||'', m.balance||0]);
+        for (const m of seedMunshis)
+          await dbRun(
+            `INSERT INTO munshis (client_id,name,phone,email,primary_poi_ids,notes,balance,area,region,pin,monthly_salary,approval_limit)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
+               (SELECT 1 FROM munshis WHERE client_id=? AND LOWER(TRIM(name))=LOWER(TRIM(?)))`,
+            [m.client_id||'CLIENT_001', m.name||'', m.phone||'', m.email||'',
+             m.primary_poi_ids||'[]', m.notes||'', m.balance||0,
+             m.area||'', m.region||'', m.pin||'', m.monthly_salary||0, m.approval_limit||0,
+             m.client_id||'CLIENT_001', m.name||'']
+          ).catch(() => {});
         await dbRun('COMMIT');
       }
 
-      // Seed fuel_type_rates if empty
-      const ftrRow = await dbGet('SELECT COUNT(1) as c FROM fuel_type_rates');
-      if ((ftrRow?.c ?? 1) === 0 && (seed.fuel_type_rates || []).length > 0) {
-        console.log(`[Seed] Seeding ${seed.fuel_type_rates.length} fuel type rates...`);
+      // Seed fuel_type_rates — upsert (has UNIQUE constraint on client_id+fuel_type)
+      const seedFtr = seed.fuel_type_rates || [];
+      if (seedFtr.length > 0) {
+        console.log(`[Seed] Upserting ${seedFtr.length} fuel type rates...`);
         await dbRun('BEGIN');
-        for (const f of seed.fuel_type_rates)
+        for (const f of seedFtr)
           await dbRun(`INSERT OR IGNORE INTO fuel_type_rates (client_id, fuel_type, cost_per_liter, updated_at) VALUES (?,?,?,?)`,
             [f.client_id||'CLIENT_001', f.fuel_type||'', f.cost_per_liter||0, f.updated_at||new Date().toISOString()]);
         await dbRun('COMMIT');
       }
 
-      // Seed eway_bills_master if empty
-      const ewbRow = await dbGet('SELECT COUNT(1) as c FROM eway_bills_master');
-      if ((ewbRow?.c ?? 1) === 0 && (seed.eway_bills || []).length > 0) {
-        console.log(`[Seed] Seeding ${seed.eway_bills.length} EWBs...`);
+      // Seed eway_bills_master — always upsert by (client_id, ewb_no)
+      const seedEwbs = seed.eway_bills || [];
+      if (seedEwbs.length > 0) {
+        console.log(`[Seed] Upserting ${seedEwbs.length} EWBs...`);
         await dbRun('BEGIN');
-        for (const e of seed.eway_bills)
-          await dbRun(`INSERT OR IGNORE INTO eway_bills_master
-            (client_id,ewb_no,doc_no,doc_date,vehicle_no,from_place,to_place,from_poi_id,from_poi_name,
-             to_poi_id,to_poi_name,from_trade_name,to_trade_name,from_pincode,to_pincode,total_value,
-             valid_upto,status,movement_type,supply_type,transport_mode,distance_km,
-             munshi_id,munshi_name,matched_trip_id,vehicle_status,delivered_at,notes,imported_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        for (const e of seedEwbs)
+          await dbRun(
+            `INSERT INTO eway_bills_master
+              (client_id,ewb_no,doc_no,doc_date,vehicle_no,from_place,to_place,from_poi_id,from_poi_name,
+               to_poi_id,to_poi_name,from_trade_name,to_trade_name,from_pincode,to_pincode,total_value,
+               valid_upto,status,movement_type,supply_type,transport_mode,distance_km,
+               munshi_id,munshi_name,matched_trip_id,vehicle_status,delivered_at,notes,imported_at,validity_days,ewb_number)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
+               (SELECT 1 FROM eway_bills_master WHERE client_id=? AND ewb_no=?)`,
             [e.client_id||'CLIENT_001',e.ewb_no||'',e.doc_no||'',e.doc_date||'',e.vehicle_no||'',
              e.from_place||'',e.to_place||'',e.from_poi_id||null,e.from_poi_name||'',
              e.to_poi_id||null,e.to_poi_name||'',e.from_trade_name||'',e.to_trade_name||'',
              e.from_pincode||'',e.to_pincode||'',e.total_value||0,e.valid_upto||'',
-             e.status||'delivered',e.movement_type||'unclassified',e.supply_type||'',
+             e.status||'active',e.movement_type||'unclassified',e.supply_type||'',
              e.transport_mode||'Road',e.distance_km||0,e.munshi_id||'',e.munshi_name||'',
              e.matched_trip_id||null,e.vehicle_status||'',e.delivered_at||null,e.notes||'',
-             e.imported_at||new Date().toISOString()]);
+             e.imported_at||new Date().toISOString(),e.validity_days||0,e.ewb_number||e.ewb_no||'',
+             e.client_id||'CLIENT_001',e.ewb_no||'']
+          ).catch(() => {});
+        await dbRun('COMMIT');
+      }
+
+      // Seed munshi_trips — always upsert by (client_id, trip_no)
+      const seedTrips = seed.munshi_trips || [];
+      if (seedTrips.length > 0) {
+        console.log(`[Seed] Upserting ${seedTrips.length} munshi trips...`);
+        await dbRun('BEGIN');
+        for (const t of seedTrips)
+          await dbRun(
+            `INSERT INTO munshi_trips
+              (client_id,trip_no,vehicle_no,driver_name,from_poi_id,from_poi_name,to_poi_id,to_poi_name,
+               ewb_no,ewb_is_temp,trip_date,km,toll,exp_admin,exp_munshi,exp_pump_consignment,
+               exp_cash_fuel,exp_unloading,exp_driver_debit,exp_other,munshi_id,munshi_name,
+               driver_id,approved_by,status,notes,created_at,updated_at)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
+               (SELECT 1 FROM munshi_trips WHERE client_id=? AND trip_no=?)`,
+            [t.client_id||'CLIENT_001',t.trip_no||'',t.vehicle_no||'',t.driver_name||'',
+             t.from_poi_id||null,t.from_poi_name||'',t.to_poi_id||null,t.to_poi_name||'',
+             t.ewb_no||'',t.ewb_is_temp||0,t.trip_date||'',t.km||0,t.toll||0,
+             t.exp_admin||0,t.exp_munshi||0,t.exp_pump_consignment||0,
+             t.exp_cash_fuel||0,t.exp_unloading||0,t.exp_driver_debit||0,t.exp_other||0,
+             t.munshi_id||'',t.munshi_name||'',t.driver_id||'',t.approved_by||'',
+             t.status||'open',t.notes||'',t.created_at||new Date().toISOString(),t.updated_at||new Date().toISOString(),
+             t.client_id||'CLIENT_001',t.trip_no||'']
+          ).catch(() => {});
         await dbRun('COMMIT');
       }
 
@@ -1257,6 +1308,27 @@ async function handleRequest(req, res, rawPath) {
   if (pathname === '/api/dev/clients' && req.method === 'GET') {
     return sqliteJson(res, `SELECT DISTINCT client_id FROM vehicles ORDER BY client_id`, [], rows =>
       rows.map(r => ({ client_id: r.client_id })));
+  }
+
+  // GET /api/admin/export-seed — exports all current data as seed_data.json format
+  // Use this to snapshot live Railway data before redeploying
+  if (pathname === '/api/admin/export-seed' && req.method === 'GET') {
+    try {
+      const [pois, vehicles, munshis, eway_bills, fuel_type_rates, munshi_trips] = await Promise.all([
+        sqAll('SELECT * FROM pois WHERE client_id=? ORDER BY id', ['CLIENT_001']),
+        sqAll('SELECT * FROM vehicles WHERE client_id=? ORDER BY id', ['CLIENT_001']),
+        sqAll('SELECT * FROM munshis WHERE client_id=? ORDER BY id', ['CLIENT_001']),
+        sqAll('SELECT * FROM eway_bills_master WHERE client_id=? ORDER BY id', ['CLIENT_001']),
+        sqAll('SELECT * FROM fuel_type_rates WHERE client_id=? ORDER BY id', ['CLIENT_001']),
+        sqAll('SELECT * FROM munshi_trips WHERE client_id=? ORDER BY id', ['CLIENT_001']),
+      ]);
+      const payload = { pois, vehicles, munshis, eway_bills, fuel_type_rates, munshi_trips, exported_at: new Date().toISOString() };
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="seed_data_export.json"');
+      return res.end(JSON.stringify(payload, null, 2));
+    } catch (e) {
+      return jsonResp(res, { error: e.message }, 500);
+    }
   }
 
   // GET /api/pois
@@ -2378,7 +2450,7 @@ async function handleRequest(req, res, rawPath) {
                FROM vehicles v LEFT JOIN gps_current g ON g.vehicle_number = v.vehicle_no
                WHERE v.client_id = ?`, [cid]),
         sqAll(`SELECT id, poi_name, latitude, longitude, radius_meters, type FROM pois WHERE client_id=?`, [cid]),
-        sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND status='active'`, [cid]),
+        sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND status IN ('active','at_destination')`, [cid]),
       ]);
 
       // If gps_current has no data, fall back to sync-db.json positions
@@ -2422,6 +2494,18 @@ async function handleRequest(req, res, rawPath) {
         return { ...v, current_poi: currentPoi || null, current_poi_name: currentPoi?.poi_name || null,
           current_poi_type: poiType || null, load_status, active_ewbs: vEwbs, ewb_count: vEwbs.length, last_seen: v.gps_time };
       });
+      // GPS auto-flag: when vehicle is unloading AT its EWB destination POI → mark at_destination
+      for (const v of result) {
+        if (v.load_status === 'unloading_at_delivery' && v.current_poi && v.active_ewbs?.length) {
+          const poiId = String(v.current_poi.id);
+          for (const ewb of v.active_ewbs) {
+            if (String(ewb.to_poi_id) === poiId && ewb.status === 'active') {
+              sqRun(`UPDATE eway_bills_master SET status='at_destination', updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='active'`, [ewb.id]).catch(() => {});
+              ewb.status = 'at_destination'; // update in-memory for this response
+            }
+          }
+        }
+      }
       return jsonResp(res, { vehicles: result });
     } catch(e) { return jsonResp(res, { vehicles: [], error: e.message }); }
   }
