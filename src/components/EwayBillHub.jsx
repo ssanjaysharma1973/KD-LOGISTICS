@@ -1516,6 +1516,128 @@ function ExtendModal({ ewb, onClose, onExtended }) {
   );
 }
 
+function CompleteModal({ ewb, onClose, onCompleted }) {
+  const [munshis, setMunshis] = React.useState([]);
+  const [selMunshi, setSelMunshi] = React.useState(ewb.munshi_id ? String(ewb.munshi_id) : '');
+  const [exp, setExp] = React.useState({ km: '', toll: '', exp_admin: '', exp_munshi: '', exp_cash_fuel: '', exp_unloading: '', exp_other: '' });
+  const [notes, setNotes] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const [done, setDone] = React.useState(false);
+
+  React.useEffect(() => {
+    fetch('/api/munshis').then(r => r.json()).then(d => setMunshis(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+
+  const selM = munshis.find(m => String(m.id) === selMunshi);
+  const sE = (k, v) => setExp(e => ({ ...e, [k]: v }));
+
+  const handleSave = async () => {
+    if (!selMunshi) { setErr('Please select a Munshi'); return; }
+    setLoading(true); setErr('');
+    try {
+      // 1. Mark EWB delivered + assign munshi
+      const pr = await fetch(`${API}/${ewb.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'delivered', munshi_id: selMunshi, munshi_name: selM?.name || '' }),
+      });
+      const pd = await pr.json();
+      if (pd.error) throw new Error(pd.error);
+
+      // 2. Create munshi trip with linked expense
+      await fetch('/api/munshi-trips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicle_no: ewb.vehicle_no || '',
+          ewb_no: ewb.ewb_no,
+          from_poi_name: ewb.from_poi_name || ewb.from_place || '',
+          to_poi_name: ewb.to_poi_name || ewb.to_place || '',
+          trip_date: new Date().toISOString().slice(0, 10),
+          munshi_id: selMunshi,
+          munshi_name: selM?.name || '',
+          km: parseFloat(exp.km) || 0,
+          toll: parseFloat(exp.toll) || 0,
+          exp_admin: parseFloat(exp.exp_admin) || 0,
+          exp_munshi: parseFloat(exp.exp_munshi) || 0,
+          exp_cash_fuel: parseFloat(exp.exp_cash_fuel) || 0,
+          exp_unloading: parseFloat(exp.exp_unloading) || 0,
+          exp_other: parseFloat(exp.exp_other) || 0,
+          notes,
+          status: 'open',
+        }),
+      });
+      setDone(true);
+      setTimeout(() => { onCompleted && onCompleted(ewb.ewb_no, selM?.name || ''); }, 1400);
+    } catch (e) { setErr(e.message); }
+    setLoading(false);
+  };
+
+  const lS = { fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 3, display: 'block' };
+  const iS = { width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, boxSizing: 'border-box' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: 500, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>✅ Mark EWB Delivered</h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: '#6b7280' }}>✕</button>
+        </div>
+
+        <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#374151', border: '1px solid #bbf7d0' }}>
+          <b>EWB:</b> {ewb.ewb_no} &nbsp;|&nbsp; <b>Vehicle:</b> {ewb.vehicle_no || '—'} &nbsp;|&nbsp;
+          <b>To:</b> {ewb.consignee_name || ewb.to_place || '—'}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={lS}>Munshi *</label>
+            <select style={iS} value={selMunshi} onChange={e => setSelMunshi(e.target.value)}>
+              <option value="">— Select Munshi —</option>
+              {munshis.map(m => <option key={m.id} value={String(m.id)}>{m.name}{m.phone ? ` (${m.phone})` : ''}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {[
+              ['km', 'KM Travelled'],
+              ['toll', 'Toll (₹)'],
+              ['exp_admin', 'Admin Exp (₹)'],
+              ['exp_munshi', 'Munshi Exp (₹)'],
+              ['exp_cash_fuel', 'Cash Fuel (₹)'],
+              ['exp_unloading', 'Unloading (₹)'],
+              ['exp_other', 'Other Exp (₹)'],
+            ].map(([k, label]) => (
+              <div key={k}>
+                <label style={lS}>{label}</label>
+                <input style={iS} type="number" min="0" step="0.01" placeholder="0"
+                  value={exp[k]} onChange={e => sE(k, e.target.value)} />
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label style={lS}>Notes (optional)</label>
+            <input style={iS} placeholder="e.g. delivered at warehouse gate" value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+        </div>
+
+        {err && <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 6, background: '#fee2e2', color: '#991b1b', fontSize: 13 }}>❌ {err}</div>}
+        {done && <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontSize: 13, fontWeight: 700 }}>✅ EWB marked delivered & trip expense saved!</div>}
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={handleSave} disabled={loading || done}
+            style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: loading || done ? '#86efac' : '#16a34a', color: '#fff', fontWeight: 700, cursor: loading || done ? 'default' : 'pointer', fontSize: 13 }}>
+            {loading ? 'Saving…' : done ? '✅ Done' : '✅ Save & Mark Delivered'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NicLiveTab() {
   const [activeList, setActiveList] = React.useState([]);
   const [listLoading, setListLoading] = React.useState(false);
@@ -1527,6 +1649,7 @@ function NicLiveTab() {
   const [searchError, setSearchError] = React.useState('');
 
   const [extendTarget, setExtendTarget] = React.useState(null);
+  const [completeTarget, setCompleteTarget] = React.useState(null);
   const [filterMode, setFilterMode] = React.useState('all'); // all | expiring | expired
   const [syncing, setSyncing] = React.useState(false);
   const [syncMsg, setSyncMsg] = React.useState('');
@@ -1601,6 +1724,11 @@ function NicLiveTab() {
     setExtendTarget(null);
   };
 
+  const handleCompleted = (ewbNo, munshiName) => {
+    setActiveList(list => list.map(e => e.ewb_no === ewbNo ? { ...e, status: 'DEL', delivered_at: new Date().toISOString(), munshi_name: munshiName } : e));
+    setCompleteTarget(null);
+  };
+
   const [statusFilter, setStatusFilter] = React.useState('all'); // all | ACT | DEL
   const [nicFetching, setNicFetching] = React.useState(false);
   const [nicMsg, setNicMsg] = React.useState('');
@@ -1641,7 +1769,7 @@ function NicLiveTab() {
   const actCount = activeList.filter(e => e.status === 'ACT').length;
   const delCount = activeList.filter(e => e.status === 'DEL').length;
 
-  const rowStyle = { display: 'grid', gridTemplateColumns: '130px 1fr 1fr 90px 110px 90px', gap: 8, alignItems: 'center', padding: '8px 12px', fontSize: 12 };
+  const rowStyle = { display: 'grid', gridTemplateColumns: '130px 1fr 1fr 90px 110px 170px', gap: 8, alignItems: 'center', padding: '8px 12px', fontSize: 12 };
 
   return (
     <div>
@@ -1769,12 +1897,18 @@ function NicLiveTab() {
                           </span>
                         : <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>Active</span>}
                   </span>
-                  <span>
+                  <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                     {!isDel && (
-                      <button onClick={() => setExtendTarget(e)}
-                        style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #2563eb', background: '#eff6ff', color: '#1d4ed8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                        Extend
-                      </button>
+                      <>
+                        <button onClick={() => setExtendTarget(e)}
+                          style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #2563eb', background: '#eff6ff', color: '#1d4ed8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                          Extend
+                        </button>
+                        <button onClick={() => setCompleteTarget(e)}
+                          style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #16a34a', background: '#f0fdf4', color: '#166534', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                          ✅ Done
+                        </button>
+                      </>
                     )}
                   </span>
                 </div>
@@ -1786,6 +1920,9 @@ function NicLiveTab() {
 
       {extendTarget && (
         <ExtendModal ewb={extendTarget} onClose={() => setExtendTarget(null)} onExtended={handleExtended} />
+      )}
+      {completeTarget && (
+        <CompleteModal ewb={completeTarget} onClose={() => setCompleteTarget(null)} onCompleted={handleCompleted} />
       )}
     </div>
   );

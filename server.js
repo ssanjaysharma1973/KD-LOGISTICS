@@ -2768,7 +2768,7 @@ async function handleRequest(req, res, rawPath) {
       const rows = await sqAll(`
         SELECT id, ewb_no, doc_no, doc_date, vehicle_no, from_trade_name, to_trade_name,
                from_place, to_place, from_poi_name, to_poi_name, valid_upto, status,
-               movement_type, distance_km, total_value, munshi_name, delivered_at,
+               movement_type, distance_km, total_value, munshi_id, munshi_name, delivered_at,
                notes, imported_at
         FROM eway_bills_master WHERE client_id=? AND ewb_no IS NOT NULL AND ewb_no != ''
         ORDER BY imported_at DESC LIMIT 1000`, [cid]);
