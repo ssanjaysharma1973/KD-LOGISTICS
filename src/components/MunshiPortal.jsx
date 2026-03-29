@@ -14,13 +14,6 @@ function fmtDate(s) {
   return isNaN(d) ? s : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
 }
 
-const STATUS_CFG = {
-  started:    { label: 'Dispatched', color: '#2563eb', bg: '#1e3a8a22', icon: '🔵' },
-  in_transit: { label: 'En Route',   color: '#d97706', bg: '#78350f22', icon: '🟡' },
-  unloading:  { label: 'Unloading',  color: '#a78bfa', bg: '#4c1d9522', icon: '🟣' },
-  completed:  { label: 'Completed',  color: '#4ade80', bg: '#14532d22', icon: '🟢' },
-  cancelled:  { label: 'Cancelled',  color: '#f87171', bg: '#7f1d1d22', icon: '🔴' },
-};
 
 // ─── PIN Login Screen ─────────────────────────────────────────────────────────
 function PinLogin({ onLogin }) {
@@ -167,7 +160,7 @@ function RoutingTab({ munshi, vehicles, pois, onGoToTrip }) {
 
   const myPoiIds = (() => { try { return JSON.parse(munshi.primary_poi_ids || '[]').map(String); } catch { return []; } })();
   const myPois = pois.filter(p => myPoiIds.includes(String(p.id)));
-  const myPoiNames = new Set(myPois.map(p => p.name));
+  const myPoiNames = new Set(myPois.map(p => p.poi_name));
 
   const fetchRoute = async () => {
     setLoading(true);
@@ -218,14 +211,14 @@ function RoutingTab({ munshi, vehicles, pois, onGoToTrip }) {
 
   const handlePoiClick = (poiName, g) => {
     if (activePoi?.name === poiName) { setActivePoi(null); setActiveVehicle(''); setActiveEwb(''); setPoiEwbs([]); return; }
-    const poiObj = g.poi_obj || pois.find(p => p.name === poiName);
+    const poiObj = g.poi_obj || pois.find(p => p.poi_name === poiName);
     setActivePoi({ name: poiName, id: poiObj?.id || null });
     setActiveVehicle(''); setActiveEwb('');
     fetchPoiEwbs(poiObj?.id);
   };
 
   const handleVehicleChipClick = (v, poiName, g) => {
-    const poiObj = g.poi_obj || pois.find(p => p.name === poiName);
+    const poiObj = g.poi_obj || pois.find(p => p.poi_name === poiName);
     if (activePoi?.name !== poiName) {
       setActivePoi({ name: poiName, id: poiObj?.id || null });
       fetchPoiEwbs(poiObj?.id);
@@ -617,16 +610,30 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
     if (onPrefillDone) onPrefillDone();
   }, [tripPrefill]);
 
-  // Whenever form vehicle changes, load real EWBs for the dropdown
+  // Whenever form vehicle changes, load real EWBs for the dropdown:
+  // Merge EWBs by vehicle_no + munshi's POI outbound EWBs (vehicle may not be assigned yet)
   useEffect(() => {
     if (!form.vehicle_no) { setFormEwbs([]); setEwbManual(false); return; }
-    fetch(`${API}/munshi-trips/ewb-search?clientId=CLIENT_001&vehicle_no=${encodeURIComponent(form.vehicle_no)}`)
-      .then(r => r.json())
-      .then(d => {
-        const list = Array.isArray(d) ? d.filter(e => e.status !== 'delivered' && e.status !== 'cancelled') : [];
-        setFormEwbs(list);
-      })
-      .catch(() => {});
+    const vno = encodeURIComponent(form.vehicle_no);
+    const byVehicle = fetch(`${API}/munshi-trips/ewb-search?clientId=CLIENT_001&vehicle_no=${vno}`)
+      .then(r => r.json()).catch(() => []);
+    const byPoi = myPoiIds.length > 0
+      ? fetch(`${API}/munshi-trips/ewb-search?clientId=CLIENT_001&poi_ids=${myPoiIds.join(',')}`)
+          .then(r => r.json()).catch(() => [])
+      : Promise.resolve([]);
+    Promise.all([byVehicle, byPoi]).then(([vData, pData]) => {
+      const vList = Array.isArray(vData) ? vData : [];
+      const pList = Array.isArray(pData) ? pData.filter(e => e.direction === 'outbound') : [];
+      // Merge, deduplicate by ewb_no, filter out delivered/cancelled
+      const seen = new Set();
+      const merged = [...vList, ...pList].filter(e => {
+        if (e.status === 'delivered' || e.status === 'cancelled') return false;
+        if (seen.has(e.ewb_no)) return false;
+        seen.add(e.ewb_no);
+        return true;
+      });
+      setFormEwbs(merged);
+    });
   }, [form.vehicle_no]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load right panel when vehicle selected
@@ -1344,6 +1351,78 @@ function Empty({ msg, sub }) {
   );
 }
 
+// ─── Reports Tab (driver issues visible to munshi) ───────────────────────────
+function ReportsTab({ munshi, vehicles }) {
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [filter,  setFilter]  = useState('open'); // 'open' | 'all'
+
+  const myVehicleNos = new Set(vehicles.filter(v =>
+    (v.munshi_id && String(v.munshi_id) === String(munshi.id)) ||
+    (v.munshi_name || '').toLowerCase() === (munshi.name || '').toLowerCase() ||
+    (v.munshi_name || '').toLowerCase() === 'common' ||
+    (!v.munshi_id && !v.munshi_name)
+  ).map(v => v.vehicle_no));
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res  = await fetch(`${API}/driver/reports`);
+      const data = await res.json();
+      const all  = Array.isArray(data) ? data : [];
+      setReports(all.filter(r => myVehicleNos.has(r.vehicle_no)));
+    } catch { setReports([]); }
+    setLoading(false);
+  }, [munshi.id, vehicles.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <Spinner />;
+
+  const openCount = reports.filter(r => r.status !== 'resolved').length;
+  const filtered  = filter === 'open' ? reports.filter(r => r.status !== 'resolved') : reports;
+
+  return (
+    <div style={{ padding: '16px 20px', maxWidth: 520, margin: '0 auto' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
+        {[['open', `Open (${openCount})`], ['all', `All (${reports.length})`]].map(([f, lbl]) => (
+          <button key={f} onClick={() => setFilter(f)}
+            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 10, border: 'none', background: filter === f ? '#dc2626' : '#1e293b', color: filter === f ? '#fff' : '#64748b', cursor: 'pointer', fontWeight: filter === f ? 700 : 400 }}>
+            {lbl}
+          </button>
+        ))}
+        <button onClick={load} style={{ marginLeft: 'auto', background: '#1e293b', border: '1px solid #334155', color: '#64748b', borderRadius: 7, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>🔄</button>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Empty msg={filter === 'open' ? 'No open issues — all clear! ✅' : 'No reports filed yet'} sub="Driver reports will appear here" />
+      ) : filtered.map((r, i) => (
+        <div key={r.id || i} style={{ background: '#1e293b', borderRadius: 10, padding: '12px 14px', marginBottom: 10, border: `1px solid ${r.admin_reply ? '#334155' : '#7f1d1d'}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+            <div>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#f87171' }}>{r.issue_type}</span>
+              {r.vehicle_no && <span style={{ fontSize: 11, color: '#60a5fa', marginLeft: 8, fontFamily: 'monospace' }}>🚛 {r.vehicle_no}</span>}
+            </div>
+            <span style={{ fontSize: 10, color: r.admin_reply ? '#4ade80' : '#f59e0b', fontWeight: 700, background: r.admin_reply ? '#14532d' : '#78350f', padding: '2px 7px', borderRadius: 10 }}>
+              {r.admin_reply ? '✅ Replied' : '⏳ Open'}
+            </span>
+          </div>
+          {r.driver_name && <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>👤 {r.driver_name}</div>}
+          <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: r.admin_reply ? 8 : 0 }}>{r.description}</div>
+          {r.admin_reply && (
+            <div style={{ background: '#0f172a', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: '#4ade80', borderLeft: '3px solid #16a34a' }}>
+              📋 Admin: {r.admin_reply}
+            </div>
+          )}
+          <div style={{ fontSize: 10, color: '#475569', marginTop: 6 }}>
+            {r.created_at ? new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main MunshiPortal ────────────────────────────────────────────────────────
 const SESSION_KEY = 'munshiPortal_session';
 const TABS = [
@@ -1352,6 +1431,7 @@ const TABS = [
   { key: 'expenses', label: '💰 Expenses' },
   { key: 'vehicles', label: '🚗 Vehicles' },
   { key: 'ledger',   label: '📒 Ledger'   },
+  { key: 'reports',  label: '🚨 Issues'   },
 ];
 
 export default function MunshiPortal() {
@@ -1430,6 +1510,7 @@ export default function MunshiPortal() {
       {tab === 'expenses' && <ExpensesTab munshi={munshi} vehicles={vehicles} />}
       {tab === 'vehicles' && <VehiclesTab munshi={munshi} vehicles={vehicles} />}
       {tab === 'ledger'   && <LedgerTab   munshi={munshi} />}
+      {tab === 'reports'  && <ReportsTab  munshi={munshi} vehicles={vehicles} />}
     </div>
   );
 }
