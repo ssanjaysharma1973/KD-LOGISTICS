@@ -137,8 +137,323 @@ function PinLogin({ onLogin }) {
   );
 }
 
+// ─── Routing Tab ────────────────────────────────────────────────────────────
+const ROUTING_SIZE_PALETTE = [
+  { bg: '#2563eb', border: '#1d4ed8' },
+  { bg: '#7c3aed', border: '#6d28d9' },
+  { bg: '#0891b2', border: '#0e7490' },
+  { bg: '#059669', border: '#047857' },
+  { bg: '#d97706', border: '#b45309' },
+  { bg: '#dc2626', border: '#b91c1c' },
+  { bg: '#db2777', border: '#be185d' },
+  { bg: '#65a30d', border: '#4d7c0f' },
+];
+const _rscc = {}; let _rscIdx = 0;
+function routingSizeColor(size) {
+  if (!size) return ROUTING_SIZE_PALETTE[0];
+  if (!_rscc[size]) { _rscc[size] = ROUTING_SIZE_PALETTE[_rscIdx % ROUTING_SIZE_PALETTE.length]; _rscIdx++; }
+  return _rscc[size];
+}
+
+function RoutingTab({ munshi, vehicles, pois, onGoToTrip }) {
+  const [routeVehicles, setRouteVehicles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedPois, setExpandedPois] = useState(new Set());
+  const [activePoi, setActivePoi] = useState(null);
+  const [activeVehicle, setActiveVehicle] = useState('');
+  const [activeEwb, setActiveEwb] = useState('');
+  const [poiEwbs, setPoiEwbs] = useState([]);
+  const [ewbLoading, setEwbLoading] = useState(false);
+
+  const myPoiIds = (() => { try { return JSON.parse(munshi.primary_poi_ids || '[]').map(String); } catch { return []; } })();
+  const myPois = pois.filter(p => myPoiIds.includes(String(p.id)));
+  const myPoiNames = new Set(myPois.map(p => p.name));
+
+  const fetchRoute = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/eway-bills-hub/vehicle-movement');
+      const data = await res.json();
+      setRouteVehicles(data.vehicles || []);
+    } catch { setRouteVehicles([]); }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchRoute();
+    const t = setInterval(fetchRoute, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  const fetchPoiEwbs = async (poiId) => {
+    if (!poiId) { setPoiEwbs([]); return; }
+    setEwbLoading(true);
+    try {
+      const res = await fetch(`${API}/munshi-trips/ewb-search?clientId=CLIENT_001&poi_ids=${poiId}`);
+      const data = await res.json();
+      setPoiEwbs(Array.isArray(data) ? data : []);
+    } catch { setPoiEwbs([]); }
+    setEwbLoading(false);
+  };
+
+  // Group vehicles
+  const inTransit = [], noGps = [], groups = {};
+  routeVehicles.forEach(v => {
+    if (v.load_status === 'in_transit_loaded' || v.load_status === 'in_transit_empty') { inTransit.push(v); return; }
+    if (!v.current_poi_name) { noGps.push(v); return; }
+    if (!groups[v.current_poi_name]) groups[v.current_poi_name] = { loading: [], unloading: [], parked: [], poi_type: v.current_poi_type, poi_obj: v.current_poi };
+    const g = groups[v.current_poi_name];
+    if (v.load_status === 'unloading_at_delivery') g.unloading.push(v);
+    else if (v.load_status === 'empty_at_delivery') g.parked.push(v);
+    else g.loading.push(v);
+  });
+
+  const myGroupEntries = Object.entries(groups).filter(([n]) => myPoiNames.has(n));
+  const otherGroupEntries = Object.entries(groups)
+    .filter(([n]) => !myPoiNames.has(n))
+    .sort((a, b) => (b[1].loading.length + b[1].unloading.length + b[1].parked.length) - (a[1].loading.length + a[1].unloading.length + a[1].parked.length));
+
+  const totalAt = g => g.loading.length + g.unloading.length + g.parked.length;
+  const poiTypeIcon = t => ({ primary: '🏭', secondary: '🏪', tertiary: '🏬' }[t] || '📍');
+
+  const handlePoiClick = (poiName, g) => {
+    if (activePoi?.name === poiName) { setActivePoi(null); setActiveVehicle(''); setActiveEwb(''); setPoiEwbs([]); return; }
+    const poiObj = g.poi_obj || pois.find(p => p.name === poiName);
+    setActivePoi({ name: poiName, id: poiObj?.id || null });
+    setActiveVehicle(''); setActiveEwb('');
+    fetchPoiEwbs(poiObj?.id);
+  };
+
+  const handleVehicleChipClick = (v, poiName, g) => {
+    const poiObj = g.poi_obj || pois.find(p => p.name === poiName);
+    if (activePoi?.name !== poiName) {
+      setActivePoi({ name: poiName, id: poiObj?.id || null });
+      fetchPoiEwbs(poiObj?.id);
+      setActiveEwb('');
+    }
+    setActiveVehicle(prev => prev === v.vehicle_no ? '' : v.vehicle_no);
+  };
+
+  const renderChip = (v, poiName, g) => {
+    const sc = routingSizeColor(v.vehicle_size);
+    const isActive = activeVehicle === v.vehicle_no && activePoi?.name === poiName;
+    return (
+      <div key={v.vehicle_no}
+        title={`${v.vehicle_no}${v.vehicle_size ? ' · ' + v.vehicle_size : ''}${v.active_ewbs?.length ? ' · ' + v.active_ewbs.length + ' EWB' : ''}`}
+        onClick={() => handleVehicleChipClick(v, poiName, g)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          background: isActive ? '#2563eb' : sc.bg,
+          border: `2px solid ${isActive ? '#93c5fd' : sc.border}`,
+          color: '#fff', borderRadius: 7, padding: '4px 10px',
+          fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+          userSelect: 'none', boxShadow: isActive ? '0 0 0 3px rgba(147,197,253,0.4)' : undefined,
+        }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
+        {v.vehicle_no}
+        {(v.active_ewbs?.length || 0) > 0 && (
+          <span style={{ background: '#fff', color: isActive ? '#2563eb' : sc.bg, borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 800, lineHeight: '16px' }}>{v.active_ewbs.length}</span>
+        )}
+      </div>
+    );
+  };
+
+  const renderActionPanel = (poiName, g) => {
+    if (activePoi?.name !== poiName) return null;
+    const waitingVehicles = [...g.loading, ...g.parked];
+    return (
+      <div style={{ margin: '0 8px 10px', background: '#0f172a', border: '1px solid #2563eb', borderRadius: 10, padding: '12px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.08em' }}>📍 {poiName}</span>
+          <button onClick={() => { setActivePoi(null); setActiveVehicle(''); setActiveEwb(''); }}
+            style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>✕</button>
+        </div>
+
+        {waitingVehicles.length > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>At POI ({waitingVehicles.length})</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {waitingVehicles.map(v => (
+                <button key={v.vehicle_no} onClick={() => setActiveVehicle(prev => prev === v.vehicle_no ? '' : v.vehicle_no)}
+                  style={{ background: activeVehicle === v.vehicle_no ? '#2563eb' : '#1e293b', border: `1.5px solid ${activeVehicle === v.vehicle_no ? '#3b82f6' : '#334155'}`, color: activeVehicle === v.vehicle_no ? '#fff' : '#94a3b8', borderRadius: 8, padding: '5px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700 }}>
+                  {v.vehicle_no}{(v.active_ewbs?.length || 0) > 0 && <span style={{ marginLeft: 4, fontSize: 10, color: '#fbbf24' }}>[{v.active_ewbs.length}]</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {inTransit.length > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>On Road ({inTransit.length})</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {inTransit.slice(0, 10).map(v => (
+                <button key={v.vehicle_no} onClick={() => setActiveVehicle(prev => prev === v.vehicle_no ? '' : v.vehicle_no)}
+                  style={{ background: activeVehicle === v.vehicle_no ? '#0891b2' : '#1e293b', border: `1.5px solid ${activeVehicle === v.vehicle_no ? '#0ea5e9' : '#334155'}`, color: activeVehicle === v.vehicle_no ? '#fff' : '#64748b', borderRadius: 8, padding: '5px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700 }}>
+                  {v.vehicle_no}{(v.active_ewbs?.length || 0) > 0 && <span style={{ marginLeft: 4, fontSize: 10, color: '#fbbf24' }}>[{v.active_ewbs.length}]</span>}
+                </button>
+              ))}
+              {inTransit.length > 10 && <span style={{ fontSize: 11, color: '#475569', padding: '5px 4px' }}>+{inTransit.length - 10} more</span>}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Other Vehicle</div>
+          <select value={activeVehicle} onChange={e => setActiveVehicle(e.target.value)}
+            style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1px solid #334155', background: '#1e293b', color: '#f1f5f9', fontSize: 12, boxSizing: 'border-box' }}>
+            <option value="">— Choose vehicle —</option>
+            {vehicles.map(v => <option key={v.vehicle_no} value={v.vehicle_no}>{v.vehicle_no}{v.driver_name ? ` · ${v.driver_name}` : ''}</option>)}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+            Live EWB {ewbLoading ? '(loading…)' : poiEwbs.length > 0 ? `(${poiEwbs.length})` : ''}
+          </div>
+          <select value={activeEwb} onChange={e => setActiveEwb(e.target.value)}
+            style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1px solid #334155', background: '#1e293b', color: '#f1f5f9', fontSize: 12, boxSizing: 'border-box' }}>
+            <option value="">— No EWB / manual —</option>
+            {poiEwbs.map(e => (
+              <option key={e.id || e.ewb_no} value={e.ewb_no}>
+                {e.ewb_no}{e.from_place ? ` · ${e.from_place}→${e.to_place || ''}` : ''}{e.movement_type ? ` [${e.movement_type.replace(/_/g, ' ')}]` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button disabled={!activeVehicle}
+          onClick={() => {
+            onGoToTrip({ vehicle_no: activeVehicle, from_poi_id: String(activePoi.id || ''), from_poi_name: activePoi.name, ewb_no: activeEwb });
+            setActivePoi(null); setActiveVehicle(''); setActiveEwb('');
+          }}
+          style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', fontWeight: 800, fontSize: 13, cursor: activeVehicle ? 'pointer' : 'not-allowed', background: activeVehicle ? '#2563eb' : '#1e293b', color: activeVehicle ? '#fff' : '#475569' }}>
+          {activeVehicle ? `➕ Create Trip for ${activeVehicle}` : '← Select a vehicle first'}
+        </button>
+      </div>
+    );
+  };
+
+  const renderPoiBlock = (poiName, g, isMine) => {
+    const total = totalAt(g);
+    const hasLoadUnload = g.loading.length > 0 || g.unloading.length > 0;
+    const inlineParked = !hasLoadUnload && g.parked.length > 0;
+    const separateParked = hasLoadUnload && g.parked.length > 0;
+    const isActive = activePoi?.name === poiName;
+    return (
+      <div key={poiName} style={{ borderRadius: 10, border: `1px solid ${isActive ? '#2563eb' : isMine ? '#3b82f6' : '#334155'}`, overflow: 'hidden', boxShadow: isActive ? '0 0 0 2px rgba(59,130,246,0.3)' : '0 1px 3px rgba(0,0,0,0.2)', background: '#1e293b' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, background: isMine ? 'rgba(30,58,138,0.3)' : '#1e293b', borderBottom: separateParked ? '1px solid #334155' : 'none' }}>
+          <button onClick={() => handlePoiClick(poiName, g)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 12px', borderRight: '1px solid #334155', width: 180, minWidth: 180, flexShrink: 0, background: isActive ? '#1e3a8a' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+            <span style={{ fontSize: 13, flexShrink: 0 }}>{poiTypeIcon(g.poi_type)}</span>
+            <span style={{ fontWeight: 800, fontSize: 12, color: isMine ? '#60a5fa' : '#94a3b8', lineHeight: 1.3, wordBreak: 'break-word' }}>{poiName}</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: isMine ? '#2563eb' : '#475569', border: `1.5px solid ${isMine ? '#1d4ed8' : '#334155'}`, padding: '1px 6px', borderRadius: 7, flexShrink: 0, marginLeft: 2, whiteSpace: 'nowrap' }}>{total}</span>
+          </button>
+          {g.loading.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRight: g.unloading.length > 0 ? '1px solid #334155' : 'none', background: 'rgba(251,191,36,0.08)', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#92400e', background: '#fde68a', border: '1.5px solid #f59e0b', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>📦 LOAD</span>
+              {g.loading.map(v => renderChip(v, poiName, g))}
+            </div>
+          )}
+          {g.unloading.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', background: 'rgba(59,130,246,0.08)', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', background: '#1e3a8a', border: '1.5px solid #3b82f6', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🔽 UNLOD</span>
+              {g.unloading.map(v => renderChip(v, poiName, g))}
+            </div>
+          )}
+          {inlineParked && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', background: 'rgba(71,85,105,0.2)', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', background: '#334155', border: '1.5px solid #475569', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🅿 PARK</span>
+              {g.parked.map(v => renderChip(v, poiName, g))}
+            </div>
+          )}
+        </div>
+        {separateParked && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 10px', background: 'rgba(71,85,105,0.15)', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', background: '#334155', border: '1.5px solid #475569', borderRadius: 7, padding: '3px 9px', whiteSpace: 'nowrap' }}>🅿 PARK</span>
+            {g.parked.map(v => renderChip(v, poiName, g))}
+          </div>
+        )}
+        {renderActionPanel(poiName, g)}
+      </div>
+    );
+  };
+
+  const stats = {
+    loading:   routeVehicles.filter(v => v.load_status === 'empty_at_loading').length,
+    transit:   inTransit.length,
+    unloading: routeVehicles.filter(v => v.load_status === 'unloading_at_delivery').length,
+    parked:    routeVehicles.filter(v => v.load_status === 'empty_at_delivery').length,
+  };
+
+  return (
+    <div style={{ padding: '12px' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        {[['📦 Load', stats.loading, '#fffbeb', '#92400e', '#fde68a'], ['🚛 Transit', stats.transit, '#f0fdf4', '#166534', '#86efac'], ['🔽 Unlod', stats.unloading, '#eff6ff', '#1d4ed8', '#93c5fd'], ['🅿 Park', stats.parked, '#f9fafb', '#4b5563', '#d1d5db']].map(([label, val, bg, color, border]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, background: bg, border: `1px solid ${border}`, color, borderRadius: 7, padding: '4px 10px', fontSize: 11, fontWeight: 700 }}>
+            {label} <span style={{ fontWeight: 800, fontSize: 13 }}>{val}</span>
+          </div>
+        ))}
+        <button onClick={fetchRoute} style={{ marginLeft: 'auto', background: '#1e293b', border: '1px solid #334155', color: '#64748b', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>🔄</button>
+      </div>
+
+      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Loading vehicle positions…</div>}
+
+      {!loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {myGroupEntries.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, color: '#60a5fa', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>📋 My POIs — click POI or vehicle to dispatch</div>
+              {myGroupEntries.map(([name, g]) => renderPoiBlock(name, g, true))}
+            </>
+          )}
+
+          {inTransit.length > 0 && (
+            <div style={{ background: '#1e293b', borderRadius: 10, border: '1px solid #22c55e', overflow: 'hidden' }}>
+              <div style={{ padding: '8px 14px', background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 12, color: '#86efac', flex: 1 }}>🚛 In Transit ({inTransit.length})</span>
+              </div>
+              <div style={{ padding: '10px 14px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {inTransit.map(v => { const sc = routingSizeColor(v.vehicle_size); return (
+                  <div key={v.vehicle_no} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: sc.bg, border: `1.5px solid ${sc.border}`, color: '#fff', borderRadius: 7, padding: '4px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
+                    {v.vehicle_no}
+                    {(v.active_ewbs?.length || 0) > 0 && <span style={{ background: '#fff', color: sc.bg, borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 800 }}>{v.active_ewbs.length}</span>}
+                  </div>
+                ); })}
+              </div>
+            </div>
+          )}
+
+          {otherGroupEntries.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Other POIs ({otherGroupEntries.length}) — click ▼ to expand</div>
+              {otherGroupEntries.map(([name, g]) => {
+                const isExpanded = expandedPois.has(name);
+                const total = totalAt(g);
+                return (
+                  <div key={name} style={{ background: '#1e293b', borderRadius: 8, border: '1px solid #334155', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer' }}
+                      onClick={() => setExpandedPois(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; })}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', flex: 1 }}>{name}</span>
+                      <span style={{ background: '#334155', color: '#94a3b8', borderRadius: 8, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>{total}</span>
+                      <span style={{ color: '#475569', fontSize: 12 }}>{isExpanded ? '▲' : '▼'}</span>
+                    </div>
+                    {isExpanded && renderPoiBlock(name, g, false)}
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {routeVehicles.length === 0 && <Empty msg="No vehicle data" sub="GPS positions auto-refresh every 30s" />}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Trips Tab ────────────────────────────────────────────────────────────────
-function TripsTab({ munshi, vehicles, pois }) {
+function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
   // Left panel state
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   // Right panel state
@@ -188,6 +503,30 @@ function TripsTab({ munshi, vehicles, pois }) {
       .then(d => setPoiEwbs(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, []);
+
+  // Apply prefill from RoutingTab
+  useEffect(() => {
+    if (!tripPrefill) return;
+    const v = vehicles.find(x => x.vehicle_no === tripPrefill.vehicle_no);
+    setSelectedVehicle(v || null);
+    const tempNo = tripPrefill.ewb_no || (() => {
+      const ds = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      return `T${ds}${String(Math.floor(Math.random() * 900) + 100)}`;
+    })();
+    setForm(f => ({
+      ...f,
+      vehicle_no:    tripPrefill.vehicle_no,
+      driver_name:   v?.driver_name || '',
+      from_poi_id:   tripPrefill.from_poi_id,
+      from_poi_name: tripPrefill.from_poi_name,
+      ewb_no:        tempNo,
+      ewb_is_temp:   tripPrefill.ewb_no ? 0 : 1,
+    }));
+    setEditId(null);
+    setShowForm(true);
+    setMsg('');
+    if (onPrefillDone) onPrefillDone();
+  }, [tripPrefill]);
 
   // Load right panel when vehicle selected
   useEffect(() => {
@@ -851,6 +1190,7 @@ function Empty({ msg, sub }) {
 const SESSION_KEY = 'munshiPortal_session';
 const TABS = [
   { key: 'trips',    label: '🚛 Trips'    },
+  { key: 'routing',  label: '🗺️ Routing'  },
   { key: 'expenses', label: '💰 Expenses' },
   { key: 'vehicles', label: '🚗 Vehicles' },
   { key: 'ledger',   label: '📒 Ledger'   },
@@ -864,6 +1204,7 @@ export default function MunshiPortal() {
   const [vehicles, setVehicles] = useState([]);
   const [pois,     setPois]     = useState([]);
   const [tab,      setTab]      = useState('trips');
+  const [tripPrefill, setTripPrefill] = useState(null);
   const intervalRef = useRef(null);
 
   function handleLogin(m) {
@@ -892,7 +1233,7 @@ export default function MunshiPortal() {
   if (!munshi) return <PinLogin onLogin={handleLogin} />;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9', fontFamily: 'system-ui, sans-serif', maxWidth: tab === 'trips' ? '100%' : 520, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9', fontFamily: 'system-ui, sans-serif', maxWidth: ['trips','routing'].includes(tab) ? '100%' : 520, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', padding: '14px 20px', display: 'flex', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ flex: 1 }}>
@@ -926,7 +1267,8 @@ export default function MunshiPortal() {
       </div>
 
       {/* Content */}
-      {tab === 'trips'    && <TripsTab    munshi={munshi} vehicles={vehicles} pois={pois} />}
+      {tab === 'trips'    && <TripsTab    munshi={munshi} vehicles={vehicles} pois={pois} tripPrefill={tripPrefill} onPrefillDone={() => setTripPrefill(null)} />}
+      {tab === 'routing'  && <RoutingTab  munshi={munshi} vehicles={vehicles} pois={pois} onGoToTrip={p => { setTripPrefill(p); setTab('trips'); }} />}
       {tab === 'expenses' && <ExpensesTab munshi={munshi} vehicles={vehicles} />}
       {tab === 'vehicles' && <VehiclesTab munshi={munshi} vehicles={vehicles} />}
       {tab === 'ledger'   && <LedgerTab   munshi={munshi} />}
