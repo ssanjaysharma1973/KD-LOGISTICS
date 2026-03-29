@@ -78,7 +78,7 @@ function PinLogin({ onLogin }) {
         type="password"
         inputMode="numeric"
         value={pin}
-        onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0,6); setPin(v); setError(''); }}
+        onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 6); setPin(v); setError(''); }}
         onKeyDown={handleKey}
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
       />

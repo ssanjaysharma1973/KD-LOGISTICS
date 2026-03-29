@@ -249,6 +249,8 @@ function seedSqliteIfEmpty() {
       await dbRun(`ALTER TABLE munshis ADD COLUMN monthly_salary REAL DEFAULT 0`).catch(() => {});
       await dbRun(`ALTER TABLE munshis ADD COLUMN approval_limit REAL DEFAULT 0`).catch(() => {});
       await dbRun(`ALTER TABLE vehicles ADD COLUMN driver_pin TEXT DEFAULT ''`).catch(() => {}); 
+      // One-time: reset non-numeric / null munshi PINs to default '1234'
+      await dbRun(`UPDATE munshis SET pin='1234' WHERE pin IS NULL OR TRIM(pin)='' OR CAST(pin AS INTEGER)=0 AND LENGTH(pin)>0`).catch(() => {});
       await dbRun(`ALTER TABLE poi_unloading_rates_v2 ADD COLUMN updated_at TEXT`).catch(() => {});
       await dbRun(`ALTER TABLE pois ADD COLUMN munshi_id TEXT DEFAULT ''`).catch(() => {});
       await dbRun(`ALTER TABLE pois ADD COLUMN munshi_name TEXT DEFAULT ''`).catch(() => {});
@@ -326,13 +328,14 @@ function seedSqliteIfEmpty() {
           if (!vno) continue;
           await dbRun(
             `INSERT INTO vehicles (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes,
-               fuel_type,munshi_id,munshi_name,driver_id,primary_poi_ids,standard_route_no,route_from,route_to,city)
-             SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
+               fuel_type,munshi_id,munshi_name,driver_id,primary_poi_ids,standard_route_no,route_from,route_to,city,driver_pin)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
                (SELECT 1 FROM vehicles WHERE client_id=? AND vehicle_no=?)`,
             [v.client_id||'CLIENT_001', vno, v.vehicle_type||'', v.vehicle_size||'',
              v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'',
              v.fuel_type||'', v.munshi_id||null, v.munshi_name||'', v.driver_id||null,
              v.primary_poi_ids||null, v.standard_route_no||null, v.route_from||'', v.route_to||'', v.city||'',
+             v.driver_pin||'',
              v.client_id||'CLIENT_001', vno]
           ).catch(() => {});
         }
