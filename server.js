@@ -286,6 +286,7 @@ function seedSqliteIfEmpty() {
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`).catch(() => {});
       await dbRun(`ALTER TABLE munshi_trips ADD COLUMN ewb_nos TEXT DEFAULT '[]'`).catch(() => {});
+      await dbRun(`ALTER TABLE munshi_trips ADD COLUMN process_step TEXT DEFAULT 'loading'`).catch(() => {});
       await dbRun(`CREATE TABLE IF NOT EXISTS driver_reports (`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT DEFAULT 'CLIENT_001',
@@ -1745,8 +1746,8 @@ async function handleRequest(req, res, rawPath) {
     db2.run(`INSERT INTO munshi_trips
       (client_id,trip_no,vehicle_no,driver_name,from_poi_id,from_poi_name,to_poi_id,to_poi_name,
        ewb_no,ewb_is_temp,trip_date,km,toll,exp_admin,exp_munshi,exp_pump_consignment,exp_cash_fuel,
-       exp_unloading,exp_driver_debit,exp_other,munshi_id,munshi_name,driver_id,approved_by,status,notes,ewb_nos)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       exp_unloading,exp_driver_debit,exp_other,munshi_id,munshi_name,driver_id,approved_by,status,notes,ewb_nos,process_step)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [b.client_id||'CLIENT_001', tripNo, b.vehicle_no||'', b.driver_name||'',
        b.from_poi_id||'', b.from_poi_name||'', b.to_poi_id||'', b.to_poi_name||'',
        _ewbNo, b.ewb_is_temp||0,
@@ -1755,7 +1756,7 @@ async function handleRequest(req, res, rawPath) {
        b.exp_admin||0, b.exp_munshi||0, b.exp_pump_consignment||0, b.exp_cash_fuel||0,
        b.exp_unloading||0, b.exp_driver_debit||0, b.exp_other||0,
        b.munshi_id||'', b.munshi_name||'', b.driver_id||'', b.approved_by||'',
-       b.status||'open', b.notes||'', _ewbNosJson],
+       b.status||'open', b.notes||'', _ewbNosJson, b.process_step||'loading'],
       function(err) {
         db2.close();
         if (err) { res.statusCode=500; return res.end(JSON.stringify({error:err.message})); }
@@ -1774,7 +1775,7 @@ async function handleRequest(req, res, rawPath) {
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
     const allowed = ['vehicle_no','driver_name','from_poi_id','from_poi_name','to_poi_id','to_poi_name',
       'ewb_no','ewb_is_temp','trip_date','km','toll','exp_admin','exp_munshi','exp_pump_consignment',
-      'exp_cash_fuel','exp_unloading','exp_driver_debit','exp_other','munshi_name','approved_by','status','notes'];
+      'exp_cash_fuel','exp_unloading','exp_driver_debit','exp_other','munshi_name','approved_by','status','notes','process_step'];
     const sets=[], vals=[];
     allowed.forEach(k => { if (b[k] !== undefined) { sets.push(`${k}=?`); vals.push(b[k]); }});
     if (b.ewb_nos !== undefined) {

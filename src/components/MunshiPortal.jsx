@@ -564,6 +564,15 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
     inward_return:        { label: '↩ Inward',    badge: '#78350f' },
   };
 
+  const PROCESS_STEPS = [
+    { key: 'loading',        label: '📦 Loading',        color: '#f59e0b' },
+    { key: 'dispatched',     label: '🚛 Dispatched',     color: '#0ea5e9' },
+    { key: 'in_transit',     label: '🛣️ In Transit',     color: '#8b5cf6' },
+    { key: 'at_destination', label: '📍 At Destination', color: '#f97316' },
+    { key: 'unloading',      label: '🏭 Unloading',      color: '#ec4899' },
+    { key: 'delivered',      label: '✅ Delivered',      color: '#4ade80' },
+  ];
+
   // Parse munshi's POI IDs
   const myPoiIds = (() => {
     try { return JSON.parse(munshi.primary_poi_ids || '[]').map(String); } catch { return []; }
@@ -675,6 +684,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
       munshi_id:   m?.id   || '',
       munshi_name: m?.name || '',
       status: 'open',
+      process_step: 'loading',
     };
   }
 
@@ -725,6 +735,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
       munshi_id:            trip.munshi_id || munshi.id || '',
       munshi_name:          trip.munshi_name || munshi.name || '',
       status:               trip.status || 'open',
+      process_step:         trip.process_step || 'loading',
     });
     setEditId(trip.id);
     setShowForm(true);
@@ -911,8 +922,25 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
         {/* TRIP FORM — shown regardless of selectedVehicle (fixes POI EWB click bug) */}
         {showForm && (
           <div style={{ background: '#1e293b', borderRadius: 10, padding: '14px 14px', marginBottom: 14, border: '1px solid #334155' }}>
-            <div style={{ fontWeight: 800, fontSize: 13, color: '#f1f5f9', marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ fontWeight: 800, fontSize: 13, color: '#f1f5f9', marginBottom: 10, display: 'flex', justifyContent: 'space-between' }}>
               <span>{editId ? '✏️ Edit Trip' : '➕ New Trip'}</span>
+            </div>
+            {/* Process Step Selector */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>📋 Process Step</div>
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                {PROCESS_STEPS.map(s => {
+                  const active = form.process_step === s.key;
+                  return (
+                    <button key={s.key} onClick={() => setForm(f => ({ ...f, process_step: s.key }))}
+                      style={{ whiteSpace: 'nowrap', padding: '5px 11px', borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                        background: active ? s.color : '#0f172a',
+                        color: active ? '#0f172a' : '#475569',
+                        border: active ? `2px solid ${s.color}` : '1px solid #334155',
+                      }}>{s.label}</button>
+                  );
+                })}
+              </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
               <div style={{ marginBottom: 10 }}>
@@ -1085,9 +1113,15 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                       <div key={trip.id} onClick={() => openEdit(trip)}
                         style={{ background: '#1e293b', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid #334155', cursor: 'pointer' }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
                           <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#60a5fa', fontWeight: 700 }}>{trip.trip_no}</span>
-                          <span style={{ fontSize: 10, color: '#64748b' }}>{trip.trip_date}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                            <span style={{ fontSize: 10, color: '#64748b' }}>{trip.trip_date}</span>
+                            {(() => {
+                              const ps = PROCESS_STEPS.find(s => s.key === (trip.process_step || 'loading'));
+                              return ps ? <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: ps.color + '22', color: ps.color, fontWeight: 800, border: `1px solid ${ps.color}55` }}>{ps.label}</span> : null;
+                            })()}
+                          </div>
                         </div>
                         <div style={{ fontSize: 11, color: '#a3e635' }}>{trip.from_poi_name || '?'} → {trip.to_poi_name || '?'}</div>
                         {(() => {
