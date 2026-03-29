@@ -583,8 +583,8 @@ function VehicleMovementTab() {
   const [search, setSearch] = useState('');
   const [sizeFilter, setSizeFilter] = useState('');
 
-  const fetch_ = async () => {
-    setLoading(true);
+  const fetch_ = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch(`${API}/vehicle-movement`);
       const data = await res.json();
@@ -593,7 +593,7 @@ function VehicleMovementTab() {
     setLoading(false);
   };
 
-  useEffect(() => { fetch_(); const t = setInterval(fetch_, 30000); return () => clearInterval(t); }, []);
+  useEffect(() => { fetch_(); const t = setInterval(() => fetch_(true), 30000); return () => clearInterval(t); }, []);
 
   // Unique sizes for dropdown
   const sizes = [...new Set(vehicles.map(v => v.vehicle_size).filter(Boolean))].sort();
@@ -798,8 +798,8 @@ function WarningsTab() {
   const [warnings, setWarnings] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetch_ = async () => {
-    setLoading(true);
+  const fetch_ = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch(`${API}/warnings`);
       const data = await res.json();
@@ -808,7 +808,7 @@ function WarningsTab() {
     setLoading(false);
   };
 
-  useEffect(() => { fetch_(); const t = setInterval(fetch_, 60000); return () => clearInterval(t); }, []);
+  useEffect(() => { fetch_(); const t = setInterval(() => fetch_(true), 60000); return () => clearInterval(t); }, []);
 
   const grouped = { HIGH: [], MEDIUM: [], LOW: [], INFO: [] };
   warnings.forEach(w => { (grouped[w.severity] || grouped.INFO).push(w); });
@@ -1729,6 +1729,15 @@ function NicLiveTab() {
     setCompleteTarget(null);
   };
 
+  const handleGpsConfirm = async (e) => {
+    const r = await fetch(`${API}/${e.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'delivered' }),
+    });
+    if (r.ok) setActiveList(list => list.map(x => x.ewb_no === e.ewb_no ? { ...x, status: 'DEL' } : x));
+  };
+
   const [statusFilter, setStatusFilter] = React.useState('all'); // all | ACT | DEL
   const [nicFetching, setNicFetching] = React.useState(false);
   const [nicMsg, setNicMsg] = React.useState('');
@@ -1757,17 +1766,19 @@ function NicLiveTab() {
   };
 
   const displayed = activeList.filter(e => {
-    if (statusFilter === 'ACT') return e.status === 'ACT';
-    if (statusFilter === 'DEL') return e.status === 'DEL';
+    if (statusFilter === 'ACT') return e.status === 'ACT' || e.status === 'active';
+    if (statusFilter === 'DEL') return e.status === 'DEL' || e.status === 'delivered';
+    if (statusFilter === 'arrived') return e.status === 'at_destination';
     if (filterMode === 'expired') return e.is_expired;
     if (filterMode === 'expiring') return e.expiring_soon;
     return true;
   });
 
-  const expiredCount = activeList.filter(e => e.is_expired).length;
+  const arrivedCount  = activeList.filter(e => e.status === 'at_destination').length;
+  const expiredCount  = activeList.filter(e => e.is_expired).length;
   const expiringCount = activeList.filter(e => e.expiring_soon).length;
-  const actCount = activeList.filter(e => e.status === 'ACT').length;
-  const delCount = activeList.filter(e => e.status === 'DEL').length;
+  const actCount = activeList.filter(e => e.status === 'ACT' || e.status === 'active').length;
+  const delCount = activeList.filter(e => e.status === 'DEL' || e.status === 'delivered').length;
 
   const rowStyle = { display: 'grid', gridTemplateColumns: '130px 1fr 1fr 90px 110px 170px', gap: 8, alignItems: 'center', padding: '8px 12px', fontSize: 12 };
 
@@ -1837,14 +1848,15 @@ function NicLiveTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, fontSize: 14 }}>📋 This Month's EWBs — {activeList.length} total</span>
           {actCount > 0 && <Badge text={`🟢 ${actCount} Active`} color="#166534" bg="#dcfce7" />}
+          {arrivedCount > 0 && <Badge text={`📍 ${arrivedCount} GPS Arrived`} color="#065f46" bg="#d1fae5" />}
           {delCount > 0 && <Badge text={`✅ ${delCount} Delivered`} color="#374151" bg="#f3f4f6" />}
           {expiredCount > 0 && <Badge text={`🔴 ${expiredCount} Expired`} color="#991b1b" bg="#fee2e2" />}
           {expiringCount > 0 && <Badge text={`⏳ ${expiringCount} Expiring <24h`} color="#92400e" bg="#fef3c7" />}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {[['all', 'All'], ['ACT', '🟢 Active'], ['DEL', '✅ Delivered'], ['expiring', '⏳ Expiring'], ['expired', '🔴 Expired']].map(([k, l]) => {
+            {[['all', 'All'], ['ACT', '🟢 Active'], ['arrived', '📍 GPS Arrived'], ['DEL', '✅ Delivered'], ['expiring', '⏳ Expiring'], ['expired', '🔴 Expired']].map(([k, l]) => {
               const isActive = statusFilter !== 'all' ? statusFilter === k : filterMode === k || k === 'all';
               return (
-                <button key={k} onClick={() => { if (k === 'expiring' || k === 'expired') { setStatusFilter('all'); setFilterMode(k); } else { setStatusFilter(k); setFilterMode('all'); } }}
+                <button key={k} onClick={() => { if (k === 'expiring' || k === 'expired') { setStatusFilter('all'); setFilterMode(k); } else if (k === 'arrived') { setStatusFilter('arrived'); setFilterMode('all'); } else { setStatusFilter(k); setFilterMode('all'); } }}
                   style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid', fontSize: 12, cursor: 'pointer',
                     background: isActive ? '#2563eb' : '#fff',
                     color: isActive ? '#fff' : '#374151',
@@ -1891,14 +1903,28 @@ function NicLiveTab() {
                   <span>
                     {isDel
                       ? <span style={{ background: '#f3f4f6', color: '#6b7280', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>✅ Delivered</span>
-                      : e.hours_left != null
-                        ? <span style={{ ...hc, padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
-                            {e.is_expired ? 'EXPIRED' : `${e.hours_left}h`}
-                          </span>
-                        : <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>Active</span>}
+                      : e.status === 'at_destination'
+                        ? <span style={{ background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>📍 GPS Arrived</span>
+                        : e.hours_left != null
+                          ? <span style={{ ...hc, padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
+                              {e.is_expired ? 'EXPIRED' : `${e.hours_left}h`}
+                            </span>
+                          : <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>Active</span>}
                   </span>
                   <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {!isDel && (
+                    {!isDel && e.status === 'at_destination' && (
+                      <>
+                        <button onClick={() => handleGpsConfirm(e)}
+                          style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #16a34a', background: '#f0fdf4', color: '#166534', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                          ✅ GPS Confirm
+                        </button>
+                        <button onClick={() => setCompleteTarget(e)}
+                          style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #6b7280', background: '#f9fafb', color: '#374151', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                          + Expense
+                        </button>
+                      </>
+                    )}
+                    {!isDel && e.status !== 'at_destination' && (
                       <>
                         <button onClick={() => setExtendTarget(e)}
                           style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #2563eb', background: '#eff6ff', color: '#1d4ed8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
