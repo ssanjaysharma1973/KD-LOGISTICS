@@ -1955,8 +1955,9 @@ async function handleRequest(req, res, rawPath) {
     return null;
   }
   // Simple POI name matching for reclassify/rematch
+  // Returns { poi, score } — threshold 5 for auto-create, 8 for confident match
   function matchPoiByName(tradeName, place, pincode, pois) {
-    if (!tradeName && !place) return null;
+    if (!tradeName && !place) return { poi: null, score: 0 };
     const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const tn = norm(tradeName), pl = norm(place), pc = (pincode || '').replace(/\D/g, '');
     let best = null, bestScore = 0;
@@ -1969,7 +1970,24 @@ async function handleRequest(req, res, rawPath) {
       if (pc && pc2 && pc === pc2) score += 15;
       if (score > bestScore) { bestScore = score; best = p; }
     }
-    return bestScore >= 8 ? best : null;
+    return { poi: bestScore >= 5 ? best : null, score: bestScore };
+  }
+  // Auto-create a POI if none matched; pushes into the pois cache array and returns the row
+  async function autoCreatePoi(tradeName, place, pincode, type, pois) {
+    const name = (tradeName || place || '').trim();
+    if (!name) return null;
+    // Exact name check (avoid duplicates within this import batch)
+    const normName = name.toLowerCase().replace(/\s+/g, ' ');
+    const dup = pois.find(p => (p.poi_name || '').toLowerCase().replace(/\s+/g, ' ') === normName);
+    if (dup) return dup;
+    try {
+      const r = await sqRun(
+        `INSERT INTO pois (client_id, poi_name, city, pin_code, type) VALUES (?,?,?,?,?)`,
+        ['CLIENT_001', name, (place || '').trim(), (pincode || '').trim(), type || 'secondary']);
+      const newPoi = { id: r.lastID, poi_name: name, city: (place||'').trim(), pin_code: (pincode||'').trim(), type: type||'secondary' };
+      pois.push(newPoi); // update cache for subsequent rows
+      return newPoi;
+    } catch { return null; }
   }
   function classifyMovement(fromPoi, toPoi, supplyType) {
     const st = (supplyType || '').toLowerCase();
@@ -2126,9 +2144,11 @@ async function handleRequest(req, res, rawPath) {
         const fromTrade = (mapped.from_trade_name || '').toString();
         const toTrade = (mapped.to_trade_name || '').toString();
 
-        // POI matching
-        const fromPoi = matchPoiByName(fromTrade, fromPlace, fromPin, pois);
-        const toPoi   = matchPoiByName(toTrade, toPlace, toPin, pois);
+        // POI matching — auto-create if no confident match
+        let { poi: fromPoi } = matchPoiByName(fromTrade, fromPlace, fromPin, pois);
+        let { poi: toPoi }   = matchPoiByName(toTrade, toPlace, toPin, pois);
+        if (!fromPoi && (fromTrade || fromPlace)) fromPoi = await autoCreatePoi(fromTrade, fromPlace, fromPin, 'primary', pois);
+        if (!toPoi   && (toTrade   || toPlace))   toPoi   = await autoCreatePoi(toTrade, toPlace, toPin, 'secondary', pois);
         const mvType  = classifyMovement(fromPoi, toPoi, mapped.supply_type);
 
         // Munshi matching by vehicle
@@ -2174,7 +2194,7 @@ async function handleRequest(req, res, rawPath) {
         }
       }
 
-      return jsonResp(res, { success: true, inserted, updated, skipped, total: rows.length, message: `Imported ${inserted} EWBs from ${rows.length} rows` });
+      return jsonResp(res, { success: true, inserted, updated, skipped, total: rows.length, message: `Imported ${inserted} EWBs from ${rows.length} rows. New POIs auto-created are visible in the Unmatched POIs tab if any needed review.` });
     } catch (e) {
       console.error('[import-excel]', e);
       return jsonResp(res, { error: e.message }, 500);
@@ -2465,14 +2485,18 @@ async function handleRequest(req, res, rawPath) {
         ? `SELECT * FROM eway_bills_master WHERE client_id=?`
         : `SELECT * FROM eway_bills_master WHERE client_id=? AND (from_poi_id IS NULL OR to_poi_id IS NULL)`;
       const [pois, bills] = await Promise.all([
-        sqAll(`SELECT id, poi_name, city, type FROM pois WHERE client_id=?`, [cid]),
+        sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE client_id=?`, [cid]),
         sqAll(sql, [cid]),
       ]);
       let updated = 0;
       for (const bill of bills) {
-        const fp = matchPoiByName(bill.from_trade_name, bill.from_place, bill.from_pincode, pois) ||
-                   (bill.from_poi_id ? null : null);
-        const tp = matchPoiByName(bill.to_trade_name, bill.to_place, bill.to_pincode, pois);
+        let { poi: fp } = matchPoiByName(bill.from_trade_name, bill.from_place, bill.from_pincode, pois);
+        let { poi: tp } = matchPoiByName(bill.to_trade_name, bill.to_place, bill.to_pincode, pois);
+        // Auto-create POIs for sides that still have no match
+        if (!fp && !bill.from_poi_id && (bill.from_trade_name || bill.from_place))
+          fp = await autoCreatePoi(bill.from_trade_name, bill.from_place, bill.from_pincode, 'primary', pois);
+        if (!tp && !bill.to_poi_id && (bill.to_trade_name || bill.to_place))
+          tp = await autoCreatePoi(bill.to_trade_name, bill.to_place, bill.to_pincode, 'secondary', pois);
         const newFromId = fp?.id ?? bill.from_poi_id;
         const newFromName = fp?.poi_name ?? bill.from_poi_name;
         const newToId = tp?.id ?? bill.to_poi_id;
