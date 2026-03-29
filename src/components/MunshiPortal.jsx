@@ -152,6 +152,16 @@ function TripsTab({ munshi, vehicles, pois }) {
   const [form, setForm] = useState(blankForm(munshi));
   const [saving, setSaving] = useState(false);
   const [msg, setMsg]     = useState('');
+  const [ewbFilter, setEwbFilter] = useState('all'); // 'all'|'dealer'|'return'|'inbound'
+
+  const MOV_CFG = {
+    primary_to_secondary: { label: 'Hub→Dist',   badge: '#1d4ed8' },
+    primary_to_tertiary:  { label: 'Hub→Dealer',  badge: '#7c3aed' },
+    secondary_to_dealer:  { label: 'Dist→Dealer', badge: '#166534' },
+    dealer_transfer:      { label: 'Dealer Xfer', badge: '#b45309' },
+    dealer_return:        { label: '↩ Return',    badge: '#92400e' },
+    inward_return:        { label: '↩ Inward',    badge: '#78350f' },
+  };
 
   // Parse munshi's POI IDs
   const myPoiIds = (() => {
@@ -288,8 +298,21 @@ function TripsTab({ munshi, vehicles, pois }) {
       // Refresh trips list
       const tripData = await fetch(`${API}/munshi-trips?clientId=CLIENT_001&vehicle_no=${encodeURIComponent(form.vehicle_no)}`).then(r => r.json()).catch(() => []);
       setTrips(Array.isArray(tripData) ? tripData : []);
+      // Auto-select vehicle if none was selected (e.g. opened from POI EWB card)
+      if (!selectedVehicle && form.vehicle_no) {
+        const v = vehicles.find(x => x.vehicle_no === form.vehicle_no);
+        if (v) setSelectedVehicle(v);
+      }
     } catch (e) { setMsg('❌ ' + e.message); }
     finally { setSaving(false); }
+  }
+
+  async function closeEwb(ewbId) {
+    try {
+      await fetch(`${API}/ewaybills/${ewbId}/close`, { method: 'PUT' });
+      setPoiEwbs(prev => prev.filter(e => e.id !== ewbId));
+      setEwbs(prev => prev.filter(e => e.id !== ewbId));
+    } catch {}
   }
 
   function Field({ label, name, type = 'text', disabled = false, hint }) {
@@ -335,6 +358,12 @@ function TripsTab({ munshi, vehicles, pois }) {
     );
   }
 
+  const filteredPoiEwbs = ewbFilter === 'all' ? poiEwbs
+    : ewbFilter === 'dealer'  ? poiEwbs.filter(e => ['primary_to_tertiary','secondary_to_dealer','dealer_transfer'].includes(e.movement_type))
+    : ewbFilter === 'return'  ? poiEwbs.filter(e => ['dealer_return','inward_return'].includes(e.movement_type))
+    : ewbFilter === 'inbound' ? poiEwbs.filter(e => e.direction === 'inbound')
+    : poiEwbs;
+
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 110px)', overflow: 'hidden' }}>
 
@@ -373,161 +402,275 @@ function TripsTab({ munshi, vehicles, pois }) {
       {/* ── RIGHT: Eway Bills + Trips ── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px', background: '#0f172a' }}>
 
-        {/* POI-sourced EWBs — shown at top always */}
+        {/* POI-sourced EWBs — with type filter + direction + close */}
         {poiEwbs.length > 0 && (
           <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 11, color: '#0ea5e9', fontWeight: 800, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>📍 E-Way Bills from My POI ({poiEwbs.length})</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
-              {poiEwbs.map(ewb => (
-                <div key={ewb.id}
-                  onClick={() => { openNew(ewb, null); setShowForm(true); }}
-                  style={{ background: '#0c1a30', border: '1px solid #0e4163', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</span>
-                      {ewb.vehicle_no && <span style={{ fontSize: 10, color: '#a3e635', fontFamily: 'monospace', background: '#14532d33', padding: '1px 6px', borderRadius: 4 }}>{ewb.vehicle_no}</span>}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>→ {ewb.to_poi_name || ewb.to_place || 'Unknown destination'}</div>
-                    {ewb.total_value > 0 && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>₹{Number(ewb.total_value).toLocaleString('en-IN')}</div>}
-                  </div>
-                  <div style={{ fontSize: 10, color: '#fff', background: '#0284c7', borderRadius: 6, padding: '4px 10px', fontWeight: 700, whiteSpace: 'nowrap', marginLeft: 8 }}>Use →</div>
-                </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11, color: '#0ea5e9', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>📍 My POI E-Way Bills ({poiEwbs.length})</div>
+              {[['all','All'],['dealer','Dealer'],['return','Returns'],['inbound','Inbound']].map(([f,lbl]) => (
+                <button key={f} onClick={() => setEwbFilter(f)}
+                  style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, border: 'none', background: ewbFilter === f ? '#0284c7' : '#1e293b', color: ewbFilter === f ? '#fff' : '#64748b', cursor: 'pointer', fontWeight: ewbFilter === f ? 700 : 400 }}
+                >{lbl}</button>
               ))}
             </div>
-          </div>
-        )}
-
-        {!selectedVehicle ? (
-          <div style={{ textAlign: 'center', padding: poiEwbs.length > 0 ? '16px 20px' : '60px 20px', color: '#334155', borderTop: poiEwbs.length > 0 ? '1px solid #1e293b' : 'none', paddingTop: poiEwbs.length > 0 ? 16 : 60 }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>👈</div>
-            <div style={{ fontWeight: 700, color: '#475569', fontSize: 13 }}>Select a vehicle for trips</div>
-          </div>
-        ) : loadingR ? <Spinner /> : (
-          <>
-            {/* Vehicle header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 16, color: '#60a5fa', fontFamily: 'monospace' }}>{selectedVehicle.vehicle_no}</div>
-                {selectedVehicle.driver_name && <div style={{ fontSize: 11, color: '#a3e635' }}>👤 {selectedVehicle.driver_name}</div>}
-              </div>
-              <button
-                onClick={() => openNew(null, selectedVehicle)}
-                style={{ background: '#1d4ed8', border: 'none', borderRadius: 8, padding: '8px 14px', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-              >+ New Trip</button>
-            </div>
-
-            {/* Active E-Way Bills */}
-            {ewbs.length > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>📄 Active E-Way Bills</div>
-                {ewbs.map(ewb => (
-                  <div key={ewb.id}
-                    onClick={() => openNew(ewb, selectedVehicle)}
-                    style={{ background: '#0c1a30', border: '1px solid #1e3a8a', borderRadius: 8, padding: '10px 12px', marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <div>
-                      <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</div>
-                      <div style={{ fontSize: 11, color: '#a3e635', marginTop: 2 }}>→ {ewb.to_poi_name || ewb.to_place || 'Unknown destination'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
+              {filteredPoiEwbs.map(ewb => {
+                const mc   = MOV_CFG[ewb.movement_type] || {};
+                const isIn = ewb.direction === 'inbound';
+                return (
+                  <div key={ewb.id + (ewb.direction||'')} style={{ background: '#0c1a30', border: isIn ? '1px solid #713f12' : '1px solid #0e4163', borderRadius: 8, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => { openNew(ewb, null); setShowForm(true); }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</span>
+                        {ewb.vehicle_no && <span style={{ fontSize: 10, color: '#a3e635', fontFamily: 'monospace', background: '#14532d33', padding: '1px 6px', borderRadius: 4 }}>{ewb.vehicle_no}</span>}
+                        {mc.label && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: (mc.badge||'#64748b')+'22', color: mc.badge||'#64748b', fontWeight: 700 }}>{mc.label}</span>}
+                        {isIn && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: '#78350f55', color: '#fbbf24', fontWeight: 700 }}>⬅ Inbound</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{isIn ? `← ${ewb.from_poi_name||ewb.from_place||'?'}` : `→ ${ewb.to_poi_name||ewb.to_place||'?'}`}</div>
                       {ewb.total_value > 0 && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>₹{Number(ewb.total_value).toLocaleString('en-IN')}</div>}
                     </div>
-                    <div style={{ fontSize: 10, color: '#1e3a8a', background: '#1d4ed8', borderRadius: 6, padding: '3px 8px', fontWeight: 700 }}>Use →</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Trip Form */}
-            {showForm && (
-              <div style={{ background: '#1e293b', borderRadius: 10, padding: '14px 14px', marginBottom: 14, border: '1px solid #334155' }}>
-                <div style={{ fontWeight: 800, fontSize: 13, color: '#f1f5f9', marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{editId ? '✏️ Edit Trip' : '➕ New Trip'}</span>
-                  {form.ewb_is_temp ? <span style={{ fontSize: 10, background: '#78350f', color: '#fbbf24', borderRadius: 6, padding: '2px 8px' }}>TEMP EWB</span> : null}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>Vehicle No</label>
-                    <select
-                      value={form.vehicle_no}
-                      onChange={e => {
-                        const v = vehicles.find(x => x.vehicle_no === e.target.value);
-                        setForm(f => ({ ...f, vehicle_no: e.target.value, driver_name: v?.driver_name || f.driver_name }));
-                      }}
-                      style={{ width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
-                    >
-                      <option value="">— Select Vehicle —</option>
-                      {vehicles.filter(v => v.vehicle_no).map(v => (
-                        <option key={v.vehicle_no} value={v.vehicle_no}>{v.vehicle_no}{v.driver_name ? ` · ${v.driver_name}` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <Field label="Driver Name" name="driver_name" />
-                  <Field label="EWB Number" name="ewb_no" hint={form.ewb_is_temp ? '⚠️ Temporary — replace with real EWB later' : ''} />
-                  <Field label="Trip Date" name="trip_date" type="date" />
-                  <PoiSelect label="From POI" nameId="from_poi_id" nameName="from_poi_name" />
-                  <PoiSelect label="To POI" nameId="to_poi_id" nameName="to_poi_name" />
-                  <Field label="KM" name="km" type="number" />
-                  <Field label="Toll (₹)" name="toll" type="number" />
-                </div>
-
-                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 800, margin: '10px 0 8px', textTransform: 'uppercase', letterSpacing: '0.08em', borderTop: '1px solid #334155', paddingTop: 10 }}>💰 Expenses</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
-                  <Field label="Admin Expense (₹)" name="exp_admin" type="number" disabled hint="Set by admin" />
-                  <Field label="Munshi Expense (₹)" name="exp_munshi" type="number" />
-                  <Field label="Pump Fuel – Consignment (₹)" name="exp_pump_consignment" type="number" hint="Petrol pump assigned by owner" />
-                  <Field label="Cash Fuel – Other (₹)" name="exp_cash_fuel" type="number" hint="Fuel paid at other pump" />
-                  <Field label="Unloading Charges (₹)" name="exp_unloading" type="number" />
-                  <Field label="Driver Debit (₹)" name="exp_driver_debit" type="number" disabled hint="Set by admin" />
-                  <div style={{ gridColumn: '1/-1' }}>
-                    <Field label="Other Expense (₹)" name="exp_other" type="number" />
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>Munshi Name 🔒</label>
-                  <input readOnly value={form.munshi_name} style={{ width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#0f172a', border: '1px solid #1e293b', color: '#475569', boxSizing: 'border-box' }} />
-                </div>
-                <Field label="Notes" name="notes" />
-
-                {msg && <div style={{ fontSize: 12, marginBottom: 8, color: msg.startsWith('✅') ? '#4ade80' : '#f87171', fontWeight: 700 }}>{msg}</div>}
-
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
-                  <button onClick={() => setShowForm(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-                  <button onClick={saveTrip} disabled={saving} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>  {saving ? '⏳...' : '💾 Save'}</button>
-                </div>
-              </div>
-            )}
-
-            {/* Saved Trips */}
-            {trips.length > 0 && (
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>🚛 Saved Trips ({trips.length})</div>
-                {trips.map(trip => {
-                  const total = [trip.exp_admin, trip.exp_munshi, trip.exp_pump_consignment, trip.exp_cash_fuel, trip.exp_unloading, trip.exp_driver_debit, trip.exp_other].reduce((s, v) => s + (parseFloat(v) || 0), 0);
-                  return (
-                    <div key={trip.id} onClick={() => openEdit(trip)}
-                      style={{ background: '#1e293b', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid #334155', cursor: 'pointer' }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#60a5fa', fontWeight: 700 }}>{trip.trip_no}</span>
-                        <span style={{ fontSize: 10, color: '#64748b' }}>{trip.trip_date}</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: '#a3e635' }}>{trip.from_poi_name || '?'} → {trip.to_poi_name || '?'}</div>
-                      {trip.ewb_no && <div style={{ fontSize: 10, color: trip.ewb_is_temp ? '#fbbf24' : '#64748b', marginTop: 2 }}>{trip.ewb_is_temp ? '⚠️ TEMP: ' : '📄 '}{trip.ewb_no}</div>}
-                      {total > 0 && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4, fontWeight: 700 }}>Total Exp: ₹{total.toLocaleString('en-IN')}</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                      <button onClick={() => { openNew(ewb, null); setShowForm(true); }}
+                        style={{ fontSize: 10, color: '#fff', background: '#0284c7', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>Use →</button>
+                      <button onClick={() => closeEwb(ewb.id)}
+                        style={{ fontSize: 10, color: '#f87171', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>🔒 Close</button>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-            {trips.length === 0 && !showForm && (
-              <Empty msg="No trips for this vehicle yet" sub="Click + New Trip or tap an E-Way Bill above" />
-            )}
-          </>
+        {/* TRIP FORM — shown regardless of selectedVehicle (fixes POI EWB click bug) */}
+        {showForm && (
+          <div style={{ background: '#1e293b', borderRadius: 10, padding: '14px 14px', marginBottom: 14, border: '1px solid #334155' }}>
+            <div style={{ fontWeight: 800, fontSize: 13, color: '#f1f5f9', marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{editId ? '✏️ Edit Trip' : '➕ New Trip'}</span>
+              {form.ewb_is_temp ? <span style={{ fontSize: 10, background: '#78350f', color: '#fbbf24', borderRadius: 6, padding: '2px 8px' }}>TEMP EWB</span> : null}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>Vehicle No</label>
+                <select
+                  value={form.vehicle_no}
+                  onChange={e => {
+                    const v = vehicles.find(x => x.vehicle_no === e.target.value);
+                    setForm(f => ({ ...f, vehicle_no: e.target.value, driver_name: v?.driver_name || f.driver_name }));
+                  }}
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
+                >
+                  <option value="">— Select Vehicle —</option>
+                  {vehicles.filter(v => v.vehicle_no).map(v => (
+                    <option key={v.vehicle_no} value={v.vehicle_no}>{v.vehicle_no}{v.driver_name ? ` · ${v.driver_name}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <Field label="Driver Name" name="driver_name" />
+              <Field label="EWB Number" name="ewb_no" hint={form.ewb_is_temp ? '⚠️ Temporary — replace with real EWB later' : ''} />
+              <Field label="Trip Date" name="trip_date" type="date" />
+              <PoiSelect label="From POI" nameId="from_poi_id" nameName="from_poi_name" />
+              <PoiSelect label="To POI" nameId="to_poi_id" nameName="to_poi_name" />
+              <Field label="KM" name="km" type="number" />
+              <Field label="Toll (₹)" name="toll" type="number" />
+            </div>
+            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 800, margin: '10px 0 8px', textTransform: 'uppercase', letterSpacing: '0.08em', borderTop: '1px solid #334155', paddingTop: 10 }}>💰 Expenses</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+              <Field label="Admin Expense (₹)" name="exp_admin" type="number" disabled hint="Set by admin" />
+              <Field label="Munshi Expense (₹)" name="exp_munshi" type="number" />
+              <Field label="Pump Fuel – Consignment (₹)" name="exp_pump_consignment" type="number" hint="Petrol pump assigned by owner" />
+              <Field label="Cash Fuel – Other (₹)" name="exp_cash_fuel" type="number" hint="Fuel paid at other pump" />
+              <Field label="Unloading Charges (₹)" name="exp_unloading" type="number" />
+              <Field label="Driver Debit (₹)" name="exp_driver_debit" type="number" disabled hint="Set by admin" />
+              <div style={{ gridColumn: '1/-1' }}><Field label="Other Expense (₹)" name="exp_other" type="number" /></div>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>Munshi Name 🔒</label>
+              <input readOnly value={form.munshi_name} style={{ width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#0f172a', border: '1px solid #1e293b', color: '#475569', boxSizing: 'border-box' }} />
+            </div>
+            <Field label="Notes" name="notes" />
+            {msg && <div style={{ fontSize: 12, marginBottom: 8, color: msg.startsWith('✅') ? '#4ade80' : '#f87171', fontWeight: 700 }}>{msg}</div>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
+              <button onClick={() => setShowForm(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={saveTrip} disabled={saving} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{saving ? '⏳...' : '💾 Save'}</button>
+            </div>
+          </div>
+        )}
+
+        {/* No vehicle selected */}
+        {!selectedVehicle && !showForm && (
+          <div style={{ textAlign: 'center', padding: poiEwbs.length > 0 ? '20px' : '60px 20px', color: '#334155', borderTop: poiEwbs.length > 0 ? '1px solid #1e293b' : 'none' }}>
+            <div style={{ fontSize: 24, marginBottom: 6 }}>👈</div>
+            <div style={{ fontWeight: 700, color: '#475569', fontSize: 13 }}>Select a vehicle for trip history</div>
+          </div>
+        )}
+
+        {/* Vehicle-specific content */}
+        {selectedVehicle && !showForm && (
+          loadingR ? <Spinner /> : (
+            <>
+              {/* Vehicle header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: 16, color: '#60a5fa', fontFamily: 'monospace' }}>{selectedVehicle.vehicle_no}</div>
+                  {selectedVehicle.driver_name && <div style={{ fontSize: 11, color: '#a3e635' }}>👤 {selectedVehicle.driver_name}</div>}
+                </div>
+                <button onClick={() => openNew(null, selectedVehicle)}
+                  style={{ background: '#1d4ed8', border: 'none', borderRadius: 8, padding: '8px 14px', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>+ New Trip</button>
+              </div>
+
+              {/* Vehicle-specific active EWBs */}
+              {ewbs.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>📄 Active E-Way Bills</div>
+                  {ewbs.map(ewb => (
+                    <div key={ewb.id} onClick={() => openNew(ewb, selectedVehicle)}
+                      style={{ background: '#0c1a30', border: '1px solid #1e3a8a', borderRadius: 8, padding: '10px 12px', marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    >
+                      <div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#60a5fa', fontWeight: 700 }}>{ewb.ewb_no}</div>
+                        <div style={{ fontSize: 11, color: '#a3e635', marginTop: 2 }}>→ {ewb.to_poi_name || ewb.to_place || 'Unknown destination'}</div>
+                        {ewb.total_value > 0 && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>₹{Number(ewb.total_value).toLocaleString('en-IN')}</div>}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#fff', background: '#1d4ed8', borderRadius: 6, padding: '3px 8px', fontWeight: 700 }}>Use →</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Saved Trips */}
+              {trips.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>🚛 Saved Trips ({trips.length})</div>
+                  {trips.map(trip => {
+                    const total = [trip.exp_admin, trip.exp_munshi, trip.exp_pump_consignment, trip.exp_cash_fuel, trip.exp_unloading, trip.exp_driver_debit, trip.exp_other].reduce((s, v) => s + (parseFloat(v) || 0), 0);
+                    return (
+                      <div key={trip.id} onClick={() => openEdit(trip)}
+                        style={{ background: '#1e293b', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid #334155', cursor: 'pointer' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#60a5fa', fontWeight: 700 }}>{trip.trip_no}</span>
+                          <span style={{ fontSize: 10, color: '#64748b' }}>{trip.trip_date}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#a3e635' }}>{trip.from_poi_name || '?'} → {trip.to_poi_name || '?'}</div>
+                        {trip.ewb_no && <div style={{ fontSize: 10, color: trip.ewb_is_temp ? '#fbbf24' : '#64748b', marginTop: 2 }}>{trip.ewb_is_temp ? '⚠️ TEMP: ' : '📄 '}{trip.ewb_no}</div>}
+                        {total > 0 && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4, fontWeight: 700 }}>Total Exp: ₹{total.toLocaleString('en-IN')}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {trips.length === 0 && <Empty msg="No trips for this vehicle yet" sub="Click + New Trip or tap an E-Way Bill above" />}
+            </>
+          )
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Expenses Tab ─────────────────────────────────────────────────────────────
+function ExpensesTab({ munshi, vehicles }) {
+  const [allTrips, setAllTrips] = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [vFilter,  setVFilter]  = useState('');
+
+  useEffect(() => {
+    if (!munshi) return;
+    setLoading(true);
+    fetch(`${API}/munshi-trips?clientId=CLIENT_001&munshiId=${encodeURIComponent(munshi.id)}`)
+      .then(r => r.json())
+      .then(d => setAllTrips(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [munshi]);
+
+  if (loading) return <Spinner />;
+
+  const filtered = vFilter ? allTrips.filter(t => t.vehicle_no === vFilter) : allTrips;
+  const sum = k => filtered.reduce((s, t) => s + (parseFloat(t[k]) || 0), 0);
+  const tots = {
+    munshi: sum('exp_munshi'), pump: sum('exp_pump_consignment'),
+    cash: sum('exp_cash_fuel'), unload: sum('exp_unloading'),
+    toll: sum('toll'), other: sum('exp_other'),
+  };
+  tots.total = tots.munshi + tots.pump + tots.cash + tots.unload + tots.toll + tots.other;
+
+  const byVehicle = {};
+  filtered.forEach(t => {
+    if (!byVehicle[t.vehicle_no]) byVehicle[t.vehicle_no] = { trips:0, munshi:0, pump:0, cash:0, unload:0, toll:0, other:0 };
+    const b = byVehicle[t.vehicle_no];
+    b.trips++;
+    b.munshi += parseFloat(t.exp_munshi)||0;   b.pump   += parseFloat(t.exp_pump_consignment)||0;
+    b.cash   += parseFloat(t.exp_cash_fuel)||0; b.unload += parseFloat(t.exp_unloading)||0;
+    b.toll   += parseFloat(t.toll)||0;          b.other  += parseFloat(t.exp_other)||0;
+  });
+  const vList = Object.entries(byVehicle).sort((a, b) => {
+    const totA = a[1].munshi+a[1].pump+a[1].cash+a[1].unload+a[1].toll+a[1].other;
+    const totB = b[1].munshi+b[1].pump+b[1].cash+b[1].unload+b[1].toll+b[1].other;
+    return totB - totA;
+  });
+
+  const fmtN = n => n > 0 ? '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—';
+
+  return (
+    <div style={{ padding: '16px 20px' }}>
+      <select value={vFilter} onChange={e => setVFilter(e.target.value)}
+        style={{ width:'100%', padding:'8px 12px', borderRadius:8, border:'1px solid #334155', background:'#1e293b', color:'#f1f5f9', fontSize:12, marginBottom:16, boxSizing:'border-box' }}>
+        <option value="">All Vehicles ({allTrips.length} trips)</option>
+        {Object.keys(byVehicle).map(vno => (
+          <option key={vno} value={vno}>{vno} ({byVehicle[vno].trips} trips)</option>
+        ))}
+      </select>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:10, marginBottom:14 }}>
+        {[
+          ['Munshi Exp',  tots.munshi,  '#f59e0b'],
+          ['Pump Fuel',   tots.pump,    '#ef4444'],
+          ['Cash Fuel',   tots.cash,    '#f97316'],
+          ['Unloading',   tots.unload,  '#8b5cf6'],
+          ['Toll',        tots.toll,    '#0ea5e9'],
+          ['Other',       tots.other,   '#64748b'],
+        ].map(([lbl, val, clr]) => (
+          <div key={lbl} style={{ background:'#1e293b', border:'1px solid #334155', borderRadius:10, padding:'12px 14px' }}>
+            <div style={{ fontSize:10, color:'#64748b', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>{lbl}</div>
+            <div style={{ fontWeight:900, fontSize:18, color:clr }}>{fmtN(val)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background:'linear-gradient(135deg,#1e3a8a,#1d4ed8)', borderRadius:12, padding:'14px 18px', marginBottom:20, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ fontSize:13, color:'#93c5fd', fontWeight:700 }}>TOTAL EXPENSES</div>
+        <div style={{ fontSize:22, fontWeight:900, color:'#fff' }}>{fmtN(tots.total)}</div>
+      </div>
+
+      {!vFilter && vList.length > 0 && (
+        <div>
+          <div style={{ fontSize:11, color:'#64748b', fontWeight:800, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.08em' }}>Per Vehicle</div>
+          {vList.map(([vno, d]) => {
+            const tot = d.munshi + d.pump + d.cash + d.unload + d.toll + d.other;
+            return (
+              <div key={vno} style={{ background:'#1e293b', borderRadius:8, padding:'10px 14px', marginBottom:8, border:'1px solid #334155' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+                  <span style={{ fontFamily:'monospace', fontSize:13, color:'#60a5fa', fontWeight:900 }}>{vno}</span>
+                  <span style={{ fontSize:11, color:'#64748b' }}>{d.trips} trip{d.trips !== 1 ? 's' : ''}</span>
+                </div>
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', fontSize:11 }}>
+                  {d.munshi > 0  && <span style={{ color:'#f59e0b' }}>Munshi {fmtN(d.munshi)}</span>}
+                  {d.pump > 0    && <span style={{ color:'#ef4444' }}>Pump {fmtN(d.pump)}</span>}
+                  {d.cash > 0    && <span style={{ color:'#f97316' }}>Cash {fmtN(d.cash)}</span>}
+                  {d.unload > 0  && <span style={{ color:'#8b5cf6' }}>Unload {fmtN(d.unload)}</span>}
+                  {d.toll > 0    && <span style={{ color:'#0ea5e9' }}>Toll {fmtN(d.toll)}</span>}
+                  {d.other > 0   && <span style={{ color:'#64748b' }}>Other {fmtN(d.other)}</span>}
+                </div>
+                <div style={{ marginTop:6, fontSize:12, fontWeight:700, color:'#f59e0b' }}>Total: {fmtN(tot)}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {allTrips.length === 0 && <Empty msg="No trips recorded yet" sub="Create trips from the Trips tab" />}
     </div>
   );
 }
@@ -708,8 +851,9 @@ function Empty({ msg, sub }) {
 const SESSION_KEY = 'munshiPortal_session';
 const TABS = [
   { key: 'trips',    label: '🚛 Trips'    },
+  { key: 'expenses', label: '💰 Expenses' },
   { key: 'vehicles', label: '🚗 Vehicles' },
-  { key: 'ledger',   label: '💰 Ledger'   },
+  { key: 'ledger',   label: '📒 Ledger'   },
 ];
 
 export default function MunshiPortal() {
@@ -783,6 +927,7 @@ export default function MunshiPortal() {
 
       {/* Content */}
       {tab === 'trips'    && <TripsTab    munshi={munshi} vehicles={vehicles} pois={pois} />}
+      {tab === 'expenses' && <ExpensesTab munshi={munshi} vehicles={vehicles} />}
       {tab === 'vehicles' && <VehiclesTab munshi={munshi} vehicles={vehicles} />}
       {tab === 'ledger'   && <LedgerTab   munshi={munshi} />}
     </div>

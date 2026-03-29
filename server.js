@@ -1465,11 +1465,15 @@ async function handleRequest(req, res, rawPath) {
   // GET /api/ewaybills
   if (pathname === '/api/ewaybills' && req.method === 'GET') {
     const clientId = parsed.query.clientId || parsed.query.client_id || 'CLIENT_001';
-    const status = parsed.query.status || '';
-    const sql = status
-      ? 'SELECT * FROM eway_bills_master WHERE client_id=? AND status=? ORDER BY imported_at DESC'
-      : 'SELECT * FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC';
-    const params = status ? [clientId, status] : [clientId];
+    const status   = parsed.query.status   || '';
+    const fromPoi  = parsed.query.from_poi_id || '';
+    const toPoi    = parsed.query.to_poi_id   || '';
+    let sql = 'SELECT * FROM eway_bills_master WHERE client_id=?';
+    const params = [clientId];
+    if (status)  { sql += ' AND status=?';       params.push(status);  }
+    if (fromPoi) { sql += ' AND from_poi_id=?';  params.push(fromPoi); }
+    if (toPoi)   { sql += ' AND to_poi_id=?';    params.push(toPoi);   }
+    sql += ' ORDER BY imported_at DESC LIMIT 500';
     return sqliteJson(res, sql, params, rows => ({ ewaybills: rows }));
   }
 
@@ -1503,6 +1507,17 @@ async function handleRequest(req, res, rawPath) {
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
     db2.run("UPDATE eway_bills_master SET vehicle_no=? WHERE id=? OR ewb_no=?",
       [body.new_vehicle_number||'', ewbId, ewbId],
+      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
+    return;
+  }
+
+  // PUT /api/ewaybills/:id/close — mark as delivered
+  if (/^\/api\/ewaybills\/[^/]+\/close$/.test(pathname) && req.method === 'PUT') {
+    const ewbId = pathname.split('/')[3];
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.run("UPDATE eway_bills_master SET status='delivered', delivered_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? OR ewb_no=?",
+      [ewbId, ewbId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
     return;
   }
@@ -1625,7 +1640,7 @@ async function handleRequest(req, res, rawPath) {
     return;
   }
 
-  // GET /api/munshi-trips/ewb-search — find active eway bills for a vehicle or munshi POI
+  // GET /api/munshi-trips/ewb-search — find EWBs for a vehicle or munshi POI (from+to direction)
   if (pathname === '/api/munshi-trips/ewb-search' && req.method === 'GET') {
     const cid    = parsed.query.clientId || 'CLIENT_001';
     const vno    = parsed.query.vehicle_no || '';
@@ -1633,15 +1648,21 @@ async function handleRequest(req, res, rawPath) {
     const poiIds = rawPoi.split(',').map(s => s.trim()).filter(Boolean);
     if (poiIds.length > 0) {
       const ph = poiIds.map(() => '?').join(',');
+      // params: CASE WHEN list (poiIds), client_id, from IN (poiIds), to IN (poiIds)
+      const params = [...poiIds, cid, ...poiIds, ...poiIds];
       return sqliteJson(res,
-        `SELECT id,ewb_no,vehicle_no,to_place,to_poi_name,from_poi_id,from_poi_name,doc_date,total_value,status
-         FROM eway_bills_master WHERE client_id=? AND from_poi_id IN (${ph}) AND status='active'
-         ORDER BY doc_date DESC LIMIT 50`,
-        [cid, ...poiIds], null);
+        `SELECT id, ewb_no, vehicle_no, to_place, to_poi_id, to_poi_name, from_poi_id, from_poi_name,
+                doc_date, total_value, status, movement_type,
+                CASE WHEN from_poi_id IN (${ph}) THEN 'outbound' ELSE 'inbound' END AS direction
+         FROM eway_bills_master
+         WHERE client_id=? AND (from_poi_id IN (${ph}) OR to_poi_id IN (${ph}))
+           AND status NOT IN ('cancelled','delivered')
+         ORDER BY doc_date DESC LIMIT 100`,
+        params, null);
     }
     return sqliteJson(res,
-      `SELECT id,ewb_no,vehicle_no,to_place,to_poi_name,from_poi_name,doc_date,total_value,status
-       FROM eway_bills_master WHERE client_id=? AND vehicle_no=? AND status='active'
+      `SELECT id, ewb_no, vehicle_no, to_place, to_poi_name, from_poi_name, doc_date, total_value, status, movement_type
+       FROM eway_bills_master WHERE client_id=? AND vehicle_no=? AND status NOT IN ('cancelled','delivered')
        ORDER BY doc_date DESC LIMIT 30`,
       [cid, vno], null);
   }

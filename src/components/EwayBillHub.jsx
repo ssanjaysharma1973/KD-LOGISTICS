@@ -1791,10 +1791,154 @@ function NicLiveTab() {
   );
 }
 
+// ─── By POI Tab ─────────────────────────────────────────────────────────────
+function ByPoiTab() {
+  const [pois, setPois]           = useState([]);
+  const [selPoi, setSelPoi]       = useState('');
+  const [ewbs, setEwbs]           = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [dirFilter, setDirFilter] = useState('all'); // 'all'|'outbound'|'inbound'|'active'
+
+  useEffect(() => {
+    fetch('/api/pois?clientId=CLIENT_001')
+      .then(r => r.json())
+      .then(d => setPois(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selPoi) { setEwbs([]); return; }
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/ewaybills?clientId=CLIENT_001&from_poi_id=${encodeURIComponent(selPoi)}`).then(r => r.json()).catch(() => []),
+      fetch(`/api/ewaybills?clientId=CLIENT_001&to_poi_id=${encodeURIComponent(selPoi)}`).then(r => r.json()).catch(() => []),
+    ]).then(([from, to]) => {
+      const fromArr = (Array.isArray(from) ? from : from.bills || []).map(e => ({ ...e, _dir: 'outbound' }));
+      const toArr   = (Array.isArray(to)   ? to   : to.bills   || []).map(e => ({ ...e, _dir: 'inbound'  }));
+      const seen = new Set();
+      const merged = [...fromArr, ...toArr].filter(e => {
+        if (seen.has(e.id)) return false;
+        seen.add(e.id);
+        return true;
+      });
+      merged.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      setEwbs(merged);
+    }).finally(() => setLoading(false));
+  }, [selPoi]);
+
+  const closeEwb = async (id) => {
+    await fetch(`/api/ewaybills/${id}/close`, { method: 'PUT' }).catch(() => {});
+    setEwbs(prev => prev.map(e => e.id === id ? { ...e, status: 'delivered' } : e));
+  };
+
+  const filtered = ewbs.filter(e => {
+    if (dirFilter === 'outbound') return e._dir === 'outbound';
+    if (dirFilter === 'inbound')  return e._dir === 'inbound';
+    if (dirFilter === 'active')   return e.status === 'active';
+    return true;
+  });
+
+  const chipStyle = (key) => ({
+    padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+    background: dirFilter === key ? '#2563eb' : '#1e293b',
+    color: dirFilter === key ? '#fff' : '#94a3b8',
+  });
+
+  const selPOI = pois.find(p => String(p.id) === String(selPoi));
+
+  return (
+    <div style={{ padding: '16px 20px', maxWidth: 1000 }}>
+      <div style={{ marginBottom: 14 }}>
+        <select value={selPoi} onChange={e => { setSelPoi(e.target.value); setDirFilter('all'); }}
+          style={{ width: '100%', padding: '9px 14px', borderRadius: 8, border: '1px solid #334155', background: '#1e293b', color: '#f1f5f9', fontSize: 13, boxSizing: 'border-box' }}>
+          <option value="">— Select a POI —</option>
+          {pois.map(p => <option key={p.id} value={p.id}>{p.name} ({p.city || p.state || ''})</option>)}
+        </select>
+      </div>
+
+      {selPoi && (
+        <>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            {[['all','All'],['outbound','Outbound'],['inbound','Inbound'],['active','Active']].map(([k,lbl]) => (
+              <button key={k} style={chipStyle(k)} onClick={() => setDirFilter(k)}>{lbl}</button>
+            ))}
+            <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>{filtered.length} records</span>
+          </div>
+
+          {loading && <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>Loading…</div>}
+
+          {!loading && filtered.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 48, color: '#64748b', fontSize: 13 }}>
+              No EWBs found for this POI with the selected filter.
+            </div>
+          )}
+
+          {!loading && filtered.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#1e293b', color: '#94a3b8', textAlign: 'left' }}>
+                    {['EWB No','Vehicle','Date','From → To','Type','Dir','Value','Status',''].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', fontWeight: 700, borderBottom: '1px solid #334155', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(e => {
+                    const ml = MOVEMENT_LABELS[e.movement_type] || { label: e.movement_type || '—', color: '#6b7280', bg: '#f3f4f6' };
+                    return (
+                      <tr key={e.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                        <td style={{ padding: '7px 10px', fontFamily: 'monospace', color: '#60a5fa', fontWeight: 700 }}>{e.ewb_no}</td>
+                        <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: 11 }}>{e.vehicle_no || '—'}</td>
+                        <td style={{ padding: '7px 10px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                          {e.created_at ? new Date(e.created_at).toLocaleDateString('en-IN') : '—'}
+                        </td>
+                        <td style={{ padding: '7px 10px', fontSize: 11, color: '#cbd5e1' }}>
+                          {e.from_place || '—'} → {e.to_place || '—'}
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <span style={{ background: ml.bg, color: ml.color, padding: '2px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            {ml.label}
+                          </span>
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: e._dir === 'inbound' ? '#22d3ee' : '#a78bfa' }}>
+                            {e._dir === 'inbound' ? '⬇ In' : '⬆ Out'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '7px 10px', color: '#f59e0b', fontWeight: 700 }}>
+                          {e.total_value ? '₹' + Number(e.total_value).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: e.status === 'active' ? '#4ade80' : '#94a3b8' }}>
+                            {e.status || '—'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          {e.status === 'active' && (
+                            <button onClick={() => closeEwb(e.id)}
+                              style={{ background: '#1e293b', border: '1px solid #475569', color: '#94a3b8', borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 700 }}
+                            >🔒 Close</button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 const TABS = [
   { key: 'vehicles',  label: '🚛 Vehicle Movement' },
   { key: 'summary',   label: '📊 Summary' },
   { key: 'bills',     label: '📋 Bills List' },
+  { key: 'byPoi',    label: '📍 By POI' },
   { key: 'import',    label: '📥 Import' },
   { key: 'warnings',  label: '⚠️ Warnings' },
   { key: 'unmatched', label: '🔗 Unmatched POIs' },
@@ -1863,6 +2007,7 @@ export default function EwayBillHub({ defaultTab = 'vehicles' }) {
       {activeTab === 'summary'   && <SummaryTab />}
       {activeTab === 'unmatched' && <UnmatchedPoisTab onSaved={fetchUnmatchedCount} />}
       {activeTab === 'live'      && <NicLiveTab />}
+      {activeTab === 'byPoi'     && <ByPoiTab />}
       </div>
     </div>
   );
