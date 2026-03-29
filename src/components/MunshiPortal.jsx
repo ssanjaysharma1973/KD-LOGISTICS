@@ -1001,7 +1001,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                     })}
                     <div onClick={() => { setEwbManual(true); }} style={{ padding: '6px 10px', fontSize: 10, color: '#475569', cursor: 'pointer' }}>⌨️ Enter manually…</div>
                   </div>
-                ) : (
+                ) : ewbManual ? (
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input
                       value={ewbManualInput}
@@ -1018,10 +1018,15 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                       placeholder="Type EWB number, press Enter to add"
                       style={{ flex: 1, padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
                     />
-                    {formEwbs.length > 0 && (
-                      <button onClick={() => { setEwbManual(false); setEwbManualInput(''); }}
-                        style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#94a3b8', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>← List</button>
-                    )}
+                    <button onClick={() => { setEwbManual(false); setEwbManualInput(''); }}
+                      style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#94a3b8', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ Cancel</button>
+                  </div>
+                ) : (
+                  /* No EWBs available — optional manual entry */
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                    <span style={{ fontSize: 11, color: '#475569' }}>No active EWBs for this vehicle</span>
+                    <button onClick={() => setEwbManual(true)}
+                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#60a5fa', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>⌨️ Add manually</button>
                   </div>
                 )}
               </div>
