@@ -552,6 +552,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
   const [ewbFilter, setEwbFilter] = useState('all'); // 'all'|'dealer'|'return'|'inbound'
   const [deliverEwb, setDeliverEwb] = useState(null); // EWB open in MunshiDeliverModal
   const [formEwbs,      setFormEwbs]      = useState([]);   // real EWBs for the vehicle selected in form
+  const [allEwbs,       setAllEwbs]       = useState([]);   // all EWBs across all munshi vehicles (loaded on mount)
   const [ewbManual,     setEwbManual]     = useState(false); // user chose to type EWB manually
   const [ewbManualInput, setEwbManualInput] = useState(''); // text buffer for manual EWB entry
 
@@ -597,7 +598,17 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
       .then(r => r.json())
       .then(d => setPoiEwbs(Array.isArray(d) ? d : []))
       .catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch EWBs for ALL munshi vehicles at once so EWB list is available without selecting vehicle first
+  useEffect(() => {
+    const vnos = myVehicles.map(v => v.vehicle_no).filter(Boolean);
+    if (!vnos.length) return;
+    fetch(`${API}/munshi-trips/all-ewbs?clientId=CLIENT_001&vehicle_nos=${encodeURIComponent(vnos.join(','))}`)
+      .then(r => r.json())
+      .then(d => setAllEwbs(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [myVehicles.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply prefill from RoutingTab
   useEffect(() => {
@@ -636,10 +647,10 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
     Promise.all([byVehicle, byPoi]).then(([vData, pData]) => {
       const vList = Array.isArray(vData) ? vData : [];
       const pList = Array.isArray(pData) ? pData.filter(e => e.direction === 'outbound') : [];
-      // Merge, deduplicate by ewb_no, filter out delivered/cancelled
+      // Merge, deduplicate by ewb_no, cancelled only excluded
       const seen = new Set();
       const merged = [...vList, ...pList].filter(e => {
-        if (e.status === 'delivered' || e.status === 'cancelled') return false;
+        if (e.status === 'cancelled') return false;
         if (seen.has(e.ewb_no)) return false;
         seen.add(e.ewb_no);
         return true;
@@ -964,6 +975,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
               <div style={{ marginBottom: 10, gridColumn: '1/-1' }}>
                 <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 3 }}>
                   EWB Numbers {form.ewb_nos.length > 0 && <span style={{ color: '#4ade80' }}>({form.ewb_nos.length} selected)</span>}
+                  {!form.vehicle_no && allEwbs.length > 0 && <span style={{ color: '#fbbf24', marginLeft: 6 }}>← pick EWB to auto-select vehicle</span>}
                 </label>
                 {/* Selected EWB chips */}
                 {form.ewb_nos.length > 0 && (
@@ -978,58 +990,99 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                   </div>
                 )}
                 {/* EWB list (checkboxes) or manual input */}
-                {formEwbs.length > 0 && !ewbManual ? (
-                  <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid #334155', borderRadius: 6, background: '#0f172a' }}>
-                    {formEwbs.map(e => {
-                      const checked = form.ewb_nos.includes(e.ewb_no);
-                      return (
-                        <label key={e.id || e.ewb_no} style={{ display: 'flex', alignItems: 'flex-start', padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #1e293b', gap: 8, background: checked ? '#0d2e1f' : 'transparent' }}>
-                          <input type="checkbox" checked={checked}
-                            onChange={() => setForm(f => ({
-                              ...f,
-                              ewb_nos: checked ? f.ewb_nos.filter(x => x !== e.ewb_no) : [...f.ewb_nos, e.ewb_no],
-                            }))}
-                            style={{ marginTop: 1 }}
-                          />
-                          <div>
-                            <span style={{ fontFamily: 'monospace', fontSize: 11, color: checked ? '#4ade80' : e.status === 'delivered' ? '#94a3b8' : '#60a5fa', fontWeight: 700 }}>{e.ewb_no}</span>
-                            {e.status === 'delivered' && !checked && <span style={{ fontSize: 9, color: '#475569', marginLeft: 4, background: '#1e293b', padding: '1px 5px', borderRadius: 4 }}>delivered</span>}
-                            {(e.to_poi_name || e.to_place) && <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6 }}>→ {e.to_poi_name || e.to_place}</span>}
-                            {e.movement_type && <span style={{ fontSize: 9, color: '#475569', marginLeft: 4 }}>[{e.movement_type.replace(/_/g,' ')}]</span>}
+                {(() => {
+                  // If no vehicle selected yet, show ALL vehicle EWBs (grouped by vehicle)
+                  // If vehicle selected, show formEwbs for that vehicle
+                  const displayEwbs = form.vehicle_no ? formEwbs : allEwbs;
+                  if (!ewbManual && displayEwbs.length > 0) {
+                    // Group by vehicle_no when showing all
+                    const grouped = !form.vehicle_no;
+                    const byVehicle = {};
+                    displayEwbs.forEach(e => {
+                      const k = e.vehicle_no || '—';
+                      if (!byVehicle[k]) byVehicle[k] = [];
+                      byVehicle[k].push(e);
+                    });
+                    return (
+                      <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #334155', borderRadius: 6, background: '#0f172a' }}>
+                        {Object.entries(byVehicle).map(([vno, ewbList]) => (
+                          <div key={vno}>
+                            {grouped && (
+                              <div style={{ padding: '4px 10px', fontSize: 10, color: '#60a5fa', fontWeight: 800, background: '#0c1a30', fontFamily: 'monospace', position: 'sticky', top: 0 }}>
+                                🚛 {vno}
+                              </div>
+                            )}
+                            {ewbList.map(e => {
+                              const checked = form.ewb_nos.includes(e.ewb_no);
+                              return (
+                                <label key={e.id || e.ewb_no} style={{ display: 'flex', alignItems: 'flex-start', padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #1e293b', gap: 8, background: checked ? '#0d2e1f' : 'transparent' }}>
+                                  <input type="checkbox" checked={checked}
+                                    onChange={() => {
+                                      // Auto-fill vehicle when first EWB is picked and no vehicle selected
+                                      if (!checked && !form.vehicle_no && e.vehicle_no) {
+                                        const v = vehicles.find(x => x.vehicle_no === e.vehicle_no);
+                                        setForm(f => ({
+                                          ...f,
+                                          vehicle_no:  e.vehicle_no,
+                                          driver_name: v?.driver_name || f.driver_name,
+                                          ewb_nos:     [...f.ewb_nos, e.ewb_no],
+                                        }));
+                                      } else {
+                                        setForm(f => ({
+                                          ...f,
+                                          ewb_nos: checked ? f.ewb_nos.filter(x => x !== e.ewb_no) : [...f.ewb_nos, e.ewb_no],
+                                        }));
+                                      }
+                                    }}
+                                    style={{ marginTop: 1 }}
+                                  />
+                                  <div>
+                                    <span style={{ fontFamily: 'monospace', fontSize: 11, color: checked ? '#4ade80' : e.status === 'delivered' ? '#94a3b8' : '#60a5fa', fontWeight: 700 }}>{e.ewb_no}</span>
+                                    {e.status === 'delivered' && !checked && <span style={{ fontSize: 9, color: '#475569', marginLeft: 4, background: '#1e293b', padding: '1px 5px', borderRadius: 4 }}>delivered</span>}
+                                    {(e.to_poi_name || e.to_place) && <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6 }}>→ {e.to_poi_name || e.to_place}</span>}
+                                    {e.movement_type && <span style={{ fontSize: 9, color: '#475569', marginLeft: 4 }}>[{e.movement_type.replace(/_/g,' ')}]</span>}
+                                  </div>
+                                </label>
+                              );
+                            })}
                           </div>
-                        </label>
-                      );
-                    })}
-                    <div onClick={() => { setEwbManual(true); }} style={{ padding: '6px 10px', fontSize: 10, color: '#475569', cursor: 'pointer' }}>⌨️ Enter manually…</div>
-                  </div>
-                ) : ewbManual ? (
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input
-                      value={ewbManualInput}
-                      onChange={e => setEwbManualInput(e.target.value)}
-                      onKeyDown={e => {
-                        if ((e.key === 'Enter' || e.key === ',') && ewbManualInput.trim()) {
-                          e.preventDefault();
-                          const val = ewbManualInput.trim().replace(/,/g,'');
-                          if (val && !form.ewb_nos.includes(val))
-                            setForm(f => ({ ...f, ewb_nos: [...f.ewb_nos, val] }));
-                          setEwbManualInput('');
-                        }
-                      }}
-                      placeholder="Type EWB number, press Enter to add"
-                      style={{ flex: 1, padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
-                    />
-                    <button onClick={() => { setEwbManual(false); setEwbManualInput(''); }}
-                      style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#94a3b8', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ Cancel</button>
-                  </div>
-                ) : (
-                  /* No EWBs available — optional manual entry */
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
-                    <span style={{ fontSize: 11, color: '#475569' }}>No active EWBs for this vehicle</span>
-                    <button onClick={() => setEwbManual(true)}
-                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#60a5fa', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>⌨️ Add manually</button>
-                  </div>
-                )}
+                        ))}
+                        <div onClick={() => { setEwbManual(true); }} style={{ padding: '6px 10px', fontSize: 10, color: '#475569', cursor: 'pointer' }}>⌨️ Enter manually…</div>
+                      </div>
+                    );
+                  }
+                  if (ewbManual) {
+                    return (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <input
+                          value={ewbManualInput}
+                          onChange={e => setEwbManualInput(e.target.value)}
+                          onKeyDown={e => {
+                            if ((e.key === 'Enter' || e.key === ',') && ewbManualInput.trim()) {
+                              e.preventDefault();
+                              const val = ewbManualInput.trim().replace(/,/g,'');
+                              if (val && !form.ewb_nos.includes(val))
+                                setForm(f => ({ ...f, ewb_nos: [...f.ewb_nos, val] }));
+                              setEwbManualInput('');
+                            }
+                          }}
+                          placeholder="Type EWB number, press Enter to add"
+                          style={{ flex: 1, padding: '7px 10px', borderRadius: 6, fontSize: 12, background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', boxSizing: 'border-box' }}
+                        />
+                        <button onClick={() => { setEwbManual(false); setEwbManualInput(''); }}
+                          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#94a3b8', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ Cancel</button>
+                      </div>
+                    );
+                  }
+                  // No EWBs at all
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                      <span style={{ fontSize: 11, color: '#475569' }}>No active EWBs for this vehicle</span>
+                      <button onClick={() => setEwbManual(true)}
+                        style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#60a5fa', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>⌨️ Add manually</button>
+                    </div>
+                  );
+                })()}
               </div>
               <Field label="Trip Date" name="trip_date" type="date" />
               <PoiSelect label="From POI" nameId="from_poi_id" nameName="from_poi_name" />

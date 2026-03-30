@@ -1793,6 +1793,21 @@ async function handleRequest(req, res, rawPath) {
     return;
   }
 
+  // GET /api/munshi-trips/all-ewbs — batch fetch EWBs for multiple vehicles at once
+  if (pathname === '/api/munshi-trips/all-ewbs' && req.method === 'GET') {
+    const cid      = parsed.query.clientId || 'CLIENT_001';
+    const rawVnos  = parsed.query.vehicle_nos || '';
+    const vnos     = rawVnos.split(',').map(s => s.trim()).filter(Boolean);
+    if (!vnos.length) { res.setHeader('Content-Type','application/json'); return res.end('[]'); }
+    const ph = vnos.map(() => '?').join(',');
+    return sqliteJson(res,
+      `SELECT id, ewb_no, vehicle_no, to_place, to_poi_name, from_poi_name, doc_date, total_value, status, movement_type
+       FROM eway_bills_master WHERE client_id=? AND vehicle_no IN (${ph})
+         AND (status NOT IN ('cancelled') OR date(doc_date) >= date('now','-30 days'))
+       ORDER BY CASE WHEN status NOT IN ('delivered','cancelled') THEN 0 ELSE 1 END, doc_date DESC LIMIT 300`,
+      [cid, ...vnos], null);
+  }
+
   // GET /api/munshi-trips/ewb-search — find EWBs for a vehicle or munshi POI (from+to direction)
   if (pathname === '/api/munshi-trips/ewb-search' && req.method === 'GET') {
     const cid    = parsed.query.clientId || 'CLIENT_001';
