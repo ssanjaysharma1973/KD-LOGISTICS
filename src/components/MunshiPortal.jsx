@@ -1363,8 +1363,26 @@ function VehiclesTab({ munshi, vehicles }) {
         <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, marginTop: myOwnVehicles.length ? 16 : 0, fontWeight: 700 }}>🔄 Common Vehicles ({commonVehicles.length})</div>
       )}
       {commonVehicles.map(v => renderVehicleCard(v, STATUS_COLORS))}
+
+      {myVehicles.length > 1 && (
+        <button onClick={() => downloadEwbCsv(myVehicles.map(v => v.vehicle_no).filter(Boolean))}
+          style={{ width: '100%', marginTop: 8, padding: '10px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#38bdf8', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          📥 Download All Vehicles EWBs (CSV)
+        </button>
+      )}
     </div>
   );
+
+  function downloadEwbCsv(vehicleNos) {
+    const vnos = Array.isArray(vehicleNos) ? vehicleNos : [vehicleNos];
+    const url = `${API}/munshi-trips/ewb-download-csv?clientId=CLIENT_001&vehicle_nos=${encodeURIComponent(vnos.join(','))}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = vnos.length === 1 ? `EWB_${vnos[0]}.csv` : 'EWB_all_vehicles.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 
   function renderVehicleCard(v, STATUS_COLORS) {
     const statusKey = Object.keys(STATUS_COLORS).find(k => (v.status || '').includes(k)) || 'Offline';
@@ -1373,7 +1391,14 @@ function VehiclesTab({ munshi, vehicles }) {
       <div key={v.vehicle_no} style={{ background: '#1e293b', borderRadius: 12, padding: '14px 16px', marginBottom: 10, border: '1px solid #334155' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontWeight: 900, fontSize: 17, color: '#60a5fa' }}>{v.vehicle_no}</div>
-          <div style={{ fontSize: 12, color: sc.dot, fontWeight: 600 }}>{sc.label}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 12, color: sc.dot, fontWeight: 600 }}>{sc.label}</div>
+            <button onClick={() => downloadEwbCsv(v.vehicle_no)}
+              style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 7, padding: '3px 9px', color: '#38bdf8', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}
+              title="Download EWBs as CSV">
+              📥 EWBs
+            </button>
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 14px', fontSize: 12 }}>
           <Kv label="Size"   val={fmtSize(v.vehicle_size)} />

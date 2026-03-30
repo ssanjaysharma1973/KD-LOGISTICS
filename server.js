@@ -1793,6 +1793,43 @@ async function handleRequest(req, res, rawPath) {
     return;
   }
 
+  // GET /api/munshi-trips/ewb-download-csv — download EWBs as CSV, vehicle-wise
+  if (pathname === '/api/munshi-trips/ewb-download-csv' && req.method === 'GET') {
+    const cid     = parsed.query.clientId || 'CLIENT_001';
+    const rawVnos = parsed.query.vehicle_nos || '';
+    const vnos    = rawVnos.split(',').map(s => s.trim()).filter(Boolean);
+    if (!vnos.length) { res.statusCode = 400; res.setHeader('Content-Type','text/plain'); return res.end('vehicle_nos required'); }
+    const ph = vnos.map(() => '?').join(',');
+    db.all(
+      `SELECT ewb_no, vehicle_no, from_poi_name, from_place, to_poi_name, to_place, doc_date, valid_upto, total_value, status, movement_type, supply_type, doc_no
+       FROM eway_bills_master WHERE client_id=? AND vehicle_no IN (${ph})
+       ORDER BY vehicle_no, doc_date DESC LIMIT 1000`,
+      [cid, ...vnos],
+      (err, rows) => {
+        if (err) { res.statusCode = 500; res.setHeader('Content-Type','text/plain'); return res.end('DB error'); }
+        const fname = vnos.length === 1 ? `EWB_${vnos[0]}.csv` : `EWB_vehicles.csv`;
+        const cols = ['EWB No','Vehicle No','Doc No','From','From Place','To','To Place','Date','Valid Upto','Value (₹)','Status','Movement','Supply Type'];
+        const esc = v => `"${String(v||'').replace(/"/g,'""')}"`;
+        const lines = [cols.join(',')];
+        (rows||[]).forEach(r => {
+          lines.push([
+            esc(r.ewb_no), esc(r.vehicle_no), esc(r.doc_no),
+            esc(r.from_poi_name), esc(r.from_place),
+            esc(r.to_poi_name), esc(r.to_place),
+            esc(r.doc_date), esc(r.valid_upto),
+            esc(r.total_value), esc(r.status),
+            esc(r.movement_type), esc(r.supply_type)
+          ].join(','));
+        });
+        const csv = lines.join('\r\n');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+        res.end('\uFEFF' + csv); // BOM for Excel compatibility
+      }
+    );
+    return;
+  }
+
   // GET /api/munshi-trips/all-ewbs — batch fetch EWBs for multiple vehicles at once
   if (pathname === '/api/munshi-trips/all-ewbs' && req.method === 'GET') {
     const cid      = parsed.query.clientId || 'CLIENT_001';
