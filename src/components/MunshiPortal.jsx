@@ -992,7 +992,8 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                             style={{ marginTop: 1 }}
                           />
                           <div>
-                            <span style={{ fontFamily: 'monospace', fontSize: 11, color: checked ? '#4ade80' : '#60a5fa', fontWeight: 700 }}>{e.ewb_no}</span>
+                            <span style={{ fontFamily: 'monospace', fontSize: 11, color: checked ? '#4ade80' : e.status === 'delivered' ? '#94a3b8' : '#60a5fa', fontWeight: 700 }}>{e.ewb_no}</span>
+                            {e.status === 'delivered' && !checked && <span style={{ fontSize: 9, color: '#475569', marginLeft: 4, background: '#1e293b', padding: '1px 5px', borderRadius: 4 }}>delivered</span>}
                             {(e.to_poi_name || e.to_place) && <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6 }}>→ {e.to_poi_name || e.to_place}</span>}
                             {e.movement_type && <span style={{ fontSize: 9, color: '#475569', marginLeft: 4 }}>[{e.movement_type.replace(/_/g,' ')}]</span>}
                           </div>

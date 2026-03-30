@@ -1815,8 +1815,9 @@ async function handleRequest(req, res, rawPath) {
     }
     return sqliteJson(res,
       `SELECT id, ewb_no, vehicle_no, to_place, to_poi_name, from_poi_name, doc_date, total_value, status, movement_type
-       FROM eway_bills_master WHERE client_id=? AND vehicle_no=? AND status NOT IN ('cancelled','delivered')
-       ORDER BY doc_date DESC LIMIT 30`,
+       FROM eway_bills_master WHERE client_id=? AND vehicle_no=?
+         AND (status NOT IN ('cancelled') OR date(doc_date) >= date('now','-60 days'))
+       ORDER BY CASE WHEN status NOT IN ('delivered','cancelled') THEN 0 ELSE 1 END, doc_date DESC LIMIT 50`,
       [cid, vno], null);
   }
 
