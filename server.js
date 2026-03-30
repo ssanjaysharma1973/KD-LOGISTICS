@@ -301,6 +301,20 @@ function seedSqliteIfEmpty() {
       )`).catch(() => {});
       await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_unloading_v2_unique ON poi_unloading_rates_v2(client_id, poi_id)`).catch(() => {});
 
+      // Auto-dedup eway_bills_master by ewb_no (keep lowest id) then enforce unique index
+      try {
+        const ewbDups = await sqAll(`SELECT ewb_no FROM eway_bills_master GROUP BY client_id, ewb_no HAVING COUNT(*) > 1`);
+        if (ewbDups.length > 0) {
+          console.log(`[Init] Removing ${ewbDups.length} duplicate EWB groups...`);
+          await dbRun('BEGIN');
+          for (const row of ewbDups) {
+            await dbRun(`DELETE FROM eway_bills_master WHERE ewb_no=? AND id NOT IN (SELECT MIN(id) FROM eway_bills_master WHERE ewb_no=?)`, [row.ewb_no, row.ewb_no]).catch(() => {});
+          }
+          await dbRun('COMMIT');
+        }
+        await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ewbm_client_ewbno ON eway_bills_master(client_id, ewb_no)`).catch(() => {});
+      } catch(e) { console.warn('[Init] EWB dedup skipped:', e.message); }
+
       // Seed pois if empty
       // Seed POIs — always upsert by (client_id, poi_name) so new entries from export survive redeploy
       const seedPois = seed.pois || [];
@@ -2461,9 +2475,11 @@ async function handleRequest(req, res, rawPath) {
         params.push(like, like, like, like);
       }
       const whereClause = where.join(' AND ');
+      // De-duplicate by ewb_no at query time — keep the row with lowest id per (client_id, ewb_no)
+      const dedupClause = `AND id IN (SELECT MIN(id) FROM eway_bills_master GROUP BY client_id, ewb_no)`;
       const [cntRows, bills] = await Promise.all([
-        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE ${whereClause}`, params),
-        sqAll(`SELECT * FROM eway_bills_master WHERE ${whereClause} ORDER BY doc_date DESC, id DESC LIMIT ? OFFSET ?`,
+        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE ${whereClause} ${dedupClause}`, params),
+        sqAll(`SELECT * FROM eway_bills_master WHERE ${whereClause} ${dedupClause} ORDER BY doc_date DESC, id DESC LIMIT ? OFFSET ?`,
               [...params, perPage, (page - 1) * perPage]),
       ]);
       return jsonResp(res, { bills, total: cntRows[0]?.cnt || 0, page, per_page: perPage });
@@ -2785,11 +2801,21 @@ async function handleRequest(req, res, rawPath) {
         const ids = await sqAll(`SELECT id FROM eway_bills_master WHERE doc_no=? AND client_id=? ORDER BY id ASC`, [row.doc_no, cid]);
         for (const r of ids.slice(0, -1)) if (!dupDel.includes(r.id)) dupDel.push(r.id);
       }
-      const allDel = [...new Set([...truncDel, ...dupDel])];
+      // Also dedup by ewb_no — keep lowest id per (client_id, ewb_no)
+      const ewbDupRows = await sqAll(
+        `SELECT ewb_no, COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND ewb_no IS NOT NULL AND ewb_no != '' GROUP BY ewb_no HAVING cnt > 1`, [cid]);
+      const ewbDupDel = [];
+      for (const row of ewbDupRows) {
+        const ids = await sqAll(`SELECT id FROM eway_bills_master WHERE ewb_no=? AND client_id=? ORDER BY id ASC`, [row.ewb_no, cid]);
+        for (const r of ids.slice(0, -1)) if (!ewbDupDel.includes(r.id)) ewbDupDel.push(r.id);
+      }
+      const allDel = [...new Set([...truncDel, ...dupDel, ...ewbDupDel])];
       if (!dryRun && allDel.length) {
         await sqRun(`DELETE FROM eway_bills_master WHERE id IN (${allDel.map(()=>'?').join(',')})`, allDel);
+        // After dedup, ensure unique index exists to prevent future duplicates
+        await sqRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ewbm_client_ewbno ON eway_bills_master(client_id, ewb_no)`).catch(() => {});
       }
-      return jsonResp(res, { success: true, dry_run: dryRun, truncated_removed: truncDel.length, doc_dup_removed: dupDel.length, total_removed: allDel.length });
+      return jsonResp(res, { success: true, dry_run: dryRun, truncated_removed: truncDel.length, doc_dup_removed: dupDel.length, ewb_dup_removed: ewbDupDel.length, total_removed: allDel.length });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
   }
 
