@@ -4096,23 +4096,12 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-// Add error listener BEFORE server.listen()
-server.on('error', (err) => {
-  console.error('[SERVER] Error binding port:', err.message, 'code:', err.code);
-  if (err.code === 'EADDRINUSE') {
-    console.error(`[SERVER] Port ${PORT} already in use - trying to kill existing process...`);
-    process.exit(1);
-  }
-  process.exit(1);
-});
-
 console.log(`[SERVER] Environment: NODE_ENV=${process.env.NODE_ENV}, PORT=${PORT}, PID=${process.pid}`);
 console.log(`[SERVER] About to listen on PORT=${PORT}...`);
 
-try {
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ [SERVER] Listening on http://0.0.0.0:${PORT}`);
-    console.log(`[DEBUG] distDir=${path.join(__dirname, 'dist')}, exists=${fs.existsSync(path.join(__dirname, 'dist'))}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ [SERVER] Listening on http://0.0.0.0:${PORT}`);
+  console.log(`[DEBUG] distDir=${path.join(__dirname, 'dist')}, exists=${fs.existsSync(path.join(__dirname, 'dist'))}`);
 
   // Seed SQLite from seed_data.json if DB is empty (Railway ephemeral filesystem)
   // Run async to not block healthcheck responses
@@ -4268,8 +4257,3 @@ try {
     console.warn('[EWB AutoRefresh] MASTERS_USERNAME/MASTERS_GSTIN not set — EWB auto-refresh disabled');
   }
 });
-} catch (err) {
-  console.error('[server] Failed to start listen:', err.message);
-  console.error(err.stack);
-  process.exit(1);
-}
