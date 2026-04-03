@@ -909,9 +909,10 @@ function sendSse(tenantId, payload) {
 
 // ── Masters India EWB Discovery: Parameterized fetch from N days back ────────── 
 // Defined at MODULE SCOPE (outside http.createServer) so it's accessible globally
+// ── Masters India EWB Discovery: Correct sequence - Assigned Bills → Details ────
 async function runFetchEwbsForDays(daysBack = 2) {
   try {
-    console.log(`[EWB Discovery] START: daysBack=${daysBack}, user=${MASTERS_USERNAME || 'NONE'}, gstin=${MASTERS_GSTIN || 'NONE'}`);
+    console.log(`[EWB Discovery] START: Getting assigned e-way bills for GSTIN=${MASTERS_GSTIN || 'NONE'}`);
     
     // Guards: require Masters credentials to be configured
     if (!MASTERS_USERNAME || !MASTERS_GSTIN) {
@@ -919,48 +920,65 @@ async function runFetchEwbsForDays(daysBack = 2) {
       return 0;
     }
 
-    const datesToCheck = [];
-    const today = new Date();
-    const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-    
-    // Build list of dates to check (today and N-1 days back)
-    for (let i = 0; i < daysBack; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      datesToCheck.push(fmt(d));
+    // STEP 1: Get list of assigned e-way bills
+    console.log(`[EWB Discovery] STEP 1: Fetching assigned e-way bills...`);
+    const { status: listStatus, data: listData } = await mastersGet(
+      `/api/v1/getEwayBillData/?action=GetAssignedEwayBills&gstin=${encodeURIComponent(MASTERS_GSTIN)}`
+    ).catch((err) => {
+      console.warn(`[EWB Discovery] GetAssignedEwayBills failed: ${err.message}`);
+      return { status: 0, data: null };
+    });
+
+    if (listStatus !== 200) {
+      console.warn(`[EWB Discovery] GetAssignedEwayBills returned status ${listStatus}`);
+      return 0;
     }
-    
+
+    const billNumbers = listData?.results?.message || [];
+    console.log(`[EWB Discovery] Found ${billNumbers.length} assigned e-way bills`);
+
+    if (!Array.isArray(billNumbers) || billNumbers.length === 0) {
+      console.log(`[EWB Discovery] No assigned bills found`);
+      return 0;
+    }
+
+    // STEP 2: Fetch details for each bill and import
+    console.log(`[EWB Discovery] STEP 2: Fetching details for each bill...`);
     let totalNew = 0;
-    for (const dateStr of datesToCheck) {
-      const { status: apiStatus, data: apiData } = await mastersGet(
-        `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
-      ).catch(() => ({ status: 0, data: null }));
-      
-      if (apiStatus !== 200) {
-        console.warn(`[EWB Discovery] API error for ${dateStr}: status=${apiStatus}`);
-        continue;
-      }
-      
-      const billsRaw = apiData?.results?.message || [];
-      console.log(`[EWB Discovery] ${dateStr}: ${billsRaw.length} total bills from API`);
-      
-      if (!Array.isArray(billsRaw)) continue;
-      
-      for (const item of billsRaw) {
-        const ewbNo = String(item.eway_bill_number || '');
-        if (!ewbNo) continue;
+    
+    for (const billNo of billNumbers) {
+      try {
+        console.log(`[EWB Discovery] Fetching details for EWB ${billNo}...`);
+        const { status: detailStatus, data: detailData } = await mastersGet(
+          `/api/v1/getEwayBillData/?action=GetEwayBillDetails&gstin=${encodeURIComponent(MASTERS_GSTIN)}&ewb_no=${encodeURIComponent(billNo)}`
+        ).catch((err) => {
+          console.warn(`[EWB Discovery] GetEwayBillDetails for ${billNo} failed: ${err.message}`);
+          return { status: 0, data: null };
+        });
+
+        if (detailStatus !== 200) {
+          console.warn(`[EWB Discovery] GetEwayBillDetails for ${billNo} returned ${detailStatus}`);
+          continue;
+        }
+
+        const item = detailData?.results?.message?.[0]; // Usually single result
+        if (!item) {
+          console.warn(`[EWB Discovery] No details returned for ${billNo}`);
+          continue;
+        }
+
+        const ewbNo = String(item.eway_bill_number || billNo);
         
         // VALIDATION: Skip dummy/test bills (require real business data)
-        // Only import if: has document number AND has both from/to details
         const hasDocNumber = !!(item.document_number || '').trim();
         const hasFromData = !!(item.from_gstin || item.from_trade_name || item.from_place || '').trim();
         const hasToData = !!(item.to_gstin || item.to_trade_name || item.to_place || '').trim();
         
-        // Skip bills that lack essential business data (likely test/dummy)
         if (!hasDocNumber || !hasFromData || !hasToData) {
-          continue; // Silently skip invalid bills
+          console.log(`[EWB Discovery] Skipping ${ewbNo}: incomplete data (doc=${hasDocNumber}, from=${hasFromData}, to=${hasToData})`);
+          continue;
         }
-        
+
         const parseDate = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
         const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
         const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();
@@ -968,15 +986,26 @@ async function runFetchEwbsForDays(daysBack = 2) {
         const result = await sqRun(
           `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
           ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
-        ).catch(() => null);
+        ).catch((err) => {
+          console.warn(`[EWB Discovery] DB insert error for ${ewbNo}: ${err.message}`);
+          return null;
+        });
         
-        if (result?.changes > 0) totalNew++;
+        if (result?.changes > 0) {
+          console.log(`[EWB Discovery] ✓ Imported EWB ${ewbNo} (doc#${item.document_number})`);
+          totalNew++;
+        } else {
+          console.log(`[EWB Discovery] ~ EWB ${ewbNo} already in DB`);
+        }
+      } catch (billErr) {
+        console.warn(`[EWB Discovery] Error processing bill ${billNo}:`, billErr.message);
       }
     }
-    if (totalNew > 0) console.log(`[EWB Discovery] ${totalNew} new EWB(s) added from Masters India (last ${daysBack} days)`);
+
+    console.log(`[EWB Discovery] Discovery complete: ${totalNew} new EWB(s) imported`);
     return totalNew;
   } catch(e) { 
-    console.warn('[EWB Discovery]', e.message);
+    console.warn('[EWB Discovery] Fatal error:', e.message);
     return 0;
   }
 }
