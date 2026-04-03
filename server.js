@@ -4066,8 +4066,10 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
+console.log(`[SERVER] About to listen on PORT=${PORT}...`);
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ [SERVER] Listening on http://0.0.0.0:${PORT}`);
+  console.log(`[DEBUG] Server started successfully, distDir=${path.join(__dirname, 'dist')}, exists=${fs.existsSync(path.join(__dirname, 'dist'))}`);
 
   // Seed SQLite from seed_data.json if DB is empty (Railway ephemeral filesystem)
   // Run async to not block healthcheck responses
