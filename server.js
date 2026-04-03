@@ -4247,3 +4247,8 @@ try {
     console.warn('[EWB AutoRefresh] MASTERS_USERNAME/MASTERS_GSTIN not set — EWB auto-refresh disabled');
   }
 });
+} catch (err) {
+  console.error('[server] Failed to start listen:', err.message);
+  console.error(err.stack);
+  process.exit(1);
+}
