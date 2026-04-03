@@ -3414,40 +3414,16 @@ async function handleRequest(req, res, rawPath) {
       // Master key only
       if (!requireMasterApiKey(req, res)) return;
       
-      console.log('[EWB Discovery] Manual trigger initiated');
+      const body = await readBody(req);
+      const daysBack = Math.min(Math.max(parseInt(body.days_back) || 5, 1), 30); // 1-30 days, default 5
+      
+      console.log(`[EWB Discovery] Manual trigger initiated (last ${daysBack} days)`);
       
       // Trigger discovery asynchronously (don't wait for completion)
       setImmediate(async () => {
         try {
-          const today = new Date();
-          const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-          const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-          let totalNew = 0;
-          
-          for (const dateStr of [fmt(today), fmt(yesterday)]) {
-            const { status: apiStatus, data: apiData } = await mastersGet(
-              `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
-            ).catch(() => ({ status: 0, data: null }));
-            
-            if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
-            
-            for (const item of apiData.results.message) {
-              const ewbNo = String(item.eway_bill_number || '');
-              if (!ewbNo) continue;
-              
-              const parseDate = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
-              const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
-              const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();
-              
-              const result = await sqRun(
-                `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-                ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
-              ).catch(() => null);
-              
-              if (result?.changes > 0) totalNew++;
-            }
-          }
-          console.log(`[EWB Discovery] Manual sync: ${totalNew} new EWB(s) added from Masters India`);
+          const totalNew = await runFetchEwbsForDays(daysBack);
+          console.log(`[EWB Discovery] Manual sync complete: ${totalNew} new EWB(s) added`);
         } catch(e) {
           console.warn('[EWB Discovery] Manual sync error:', e.message);
         }
@@ -3455,8 +3431,9 @@ async function handleRequest(req, res, rawPath) {
       
       return jsonResp(res, {
         success: true,
-        message: 'Manual e-way bill discovery triggered - checking Masters India for new bills',
+        message: `Manual e-way bill discovery triggered - checking last ${daysBack} days from Masters India`,
         status: 'in-progress',
+        days_requested: daysBack,
       });
     } catch(e) {
       res.statusCode = 500;
@@ -4295,32 +4272,55 @@ server.listen(PORT, '0.0.0.0', () => {
     }
     // ── Daily EWB discovery: fetch all EWBs from Masters India by date ───────
     // Discovers NEW EWBs assigned by customers (not yet in local DB)
-    async function runFetchTodayEwbs() {
+    // ── Parameterized EWB discovery: fetch from N days back ───────────────────
+    async function runFetchEwbsForDays(daysBack = 2) {
       try {
+        const datesToCheck = [];
         const today = new Date();
-        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
         const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+        
+        // Build list of dates to check (today and N-1 days back)
+        for (let i = 0; i < daysBack; i++) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          datesToCheck.push(fmt(d));
+        }
+        
         let totalNew = 0;
-        for (const dateStr of [fmt(today), fmt(yesterday)]) {
+        for (const dateStr of datesToCheck) {
           const { status: apiStatus, data: apiData } = await mastersGet(
             `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
           ).catch(() => ({ status: 0, data: null }));
+          
           if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
+          
           for (const item of apiData.results.message) {
             const ewbNo = String(item.eway_bill_number || '');
             if (!ewbNo) continue;
+            
             const parseDate = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
             const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
             const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();
+            
             const result = await sqRun(
               `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
               ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
             ).catch(() => null);
+            
             if (result?.changes > 0) totalNew++;
           }
         }
-        if (totalNew > 0) console.log(`[EWB Discovery] ${totalNew} new EWB(s) added from Masters India`);
-      } catch(e) { console.warn('[EWB Discovery]', e.message); }
+        if (totalNew > 0) console.log(`[EWB Discovery] ${totalNew} new EWB(s) added from Masters India (last ${daysBack} days)`);
+        return totalNew;
+      } catch(e) { 
+        console.warn('[EWB Discovery]', e.message);
+        return 0;
+      }
+    }
+
+    // Keep backward compatibility - original scheduler runs 2-day discovery every 30 min
+    async function runFetchTodayEwbs() {
+      return await runFetchEwbsForDays(2);
     }
 
     // First run after 30s startup delay, then every 4 hours
