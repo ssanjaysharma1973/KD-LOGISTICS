@@ -22,10 +22,6 @@ const { requireMasterApiKey, extractClientIdFromQuery } = masterKeyAuth;
 const { exportEwayBillsToExcel, generateExportFilename } = excelExport;
 const { getRecentExports, downloadExport, getSchedulerStatus } = exportScheduler;
 
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const MIME = {
   '.html': 'text/html',
   '.js':   'application/javascript',

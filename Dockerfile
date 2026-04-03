@@ -18,5 +18,5 @@ RUN npm run build
 ENV PORT=3000
 EXPOSE 3000
 
-# Use minimal server while we debug the full server.js
-CMD ["node", "server.minimal.js"]
+# Use full server with backend
+CMD ["node", "server.js"]
