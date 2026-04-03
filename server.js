@@ -930,6 +930,27 @@ const server = http.createServer((req, res) => {
 });
 
 async function handleRequest(req, res, rawPath) {
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).substring(7);
+  console.log(`[HTTP-${requestId}] START ${req.method} ${rawPath}`);
+  
+  // Add response timeout
+  const timeout = setTimeout(() => {
+    console.error(`[HTTP-${requestId}] TIMEOUT after 30s - forcing close`);
+    if (!res.headersSent) {
+      res.writeHead(503);
+      res.end('Request timeout');
+    } else {
+      res.destroy();
+    }
+  }, 30000);
+  
+  res.on('finish', () => {
+    clearTimeout(timeout);
+    const elapsed = Date.now() - startTime;
+    console.log(`[HTTP-${requestId}] END ${res.statusCode} (${elapsed}ms)`);
+  });
+
   try {
   const parsed = url.parse(req.url, true);
   // normalize pathname by stripping trailing slashes so routes match consistently
