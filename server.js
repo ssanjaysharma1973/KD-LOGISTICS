@@ -4081,7 +4081,8 @@ async function mastersPost(path, body) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PORT = process.env.PORT || 3000;
+// Railway deploys on port 5001; use that as primary, fallback to 3000 for local
+const PORT = process.env.PORT || (process.env.RAILWAY_ENVIRONMENT_NAME ? 5001 : 3000);
 
 // Global error handlers to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {
