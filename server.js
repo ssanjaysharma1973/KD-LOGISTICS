@@ -908,6 +908,9 @@ function sendSse(tenantId, payload) {
 }
 
 const server = http.createServer((req, res) => {
+  // Log every incoming request
+  console.log(`[HTTP] ${req.method} ${req.url} from ${req.headers.host}`);
+  
   // ── Healthcheck – sync, outside async handler ─────────────────────────────
   const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
   if (rawPath === '/health' || rawPath === '/api/health') {
@@ -916,8 +919,13 @@ const server = http.createServer((req, res) => {
   }
   // Delegate everything else to async handler
   handleRequest(req, res, rawPath).catch(err => {
-    console.error('[server] unhandled error:', err.message);
-    if (!res.headersSent) { res.writeHead(500); res.end('Internal Server Error'); }
+    console.error('[server] unhandled error in handleRequest:', err.message || err);
+    console.error('[server] error stack:', err.stack || 'no stack');
+    console.error('[server] headers sent?', res.headersSent);
+    if (!res.headersSent) { 
+      res.writeHead(500, { 'Content-Type': 'application/json' }); 
+      res.end(JSON.stringify({ error: 'Internal Server Error', details: err.message })); 
+    }
   });
 });
 
@@ -3994,7 +4002,8 @@ async function handleRequest(req, res, rawPath) {
   res.statusCode = 404; res.end(JSON.stringify({ error: 'not found' }));
 
   } catch (err) {
-    console.error('[server] unhandled request error:', err);
+    console.error('[server] unhandled request error:', err.message || err);
+    console.error('[server] stack:', err.stack || 'no stack');
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'internal server error' }));
