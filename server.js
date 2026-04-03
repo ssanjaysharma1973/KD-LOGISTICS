@@ -4236,6 +4236,7 @@ server.listen(PORT, '0.0.0.0', () => {
 
   // ── Masters India EWB Discovery: Parameterized fetch from N days back ────────── 
   // Available globally for both scheduler and manual discovery endpoint
+  // GLOBAL SCOPE: Defined here to be accessible from both scheduler and manual endpoint
   async function runFetchEwbsForDays(daysBack = 2) {
     try {
       // Guards: require Masters credentials to be configured
