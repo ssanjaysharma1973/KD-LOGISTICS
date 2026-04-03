@@ -15,10 +15,6 @@ COPY . .
 # Frontend build - outputs to ./build
 RUN npm run build
 
-# Verify backend source files are present
-RUN ls -la src/ && ls -la src/middleware/ && ls -la src/services/
-
-ENV NODE_OPTIONS=--no-warnings
 ENV PORT=3000
 EXPOSE 3000
 
