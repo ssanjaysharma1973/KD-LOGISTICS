@@ -934,9 +934,17 @@ async function runFetchEwbsForDays(daysBack = 2) {
         `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
       ).catch(() => ({ status: 0, data: null }));
       
-      if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
+      if (apiStatus !== 200) {
+        console.warn(`[EWB Discovery] API error for ${dateStr}: status=${apiStatus}`);
+        continue;
+      }
       
-      for (const item of apiData.results.message) {
+      const billsRaw = apiData?.results?.message || [];
+      console.log(`[EWB Discovery] ${dateStr}: ${billsRaw.length} total bills from API`);
+      
+      if (!Array.isArray(billsRaw)) continue;
+      
+      for (const item of billsRaw) {
         const ewbNo = String(item.eway_bill_number || '');
         if (!ewbNo) continue;
         
