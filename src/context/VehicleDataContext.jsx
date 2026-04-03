@@ -4,16 +4,15 @@
  * Auto-refreshes every 30 seconds.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { useTenant } from '../TenantContext.js';
+import { useTenant } from '../TenantContext.jsx';
+import apiClient from '../services/apiClient';
 
 const VehicleDataContext = createContext(null);
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 export function VehicleDataProvider({ children }) {
   const { tenantKey } = useTenant();
-  const clientId = tenantKey || 'CLIENT_001';
 
   const [vehicles, setVehicles] = useState([]);
   const [pois, setPois] = useState([]);
@@ -26,27 +25,20 @@ export function VehicleDataProvider({ children }) {
     const RETRY_DELAY_MS = 2000;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const response = await fetch(
-          `${API_BASE}/api/vehicles?clientId=${encodeURIComponent(clientId)}`,
-          { headers: { 'X-Tenant-ID': clientId } }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setVehicles(Array.isArray(data) ? data : (data.vehicles || []));
-          return;
-        } else if (response.status === 503 && attempt < MAX_RETRIES) {
-          console.warn(`[VehicleDataContext] Vehicles 503 — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES})`);
+        const data = await apiClient.get('/api/vehicles');
+        setVehicles(Array.isArray(data) ? data : (data.vehicles || []));
+        return;
+      } catch (error) {
+        if (error.message && attempt < MAX_RETRIES) {
+          console.warn(`[VehicleDataContext] Vehicles error — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES}):`, error.message);
           await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         } else {
-          console.error(`[VehicleDataContext] Error fetching vehicles: status ${response.status}`);
+          console.error('[VehicleDataContext] Error fetching vehicles:', error.message);
           break;
         }
-      } catch (error) {
-        console.error('[VehicleDataContext] Error fetching vehicles:', error);
-        break;
       }
     }
-  }, [clientId]);
+  }, []);
 
   // Fetch POIs — retries up to 3x on 503 (sqlite3 startup delay on Railway)
   const fetchPois = useCallback(async () => {
@@ -54,26 +46,20 @@ export function VehicleDataProvider({ children }) {
     const RETRY_DELAY_MS = 2000;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const response = await fetch(
-          `${API_BASE}/api/pois?clientId=${encodeURIComponent(clientId)}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setPois(Array.isArray(data) ? data.map(p => ({ ...p, name: p.poi_name || p.name })) : []);
-          return;
-        } else if (response.status === 503 && attempt < MAX_RETRIES) {
-          console.warn(`[VehicleDataContext] POIs 503 — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES})`);
+        const data = await apiClient.get('/api/pois');
+        setPois(Array.isArray(data) ? data.map(p => ({ ...p, name: p.poi_name || p.name })) : []);
+        return;
+      } catch (error) {
+        if (error.message && attempt < MAX_RETRIES) {
+          console.warn(`[VehicleDataContext] POIs error — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES}):`, error.message);
           await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         } else {
-          console.error(`[VehicleDataContext] Error fetching POIs: status ${response.status}`);
+          console.error('[VehicleDataContext] Error fetching POIs:', error.message);
           break;
         }
-      } catch (error) {
-        console.error('[VehicleDataContext] Error fetching POIs:', error);
-        break;
       }
     }
-  }, [clientId]);
+  }, []);
 
   // Fetch Munshis (drivers) — retries up to 3x on 503
   const fetchMunshis = useCallback(async () => {
@@ -81,27 +67,20 @@ export function VehicleDataProvider({ children }) {
     const RETRY_DELAY_MS = 2000;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const response = await fetch(
-          `${API_BASE}/api/munshis?clientId=${encodeURIComponent(clientId)}`,
-          { headers: { 'X-Tenant-ID': clientId } }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setMunshis(Array.isArray(data) ? data : (data.munshis || []));
-          return;
-        } else if (response.status === 503 && attempt < MAX_RETRIES) {
-          console.warn(`[VehicleDataContext] Munshis 503 — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES})`);
+        const data = await apiClient.get('/api/munshis');
+        setMunshis(Array.isArray(data) ? data : (data.munshis || []));
+        return;
+      } catch (error) {
+        if (error.message && attempt < MAX_RETRIES) {
+          console.warn(`[VehicleDataContext] Munshis error — retrying in ${RETRY_DELAY_MS / 1000}s (${attempt}/${MAX_RETRIES}):`, error.message);
           await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         } else {
-          console.error(`[VehicleDataContext] Error fetching munshis: status ${response.status}`);
+          console.error('[VehicleDataContext] Error fetching munshis:', error.message);
           break;
         }
-      } catch (error) {
-        console.error('[VehicleDataContext] Error fetching munshis:', error);
-        break;
       }
     }
-  }, [clientId]);
+  }, []);
 
   const intervalRef = useRef(null);
 

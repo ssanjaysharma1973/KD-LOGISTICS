@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/apiClient';
 
 const API = '/api';
 
@@ -34,9 +35,8 @@ export default function EwayBillManagement() {
 
   const fetchEwaybills = useCallback(async () => {
     try {
-      const url = statusFilter ? `${API}/ewaybills?status=${statusFilter}` : `${API}/ewaybills`;
-      const res = await fetch(url);
-      const data = await res.json();
+      const endpoint = statusFilter ? `/api/ewaybills?status=${statusFilter}` : `/api/ewaybills`;
+      const data = await apiClient.get(endpoint);
       setEwaybills(data.ewaybills || []);
     } catch (err) {
       console.error('Failed to fetch e-way bills:', err);
@@ -48,7 +48,7 @@ export default function EwayBillManagement() {
   useEffect(() => { fetchEwaybills(); }, [fetchEwaybills]);
 
   useEffect(() => {
-    fetch(`${API}/vehicles-master/dropdown?client_id=CLIENT_001`).then(r => r.json())
+    apiClient.get('/api/vehicles-master/dropdown')
       .then(vData => { setVehicles(vData.vehicles || []); })
       .catch(() => {});
   }, []);
@@ -56,12 +56,7 @@ export default function EwayBillManagement() {
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API}/ewaybills`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
+      const data = await apiClient.post('/api/ewaybills', form);
       if (data.success) {
         setShowForm(false);
         setForm(defaultForm);
@@ -77,8 +72,7 @@ export default function EwayBillManagement() {
   const handleExtend = async (ewbId) => {
     if (!window.confirm('Extend this e-way bill by 1 day?')) return;
     try {
-      const res = await fetch(`${API}/ewaybills/${ewbId}/extend`, { method: 'PUT' });
-      const data = await res.json();
+      const data = await apiClient.put(`/api/ewaybills/${ewbId}/extend`, {});
       if (data.success) fetchEwaybills();
       else alert('Error: ' + (data.error || 'Unknown'));
     } catch (err) {
@@ -89,16 +83,11 @@ export default function EwayBillManagement() {
   const handleVehicleChange = async (ewbId) => {
     if (!vehicleChangeForm.new_vehicle_number) return alert('Select a new vehicle');
     try {
-      const res = await fetch(`${API}/ewaybills/${ewbId}/update-part-b`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vehicle_number: vehicleChangeForm.new_vehicle_number,
-          change_reason: vehicleChangeForm.change_reason || 'Vehicle changed',
-          changed_by: 'admin',
-        }),
+      const data = await apiClient.put(`/api/ewaybills/${ewbId}/update-part-b`, {
+        vehicle_number: vehicleChangeForm.new_vehicle_number,
+        change_reason: vehicleChangeForm.change_reason || 'Vehicle changed',
+        changed_by: 'admin',
       });
-      const data = await res.json();
       if (data.success) {
         setShowVehicleChange(null);
         setVehicleChangeForm({ new_vehicle_number: '', change_reason: '' });
@@ -112,8 +101,7 @@ export default function EwayBillManagement() {
   const loadVehicleHistory = async (ewbId) => {
     if (expandedEwb === ewbId) { setExpandedEwb(null); return; }
     try {
-      const res = await fetch(`${API}/ewaybills/${ewbId}/vehicle-history`);
-      const data = await res.json();
+      const data = await apiClient.get(`/api/ewaybills/${ewbId}/vehicle-history`);
       setVehicleHistory(data.changes || []);
       setExpandedEwb(ewbId);
     } catch { setVehicleHistory([]); }

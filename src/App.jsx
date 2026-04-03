@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TenantContext, useTenant } from './TenantContext.js';
+import { TenantContext, useTenant, TenantProvider } from './TenantContext.jsx';
+import { getAuthHeaders } from './services/tokenManager.js';
 import {
   MapPin,
   Search,
@@ -451,7 +452,7 @@ function App() {
 
   const hasAnyFilter = selectedStatusFilter || selectedPoiFilter || selectedSizeFilter;
 
-  return (
+  const mainContent = (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', fontFamily: 'sans-serif', background: '#fff' }}>
       {/* Top navigation bar */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} dashboardView={dashboardView} setDashboardView={setDashboardView} pois={pois} onSelectPOI={setSelectedPOI} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(c => !c)} sidebarCollapsed={sidebarCollapsed} />
@@ -1853,6 +1854,12 @@ function App() {
         )}
       </div>
     </div>
+  );
+
+  return (
+    <TenantProvider>
+      {mainContent}
+    </TenantProvider>
   );
 }
 

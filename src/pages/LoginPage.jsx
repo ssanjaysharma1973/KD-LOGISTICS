@@ -7,7 +7,6 @@ import {
   LogIn,
   Truck
 } from 'lucide-react';
-import { findClientByEmail } from '../config/tenants';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -22,7 +21,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // For now, validate locally (replace with backend auth later)
+      // Validate input locally first
       if (!email || !password) {
         throw new Error('Email and password are required');
       }
@@ -35,21 +34,33 @@ export default function LoginPage() {
         throw new Error('Password must be at least 6 characters');
       }
 
-      // Find client by email (from .env config)
-      const clientId = findClientByEmail(email);
+      // Call backend /api/auth/login endpoint
+      const baseUrl = process.env.REACT_APP_API_URL || window.location.origin;
+      const response = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-      // Store user in localStorage (replace with proper token management)
-      const user = {
-        id: Math.random().toString(),
-        email,
-        name: email.split('@')[0],
-        clientId, // Store client association from .env config
-        createdAt: new Date().toISOString(),
-      };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Login failed');
+      }
 
-      localStorage.setItem('user', JSON.stringify(user));
+      const data = await response.json();
+      
+      if (!data.ok || !data.token) {
+        throw new Error('Invalid response from server');
+      }
+
+      // Store JWT token and user info
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('expiresIn', data.expiresIn);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('clientId', data.user.clientId);
       localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem('clientId', clientId); // Store for easy access
 
       // Reload page to trigger AppWrapper re-render
       window.location.href = '/';

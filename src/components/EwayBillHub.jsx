@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import apiClient from '../services/apiClient';
 
 const API = '/api/eway-bills-hub';
 
@@ -59,9 +60,8 @@ function ImportTab({ onImported }) {
     const fd = new FormData();
     fd.append('file', file);
     try {
-      const res = await fetch(`${API}/import-excel`, { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok || data.error) { setError(data.error || 'Import failed'); }
+      const data = await apiClient.post(`${API}/import-excel`, fd);
+      if (data.error) { setError(data.error || 'Import failed'); }
       else { setResult(data); onImported && onImported(); }
     } catch (e) { setError('Network error: ' + e.message); }
     setLoading(false);
@@ -161,12 +161,13 @@ function DeduplicatePanel({ onDone }) {
   const [loading, setLoading] = useState(false);
   const [purging, setPurging] = useState(false);
   const [showPurge, setShowPurge] = useState(false);
+  const [oldDate, setOldDate] = useState('');
+  const [deletingOld, setDeletingOld] = useState(false);
 
   const runDedup = async (dryRun = false) => {
     setLoading(true); setResult(null);
     try {
-      const res = await fetch(`${API}/deduplicate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dry_run: dryRun }) });
-      const data = await res.json();
+      const data = await apiClient.post(`${API}/deduplicate`, { dry_run: dryRun });
       setResult({ ...data, dry_run: dryRun });
       if (!dryRun) onDone && onDone();
     } catch (e) { setResult({ error: e.message }); }
@@ -174,16 +175,28 @@ function DeduplicatePanel({ onDone }) {
   };
 
   const runPurge = async () => {
-    if (!window.confirm('DELETE ALL e-way bills? This cannot be undone.')) return;
+    if (!window.confirm('DELETE ALL e-way bill records? This cannot be undone.')) return;
     setPurging(true);
     try {
-      const res = await fetch(`${API}/purge-all`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: 'PURGE' }) });
-      const data = await res.json();
+      const data = await apiClient.post(`${API}/purge-all`, { confirm: 'PURGE' });
       setResult({ purged: true, deleted: data.deleted });
       onDone && onDone();
     } catch (e) { setResult({ error: e.message }); }
     setPurging(false);
     setShowPurge(false);
+  };
+
+  const runDeleteOld = async () => {
+    if (!oldDate) return;
+    if (!window.confirm(`Delete ALL e-way bills with doc date BEFORE ${oldDate}? This cannot be undone.`)) return;
+    setDeletingOld(true); setResult(null);
+    try {
+      const data = await apiClient.post(`${API}/purge-old`, { confirm: 'DELETE_OLD', before_date: oldDate });
+      if (data.error) throw new Error(data.error);
+      setResult({ deletedOld: true, deleted: data.deleted, cutoff: data.cutoff });
+      onDone && onDone();
+    } catch (e) { setResult({ error: e.message }); }
+    setDeletingOld(false);
   };
 
   return (
@@ -223,6 +236,8 @@ function DeduplicatePanel({ onDone }) {
         <div style={{ marginTop: 12, padding: '10px 14px', background: result.dry_run ? '#eff6ff' : '#f0fdf4', border: `1px solid ${result.dry_run ? '#bfdbfe' : '#86efac'}`, borderRadius: 8, fontSize: 13 }}>
           {result.purged
             ? <span style={{ color: '#991b1b' }}>🗑️ Deleted {result.deleted} records.</span>
+            : result.deletedOld
+            ? <span style={{ color: '#991b1b' }}>🗑️ Deleted {result.deleted} records older than {result.cutoff}.</span>
             : <>
                 <strong>{result.dry_run ? '🔍 Preview:' : '✅ Done:'}</strong>{' '}
                 {result.truncated_removed} truncated EWB records removed,{' '}
@@ -233,6 +248,29 @@ function DeduplicatePanel({ onDone }) {
         </div>
       )}
       {result?.error && <div style={{ marginTop: 10, padding: '8px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: 8, fontSize: 13 }}>{result.error}</div>}
+
+      {/* Delete Old Data */}
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #e5e7eb' }}>
+        <div style={{ fontWeight: 600, color: '#374151', marginBottom: 6, fontSize: 14 }}>🗓️ Delete Old EWBs by Date</div>
+        <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 10px' }}>
+          Permanently delete all e-way bills with a doc date <strong>before</strong> the selected date.
+        </p>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="date"
+            value={oldDate}
+            onChange={e => setOldDate(e.target.value)}
+            style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }}
+          />
+          <button
+            onClick={runDeleteOld}
+            disabled={!oldDate || deletingOld}
+            style={{ padding: '8px 18px', background: oldDate ? '#dc2626' : '#f3f4f6', color: oldDate ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, cursor: oldDate ? 'pointer' : 'default', fontWeight: 700, fontSize: 13 }}
+          >
+            {deletingOld ? '⏳ Deleting…' : '🗑️ Delete Before This Date'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -243,6 +281,7 @@ function BillsListTab() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ movement_type: '', status: '', vehicle_no: '', search: '', date_from: '', date_to: '' });
+  const [searchInput, setSearchInput] = useState(''); // local input — not committed yet
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState(null);
   const PER_PAGE = 50;
@@ -251,8 +290,7 @@ function BillsListTab() {
     setLoading(true);
     const params = new URLSearchParams({ page, per_page: PER_PAGE, ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) });
     try {
-      const res = await fetch(`${API}?${params}`);
-      const data = await res.json();
+      const data = await apiClient.get(`${API}?${params}`);
       setBills(data.bills || []);
       setTotal(data.total || 0);
     } catch { setBills([]); }
@@ -263,23 +301,37 @@ function BillsListTab() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this e-way bill?')) return;
-    await fetch(`${API}/${id}`, { method: 'DELETE' });
+    await apiClient.delete(`${API}/${id}`);
     fetchBills();
   };
 
   const handleReclassify = async () => {
-    await fetch(`${API}/reclassify`, { method: 'POST' });
+    await apiClient.post(`${API}/reclassify`, {});
     fetchBills();
   };
 
   const fld = (k, v) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); };
 
+  const commitSearch = () => { fld('search', searchInput.trim()); };
+  const clearSearch = () => { setSearchInput(''); fld('search', ''); };
+
   return (
     <div>
       {/* Filters */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, alignItems: 'flex-end' }}>
-        <input placeholder="🔍 Search EWB no / vehicle / place…" value={filters.search} onChange={e => fld('search', e.target.value)}
-          style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, minWidth: 220 }} />
+        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: 8, overflow: 'hidden', background: '#fff', minWidth: 280 }}>
+          <input
+            placeholder="🔍 Search EWB no / vehicle / place…"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') commitSearch(); if (e.key === 'Escape') clearSearch(); }}
+            style={{ padding: '7px 12px', border: 'none', outline: 'none', fontSize: 13, flex: 1, minWidth: 0 }}
+          />
+          {searchInput && (
+            <button onClick={clearSearch} title="Clear" style={{ padding: '0 8px', border: 'none', background: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+          )}
+          <button onClick={commitSearch} style={{ padding: '7px 14px', background: '#2563eb', color: '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>Search</button>
+        </div>
         <select value={filters.movement_type} onChange={e => fld('movement_type', e.target.value)}
           style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }}>
           <option value="">All Types</option>
@@ -352,13 +404,8 @@ function BillsListTab() {
                             onClick={async (e) => {
                               e.stopPropagation();
                               try {
-                                const res = await fetch(`${API}/${b.id}`, {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ status: 'delivered' }),
-                                });
-                                const data = await res.json();
-                                if (res.ok && !data.error) fetchBills();
+                                const data = await apiClient.patch(`${API}/${b.id}`, { status: 'delivered' });
+                                if (!data.error) fetchBills();
                                 else alert(data.error || 'Save failed');
                               } catch (err) { alert('Network error: ' + err.message); }
                             }}
@@ -433,14 +480,9 @@ function QuickStatusUpdate({ bill, onUpdated }) {
     setSaving(true);
     setMsg(null);
     try {
-      const res = await fetch(`${API}/${bill.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        setMsg({ ok: false, text: data.error || `Server error ${res.status}` });
+      const data = await apiClient.patch(`${API}/${bill.id}`, { status });
+      if (data.error) {
+        setMsg({ ok: false, text: data.error || 'Save failed' });
       } else {
         setMsg({ ok: true, text: `✅ Saved as "${status}"` });
         onUpdated();
@@ -550,11 +592,7 @@ function VehicleChip({ v, pois = [] }) {
     setFwding(poi.id);
     try {
       await Promise.all(activeEwbs.map(ewb =>
-        fetch(`/api/eway-bills-hub/${ewb.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to_poi_id: String(poi.id), to_poi_name: poi.poi_name }),
-        })
+        apiClient.patch(`/api/eway-bills-hub/${ewb.id}`, { to_poi_id: String(poi.id), to_poi_name: poi.poi_name })
       ));
       setOpen(false); setSelCity(''); setOrgQ('');
     } finally { setFwding(null); }
@@ -690,14 +728,13 @@ function VehicleMovementTab() {
   const [pois, setPois] = useState([]);
 
   useEffect(() => {
-    fetch('/api/pois?clientId=CLIENT_001').then(r => r.json()).then(d => setPois(Array.isArray(d) ? d : [])).catch(() => {});
+    apiClient.get('/api/pois').then(d => setPois(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   const fetch_ = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch(`${API}/vehicle-movement`);
-      const data = await res.json();
+      const data = await apiClient.get(`${API}/vehicle-movement`);
       setVehicles(data.vehicles || []);
     } catch { setVehicles([]); }
     setLoading(false);
@@ -913,8 +950,7 @@ function WarningsTab() {
   const fetch_ = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch(`${API}/warnings`);
-      const data = await res.json();
+      const data = await apiClient.get(`${API}/warnings`);
       setWarnings(data.warnings || []);
     } catch { setWarnings([]); }
     setLoading(false);
@@ -986,7 +1022,7 @@ function SummaryTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/summary`).then(r => r.json()).then(d => { setSummary(d); setLoading(false); }).catch(() => setLoading(false));
+    apiClient.get(`${API}/summary`).then(d => { setSummary(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>Loading summary…</div>;
@@ -1136,8 +1172,7 @@ function PoiPicker({ suggestions, placeholder, onSelect, value }) {
     if (!q.trim()) { setResults(suggestions || []); return; }
     setFetching(true);
     try {
-      const res = await fetch(`${API}/suggest-pois?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
+      const data = await apiClient.get(`${API}/suggest-pois?q=${encodeURIComponent(q)}`);
       setResults(data.pois || []);
     } catch { setResults([]); }
     setFetching(false);
@@ -1199,8 +1234,7 @@ function UnmatchedPoisTab() {
     setLoading(true);
     const params = new URLSearchParams({ threshold, page, per_page: PER_PAGE });
     try {
-      const res = await fetch(`${API}/unmatched-pois?${params}`);
-      const data = await res.json();
+      const data = await apiClient.get(`${API}/unmatched-pois?${params}`);
       setBills(data.bills || []);
       setTotal(data.total || 0);
     } catch { setBills([]); }
@@ -1225,11 +1259,7 @@ function UnmatchedPoisTab() {
 
     setSaving(s => ({ ...s, [bill.id]: true }));
     try {
-      await fetch(`${API}/${bill.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      await apiClient.patch(`${API}/${bill.id}`, payload);
       setAssigns(a => { const n = { ...a }; delete n[bill.id]; return n; });
       fetchBills();
     } catch { /* handled silently */ }
@@ -1240,12 +1270,7 @@ function UnmatchedPoisTab() {
     setRematching(true);
     setRematchResult(null);
     try {
-      const res = await fetch(`${API}/rematch-pois`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threshold }),
-      });
-      const data = await res.json();
+      const data = await apiClient.post(`${API}/rematch-pois`, { threshold });
       setRematchResult(data);
       fetchBills();
     } catch { setRematchResult({ error: 'Request failed' }); }
@@ -1285,12 +1310,7 @@ function UnmatchedPoisTab() {
     if (!form?.name?.trim()) return;
     setCreateForms(f => ({ ...f, [key]: { ...f[key], submitting: true, error: null } }));
     try {
-      const res = await fetch(`${API}/create-poi`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ poi_name: form.name.trim(), city: form.city.trim(), pin_code: form.pin.trim(), type: 'secondary' }),
-      });
-      const data = await res.json();
+      const data = await apiClient.post(`${API}/create-poi`, { poi_name: form.name.trim(), city: form.city.trim(), pin_code: form.pin.trim(), type: 'secondary' });
       if (!data.success) throw new Error(data.error || 'Create failed');
       const newPoi = data.poi;
 
@@ -1537,21 +1557,16 @@ function ExtendModal({ ewb, onClose, onExtended }) {
     if (!form.from_place.trim()) { alert('Enter current location (From Place)'); return; }
     setLoading(true); setResult(null);
     try {
-      const res = await fetch(`${EWB_API}/extend-validity`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ewb_no: ewb.ewb_no,
-          vehicle_no: ewb.vehicle_no,
-          from_place: form.from_place,
-          from_state: form.from_state,
-          remaining_distance: parseInt(form.remaining_distance) || 100,
-          exten_reason: form.exten_reason,
-          exten_remarks: form.exten_remarks,
-          trans_doc_no: form.trans_doc_no,
-        }),
+      const data = await apiClient.post(`${EWB_API}/extend-validity`, {
+        ewb_no: ewb.ewb_no,
+        vehicle_no: ewb.vehicle_no,
+        from_place: form.from_place,
+        from_state: form.from_state,
+        remaining_distance: parseInt(form.remaining_distance) || 100,
+        exten_reason: form.exten_reason,
+        exten_remarks: form.exten_remarks,
+        trans_doc_no: form.trans_doc_no,
       });
-      const data = await res.json();
       setResult(data);
       if (data.status === 'success') onExtended && onExtended(ewb.ewb_no, data.new_validity);
     } catch (e) {
@@ -1638,7 +1653,7 @@ function CompleteModal({ ewb, onClose, onCompleted }) {
   const [done, setDone] = React.useState(false);
 
   React.useEffect(() => {
-    fetch('/api/munshis').then(r => r.json()).then(d => setMunshis(Array.isArray(d) ? d : [])).catch(() => {});
+    apiClient.get('/api/munshis').then(d => setMunshis(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   const selM = munshis.find(m => String(m.id) === selMunshi);
@@ -1649,36 +1664,27 @@ function CompleteModal({ ewb, onClose, onCompleted }) {
     setLoading(true); setErr('');
     try {
       // 1. Mark EWB delivered + assign munshi
-      const pr = await fetch(`${API}/${ewb.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'delivered', munshi_id: selMunshi, munshi_name: selM?.name || '' }),
-      });
-      const pd = await pr.json();
+      const pd = await apiClient.patch(`${API}/${ewb.id}`, { status: 'delivered', munshi_id: selMunshi, munshi_name: selM?.name || '' });
       if (pd.error) throw new Error(pd.error);
 
       // 2. Create munshi trip with linked expense
-      await fetch('/api/munshi-trips', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vehicle_no: ewb.vehicle_no || '',
-          ewb_no: ewb.ewb_no,
-          from_poi_name: ewb.from_poi_name || ewb.from_place || '',
-          to_poi_name: ewb.to_poi_name || ewb.to_place || '',
-          trip_date: new Date().toISOString().slice(0, 10),
-          munshi_id: selMunshi,
-          munshi_name: selM?.name || '',
-          km: parseFloat(exp.km) || 0,
-          toll: parseFloat(exp.toll) || 0,
-          exp_admin: parseFloat(exp.exp_admin) || 0,
-          exp_munshi: parseFloat(exp.exp_munshi) || 0,
-          exp_cash_fuel: parseFloat(exp.exp_cash_fuel) || 0,
-          exp_unloading: parseFloat(exp.exp_unloading) || 0,
-          exp_other: parseFloat(exp.exp_other) || 0,
-          notes,
-          status: 'open',
-        }),
+      await apiClient.post('/api/munshi-trips', {
+        vehicle_no: ewb.vehicle_no || '',
+        ewb_no: ewb.ewb_no,
+        from_poi_name: ewb.from_poi_name || ewb.from_place || '',
+        to_poi_name: ewb.to_poi_name || ewb.to_place || '',
+        trip_date: new Date().toISOString().slice(0, 10),
+        munshi_id: selMunshi,
+        munshi_name: selM?.name || '',
+        km: parseFloat(exp.km) || 0,
+        toll: parseFloat(exp.toll) || 0,
+        exp_admin: parseFloat(exp.exp_admin) || 0,
+        exp_munshi: parseFloat(exp.exp_munshi) || 0,
+        exp_cash_fuel: parseFloat(exp.exp_cash_fuel) || 0,
+        exp_unloading: parseFloat(exp.exp_unloading) || 0,
+        exp_other: parseFloat(exp.exp_other) || 0,
+        notes,
+        status: 'open',
       });
       setDone(true);
       setTimeout(() => { onCompleted && onCompleted(ewb.ewb_no, selM?.name || ''); }, 1400);
@@ -1769,9 +1775,7 @@ function NicLiveTab() {
   const loadList = React.useCallback(async () => {
     setListLoading(true); setListError('');
     try {
-      const res = await fetch(`${EWB_API}/active-list`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed');
+      const data = await apiClient.get(`${EWB_API}/active-list`);
       setActiveList(data);
     } catch (e) { setListError(e.message); }
     setListLoading(false);
@@ -1780,15 +1784,24 @@ function NicLiveTab() {
   const handleSyncLastDays = React.useCallback(async (days = 5) => {
     setSyncing(true); setSyncMsg('');
     try {
-      const res = await fetch(`${EWB_API}/sync-last-days`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days }),
-      });
-      const data = await res.json();
+      const data = await apiClient.post(`${EWB_API}/sync-last-days`, { days });
       if (data.status === 'error') throw new Error(data.message);
       setSyncMsg(`✅ Synced ${data.synced} EWBs (last ${days} days since ${data.since})`);
       await loadList();
+    } catch (e) { setSyncMsg(`❌ ${e.message}`); }
+    setSyncing(false);
+  }, [loadList]);
+
+  const handleFetchToday = React.useCallback(async () => {
+    setSyncing(true); setSyncMsg('');
+    try {
+      const data = await apiClient.post(`${EWB_API}/fetch-today`, { days_back: 1 });
+      if (data.error) throw new Error(data.error);
+      const msg = data.new > 0
+        ? `✅ ${data.new} new EWB(s) added from Masters India`
+        : `✅ No new EWBs — ${data.seen} seen, all already in list`;
+      setSyncMsg(msg);
+      if (data.new > 0) await loadList();
     } catch (e) { setSyncMsg(`❌ ${e.message}`); }
     setSyncing(false);
   }, [loadList]);
@@ -1798,14 +1811,11 @@ function NicLiveTab() {
     const init = async () => {
       setListLoading(true);
       try {
-        const res = await fetch(`${EWB_API}/active-list`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Failed');
+        const data = await apiClient.get(`${EWB_API}/active-list`);
         if (data.length === 0) {
           // First time — load entire current month
           setSyncing(true); setSyncMsg("⏳ First load: syncing this month's EWBs…");
-          const r2 = await fetch(`${EWB_API}/sync-this-month`, { method: 'POST' });
-          const d2 = await r2.json();
+          const d2 = await apiClient.post(`${EWB_API}/sync-this-month`, {});
           setSyncMsg(`✅ Loaded ${d2.synced} EWBs for this month (since ${d2.since})`);
           setSyncing(false);
           await loadList();
@@ -1823,8 +1833,7 @@ function NicLiveTab() {
     if (!no) return;
     setSearchLoading(true); setSearchError(''); setSearchResult(null);
     try {
-      const res = await fetch(`${EWB_API}/details/${encodeURIComponent(no)}`);
-      const data = await res.json();
+      const data = await apiClient.get(`${EWB_API}/details/${encodeURIComponent(no)}`);
       if (data.status === 'error') { setSearchError(data.message); }
       else { setSearchResult(data.data); }
     } catch (e) { setSearchError(e.message); }
@@ -1842,12 +1851,8 @@ function NicLiveTab() {
   };
 
   const handleGpsConfirm = async (e) => {
-    const r = await fetch(`${API}/${e.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'delivered' }),
-    });
-    if (r.ok) setActiveList(list => list.map(x => x.ewb_no === e.ewb_no ? { ...x, status: 'DEL' } : x));
+    const r = await apiClient.patch(`${API}/${e.id}`, { status: 'delivered' });
+    if (r && !r.error) setActiveList(list => list.map(x => x.ewb_no === e.ewb_no ? { ...x, status: 'DEL' } : x));
   };
 
   const [statusFilter, setStatusFilter] = React.useState('all'); // all | ACT | DEL
@@ -1860,12 +1865,7 @@ function NicLiveTab() {
   const handleFetchFromNic = async () => {
     setNicFetching(true); setNicMsg('');
     try {
-      const res = await fetch(`${EWB_API}/fetch-from-nic`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: nicDate, status: 'ACT' }),
-      });
-      const data = await res.json();
+      const data = await apiClient.post(`${EWB_API}/fetch-from-nic`, { date: nicDate, status: 'ACT' });
       if (data.status === 'error') throw new Error(data.message);
       if (data.status === 'nic_error') {
         setNicMsg(`⚠️ NIC: ${data.message}`);
@@ -1978,6 +1978,10 @@ function NicLiveTab() {
               );
             })}
             <button onClick={loadList} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, cursor: 'pointer', background: '#fff' }}>🔄 Refresh</button>
+            <button onClick={handleFetchToday} disabled={syncing}
+              style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #2563eb', fontSize: 12, cursor: 'pointer', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700 }}>
+              {syncing ? '⏳ Fetching…' : '📥 Fetch Today\'s EWBs'}
+            </button>
             <button onClick={() => handleSyncLastDays(5)} disabled={syncing}
               style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #16a34a', fontSize: 12, cursor: 'pointer', background: '#f0fdf4', color: '#15803d', fontWeight: 700 }}>
               {syncing ? '⏳ Syncing…' : '⬇️ Sync Last 5 Days'}
@@ -2075,8 +2079,7 @@ function ByPoiTab() {
   const [dirFilter, setDirFilter] = useState('all'); // 'all'|'outbound'|'inbound'|'active'
 
   useEffect(() => {
-    fetch('/api/pois?clientId=CLIENT_001')
-      .then(r => r.json())
+    apiClient.get('/api/pois')
       .then(d => setPois(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, []);
@@ -2085,8 +2088,8 @@ function ByPoiTab() {
     if (!selPoi) { setEwbs([]); return; }
     setLoading(true);
     Promise.all([
-      fetch(`/api/ewaybills?clientId=CLIENT_001&from_poi_id=${encodeURIComponent(selPoi)}`).then(r => r.json()).catch(() => []),
-      fetch(`/api/ewaybills?clientId=CLIENT_001&to_poi_id=${encodeURIComponent(selPoi)}`).then(r => r.json()).catch(() => []),
+      apiClient.get(`/api/ewaybills?from_poi_id=${encodeURIComponent(selPoi)}`).catch(() => []),
+      apiClient.get(`/api/ewaybills?to_poi_id=${encodeURIComponent(selPoi)}`).catch(() => []),
     ]).then(([from, to]) => {
       const fromArr = (Array.isArray(from) ? from : from.bills || []).map(e => ({ ...e, _dir: 'outbound' }));
       const toArr   = (Array.isArray(to)   ? to   : to.bills   || []).map(e => ({ ...e, _dir: 'inbound'  }));
@@ -2102,7 +2105,7 @@ function ByPoiTab() {
   }, [selPoi]);
 
   const closeEwb = async (id) => {
-    await fetch(`/api/ewaybills/${id}/close`, { method: 'PUT' }).catch(() => {});
+    await apiClient.put(`/api/ewaybills/${id}/close`, {}).catch(() => {});
     setEwbs(prev => prev.map(e => e.id === id ? { ...e, status: 'delivered' } : e));
   };
 
@@ -2209,8 +2212,334 @@ function ByPoiTab() {
   );
 }
 
+// ─── ASSIGN VEHICLE (PART B) TAB ─────────────────────────────────────────────
+function AssignVehicleTab() {
+  const [ewbNo, setEwbNo] = useState('');
+  const [fetching, setFetching] = useState(false);
+  const [ewbData, setEwbData] = useState(null);
+  const [fetchErr, setFetchErr] = useState('');
+
+  const [vehicles, setVehicles] = useState([]);
+  const [vehicleNo, setVehicleNo] = useState('');
+  const [place, setPlace] = useState('');
+  const [state, setState] = useState('Rajasthan');
+  const [transDocNo, setTransDocNo] = useState('');
+  const [transDocDate, setTransDocDate] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState(null);
+  const [submitErr, setSubmitErr] = useState('');
+
+  useEffect(() => {
+    fetch('/api/vehicles?client_id=CLIENT_001&limit=200')
+      .then(r => r.json())
+      .then(d => {
+        const list = d.vehicles || d.data || d || [];
+        setVehicles(Array.isArray(list) ? list : []);
+      }).catch(() => {});
+  }, []);
+
+  const handleFetch = async () => {
+    if (!ewbNo.trim()) return;
+    setFetching(true); setFetchErr(''); setEwbData(null); setSubmitResult(null); setSubmitErr('');
+    try {
+      const res = await fetch(`/api/ewb/details/${encodeURIComponent(ewbNo.trim())}?client_id=CLIENT_001`);
+      const d = await res.json();
+      if (d.status === 'ok') {
+        setEwbData(d.data);
+        // Pre-fill place from consignor info if available
+        if (d.data.place_of_consignor) setPlace(d.data.place_of_consignor);
+        if (d.data.state_of_consignor) setState(d.data.state_of_consignor);
+      } else {
+        setFetchErr(d.message || 'EWB not found. Make sure the EWB number is correct and belongs to your GSTIN.');
+      }
+    } catch (e) { setFetchErr('Network error: ' + e.message); }
+    setFetching(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!vehicleNo) { setSubmitErr('Please select a vehicle'); return; }
+    if (!place.trim()) { setSubmitErr('Please enter the current place/location'); return; }
+    setSubmitting(true); setSubmitErr(''); setSubmitResult(null);
+    try {
+      const today = new Date();
+      const dd = String(today.getDate()).padStart(2,'0');
+      const mm = String(today.getMonth()+1).padStart(2,'0');
+      const yyyy = today.getFullYear();
+      const res = await fetch('/api/ewb/update-vehicle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: 'CLIENT_001',
+          ewb_no: ewbNo.trim(),
+          vehicle_number: vehicleNo,
+          place_of_consignor: place.trim(),
+          state_of_consignor: state,
+          mode_of_transport: 1,
+          reason_code: 'Others',
+          transporter_document_number: transDocNo.trim() || '',
+          transporter_document_date: transDocDate
+            ? (() => { const [y,m,d2] = transDocDate.split('-'); return `${d2}/${m}/${y}`; })()
+            : `${dd}/${mm}/${yyyy}`,
+        })
+      });
+      const d = await res.json();
+      if (d.status === 'success') {
+        setSubmitResult(d);
+        // refresh EWB data
+        handleFetch();
+      } else {
+        setSubmitErr(d.message || 'Failed to update vehicle. Check EWB validity.');
+      }
+    } catch (e) { setSubmitErr('Network error: ' + e.message); }
+    setSubmitting(false);
+  };
+
+  const infoRow = (label, value, bold) => value ? (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontSize: 13 }}>
+      <span style={{ color: '#6b7280', minWidth: 160 }}>{label}</span>
+      <span style={{ color: '#111827', fontWeight: bold ? 700 : 400 }}>{value}</span>
+    </div>
+  ) : null;
+
+  return (
+    <div style={{ maxWidth: 820, margin: '0 auto' }}>
+      {/* Step 1 — Enter EWB number */}
+      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 24, marginBottom: 16 }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: '#111827' }}>🔍 Step 1 — Enter EWB Number</h3>
+        <p style={{ margin: '0 0 16px', color: '#6b7280', fontSize: 13 }}>
+          Customer shares an EWB number with you. Enter it below to fetch Part A details.
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <input
+            value={ewbNo}
+            onChange={e => setEwbNo(e.target.value.replace(/\D/g,''))}
+            onKeyDown={e => e.key === 'Enter' && handleFetch()}
+            placeholder="Enter 12-digit EWB number (e.g. 321009218808)"
+            maxLength={12}
+            style={{ flex: 1, padding: '10px 14px', border: '1.5px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none' }}
+          />
+          <button
+            onClick={handleFetch}
+            disabled={fetching || !ewbNo.trim()}
+            style={{ padding: '10px 24px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: fetching ? 'wait' : 'pointer', opacity: !ewbNo.trim() ? 0.5 : 1 }}
+          >
+            {fetching ? '⏳ Fetching...' : '🔍 Fetch Details'}
+          </button>
+        </div>
+        {fetchErr && <div style={{ marginTop: 10, padding: '10px 14px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>{fetchErr}</div>}
+      </div>
+
+      {/* Step 2 — Part A details */}
+      {ewbData && (
+        <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 24, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 16, color: '#111827' }}>📋 Part A — EWB Details</h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {ewbData.eway_bill_status && (
+                <Badge
+                  text={ewbData.eway_bill_status}
+                  color={ewbData.eway_bill_status === 'Active' ? '#166534' : '#991b1b'}
+                  bg={ewbData.eway_bill_status === 'Active' ? '#dcfce7' : '#fee2e2'}
+                />
+              )}
+              {ewbData.hours_left != null && (
+                <Badge
+                  text={ewbData.hours_left > 0 ? `⏳ ${ewbData.hours_left}h left` : '🔴 Expired'}
+                  color={ewbData.hours_left > 24 ? '#166534' : ewbData.hours_left > 0 ? '#92400e' : '#991b1b'}
+                  bg={ewbData.hours_left > 24 ? '#dcfce7' : ewbData.hours_left > 0 ? '#fef3c7' : '#fee2e2'}
+                />
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+            <div>
+              <div style={{ fontWeight: 700, color: '#374151', fontSize: 12, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>EWB Info</div>
+              {infoRow('EWB Number', ewbData.eway_bill_number || ewbNo, true)}
+              {infoRow('EWB Date', ewbData.eway_bill_date)}
+              {infoRow('Valid Upto', ewbData.eway_bill_valid_date, true)}
+              {infoRow('Document No.', ewbData.document_number)}
+              {infoRow('Document Date', ewbData.document_date)}
+              {infoRow('Invoice Value', ewbData.total_invoice_value != null ? `₹${Number(ewbData.total_invoice_value).toLocaleString('en-IN')}` : null)}
+              {infoRow('Distance', ewbData.transportation_distance ? `${ewbData.transportation_distance} km` : null)}
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: '#374151', fontSize: 12, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Consignor → Consignee</div>
+              {infoRow('From', ewbData.legal_name_of_consignor, true)}
+              {infoRow('', `${ewbData.place_of_consignor || ''}${ewbData.state_of_consignor ? ', '+ewbData.state_of_consignor : ''}`)}
+              {infoRow('GSTIN (Consignor)', ewbData.gstin_of_consignor)}
+              {infoRow('To', ewbData.legal_name_of_consignee, true)}
+              {infoRow('', `${ewbData.place_of_consignee || ''}${ewbData.state_of_supply ? ', '+ewbData.state_of_supply : ''}`)}
+              {infoRow('GSTIN (Consignee)', ewbData.gstin_of_consignee)}
+            </div>
+          </div>
+
+          {/* Items */}
+          {ewbData.itemList && ewbData.itemList.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontWeight: 700, color: '#374151', fontSize: 12, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Goods</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb' }}>
+                    {['Product', 'HSN', 'Qty', 'Unit', 'Taxable Amount'].map(h => (
+                      <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#6b7280', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ewbData.itemList.map((item, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '6px 10px', color: '#111827' }}>{item.product_name}</td>
+                      <td style={{ padding: '6px 10px', color: '#6b7280' }}>{item.hsn_code}</td>
+                      <td style={{ padding: '6px 10px', color: '#374151' }}>{item.quantity}</td>
+                      <td style={{ padding: '6px 10px', color: '#374151' }}>{item.unit_of_product}</td>
+                      <td style={{ padding: '6px 10px', color: '#111827', fontWeight: 600 }}>₹{Number(item.taxable_amount).toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Current vehicle assignment if any */}
+          {ewbData.VehiclListDetails && ewbData.VehiclListDetails.length > 0 && (
+            <div style={{ marginTop: 16, padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', marginBottom: 4 }}>Currently Assigned Vehicle</div>
+              <div style={{ fontSize: 13, color: '#166534' }}>
+                🚛 <strong>{ewbData.VehiclListDetails[0].vehicle_number}</strong>
+                {ewbData.VehiclListDetails[0].place_of_consignor && ` — from ${ewbData.VehiclListDetails[0].place_of_consignor}`}
+                <span style={{ color: '#6b7280', marginLeft: 8, fontSize: 12 }}>{ewbData.VehiclListDetails[0].vehicle_number_update_date}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 3 — Assign vehicle (Part B) */}
+      {ewbData && (
+        <div style={{ background: '#fff', borderRadius: 12, border: '1.5px solid #bfdbfe', padding: 24 }}>
+          <h3 style={{ margin: '0 0 4px', fontSize: 16, color: '#1d4ed8' }}>🚛 Step 2 — Assign Vehicle (Part B)</h3>
+          <p style={{ margin: '0 0 18px', color: '#6b7280', fontSize: 13 }}>
+            This will update Part B on the NIC / Masters India system directly.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            {/* Vehicle */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Vehicle Number *</label>
+              <select
+                value={vehicleNo}
+                onChange={e => setVehicleNo(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' }}
+              >
+                <option value="">— Select vehicle —</option>
+                {vehicles.map(v => {
+                  const vno = v.vehicle_no || v.vehicle_number || '';
+                  return <option key={vno} value={vno}>{vno}{v.driver_name ? ` (${v.driver_name})` : ''}</option>;
+                })}
+                <option value="__manual__">✏️ Type manually...</option>
+              </select>
+              {vehicleNo === '__manual__' && (
+                <input
+                  placeholder="e.g. RJ14GC5678"
+                  onChange={e => setVehicleNo(e.target.value.toUpperCase())}
+                  style={{ width: '100%', marginTop: 8, padding: '10px 12px', border: '1.5px solid #d1d5db', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              )}
+            </div>
+
+            {/* Current place */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Current Place / Loading Point *</label>
+              <input
+                value={place}
+                onChange={e => setPlace(e.target.value)}
+                placeholder="e.g. Jaipur"
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #d1d5db', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
+              />
+            </div>
+
+            {/* State */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>State</label>
+              <select
+                value={state}
+                onChange={e => setState(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' }}
+              >
+                {['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Jammu and Kashmir','Ladakh'].map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Transporter Doc No (optional) */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+                Transporter Doc No <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <input
+                value={transDocNo}
+                onChange={e => setTransDocNo(e.target.value)}
+                placeholder="e.g. LR/2026/0401"
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #d1d5db', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
+              />
+            </div>
+
+            {/* Transporter Doc Date (optional) */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+                Transporter Doc Date <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <input
+                type="date"
+                value={transDocDate}
+                onChange={e => setTransDocDate(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #d1d5db', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
+              />
+            </div>
+          </div>
+
+          {submitErr && (
+            <div style={{ marginTop: 16, padding: '10px 14px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>
+              ❌ {submitErr}
+            </div>
+          )}
+
+          {submitResult && (
+            <div style={{ marginTop: 16, padding: '14px 18px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, color: '#166534', fontSize: 13 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>✅ Part B updated successfully!</div>
+              <div>Vehicle <strong>{vehicleNo}</strong> assigned to EWB <strong>{ewbNo}</strong> on Masters India.</div>
+              {submitResult.api_response?.results?.message?.vehUpdDate && (
+                <div style={{ marginTop: 4, color: '#15803d' }}>Updated at: {submitResult.api_response.results.message.vehUpdDate}</div>
+              )}
+              <div style={{ marginTop: 6, color: '#15803d', fontSize: 12 }}>📋 EWB saved to Bills List — visible in the Bills tab.</div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !vehicleNo || vehicleNo === '__manual__' || !place.trim()}
+              style={{
+                padding: '12px 32px', background: submitting ? '#93c5fd' : '#1d4ed8', color: '#fff',
+                border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 15,
+                cursor: submitting ? 'wait' : 'pointer',
+                opacity: (!vehicleNo || vehicleNo === '__manual__' || !place.trim()) ? 0.5 : 1
+              }}
+            >
+              {submitting ? '⏳ Updating...' : '🚛 Assign Vehicle (Update Part B)'}
+            </button>
+        </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TABS = [
-  { key: 'vehicles',  label: '🚛 Vehicle Movement' },
+  { key: 'assign',    label: '🚛 Assign Vehicle (Part B)' },
+  { key: 'vehicles',  label: '📍 Vehicle Movement' },
   { key: 'summary',   label: '📊 Summary' },
   { key: 'bills',     label: '📋 Bills List' },
   { key: 'byPoi',    label: '📍 By POI' },
@@ -2220,7 +2549,7 @@ const TABS = [
   { key: 'live',      label: '🔴 Live EWB' },
 ];
 
-export default function EwayBillHub({ defaultTab = 'vehicles' }) {
+export default function EwayBillHub({ defaultTab = 'assign' }) {
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [summary, setSummary] = useState(null);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
@@ -2275,6 +2604,7 @@ export default function EwayBillHub({ defaultTab = 'vehicles' }) {
 
       {/* Tab content */}
       <div style={{ marginTop: 12 }}>
+      {activeTab === 'assign'    && <AssignVehicleTab />}
       {activeTab === 'import'    && <ImportTab onImported={() => { fetchSummary(); fetchUnmatchedCount(); }} />}
       {activeTab === 'bills'     && <BillsListTab />}
       {activeTab === 'vehicles'  && <VehicleMovementTab />}
