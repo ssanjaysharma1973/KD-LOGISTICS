@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 00:45 UTC - Module scope fix  
+# Build on: 2026-04-04 00:55 UTC - Debug logging 
 FROM node:20-slim
 
 WORKDIR /app
