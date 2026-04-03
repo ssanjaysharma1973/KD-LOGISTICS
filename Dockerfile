@@ -16,6 +16,11 @@ COPY . .
 RUN npm run build
 
 ENV PORT=3000
+ENV MASTER_API_KEY=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2
+ENV MASTERS_API_URL=https://sandb-api.mastersindia.co
+ENV MASTERS_USERNAME=sanjaysec28@gmail.com
+ENV MASTERS_PASSWORD=Sanjaysec@123
+ENV MASTERS_GSTIN=05AAABB0639G1Z8
 EXPOSE 3000
 
 # Use full server with backend
