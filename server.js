@@ -4052,6 +4052,20 @@ async function mastersPost(path, body) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
+
+// Global error handlers to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled Rejection:', reason);
+  console.error(reason?.stack);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[FATAL] Uncaught Exception:', error);
+  console.error(error?.stack);
+  // Re-throw to let process manager handle restart
+  process.exit(1);
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ [SERVER] Listening on http://0.0.0.0:${PORT}`);
 
@@ -4207,5 +4221,19 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('[EWB AutoRefresh] Scheduler started — every 4 hours + discovery every 30 min');
   } else {
     console.warn('[EWB AutoRefresh] MASTERS_USERNAME/MASTERS_GSTIN not set — EWB auto-refresh disabled');
+  }
+});
+
+// Server error handlers
+server.on('error', (err) => {
+  console.error('[SERVER-ERROR]', err.message);
+  console.error(err.stack);
+  process.exit(1);
+});
+
+server.on('clientError', (err, socket) => {
+  console.error('[CLIENT-ERROR]', err.message);
+  if (socket.writable) {
+    socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
   }
 });
