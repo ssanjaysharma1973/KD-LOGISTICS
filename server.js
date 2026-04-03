@@ -4234,6 +4234,64 @@ server.listen(PORT, '0.0.0.0', () => {
     console.warn('[AutoSync] PROVIDER_API_URL not set — auto-sync disabled');
   }
 
+  // ── Masters India EWB Discovery: Parameterized fetch from N days back ────────── 
+  // Available globally for both scheduler and manual discovery endpoint
+  async function runFetchEwbsForDays(daysBack = 2) {
+    try {
+      const datesToCheck = [];
+      const today = new Date();
+      const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      
+      // Build list of dates to check (today and N-1 days back)
+      for (let i = 0; i < daysBack; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        datesToCheck.push(fmt(d));
+      }
+      
+      let totalNew = 0;
+      for (const dateStr of datesToCheck) {
+        const { status: apiStatus, data: apiData } = await mastersGet(
+          `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
+        ).catch(() => ({ status: 0, data: null }));
+        
+        if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
+        
+        for (const item of apiData.results.message) {
+          const ewbNo = String(item.eway_bill_number || '');
+          if (!ewbNo) continue;
+          
+          // VALIDATION: Skip dummy/test bills (require real business data)
+          // Only import if: has document number AND has both from/to details
+          const hasDocNumber = !!(item.document_number || '').trim();
+          const hasFromData = !!(item.from_gstin || item.from_trade_name || item.from_place || '').trim();
+          const hasToData = !!(item.to_gstin || item.to_trade_name || item.to_place || '').trim();
+          
+          // Skip bills that lack essential business data (likely test/dummy)
+          if (!hasDocNumber || !hasFromData || !hasToData) {
+            continue; // Silently skip invalid bills
+          }
+          
+          const parseDate = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
+          const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
+          const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();
+          
+          const result = await sqRun(
+            `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+            ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
+          ).catch(() => null);
+          
+          if (result?.changes > 0) totalNew++;
+        }
+      }
+      if (totalNew > 0) console.log(`[EWB Discovery] ${totalNew} new EWB(s) added from Masters India (last ${daysBack} days)`);
+      return totalNew;
+    } catch(e) { 
+      console.warn('[EWB Discovery]', e.message);
+      return 0;
+    }
+  }
+
   // ── Masters India EWB auto-refresh ─────────────────────────────────────────
   // Every 4 hours: refresh status of active EWBs from the last 30 days
   if (MASTERS_USERNAME && MASTERS_GSTIN) {
@@ -4272,64 +4330,6 @@ server.listen(PORT, '0.0.0.0', () => {
     }
     // ── Daily EWB discovery: fetch all EWBs from Masters India by date ───────
     // Discovers NEW EWBs assigned by customers (not yet in local DB)
-    // ── Parameterized EWB discovery: fetch from N days back ───────────────────
-    async function runFetchEwbsForDays(daysBack = 2) {
-      try {
-        const datesToCheck = [];
-        const today = new Date();
-        const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-        
-        // Build list of dates to check (today and N-1 days back)
-        for (let i = 0; i < daysBack; i++) {
-          const d = new Date(today);
-          d.setDate(d.getDate() - i);
-          datesToCheck.push(fmt(d));
-        }
-        
-        let totalNew = 0;
-        for (const dateStr of datesToCheck) {
-          const { status: apiStatus, data: apiData } = await mastersGet(
-            `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
-          ).catch(() => ({ status: 0, data: null }));
-          
-          if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
-          
-          for (const item of apiData.results.message) {
-            const ewbNo = String(item.eway_bill_number || '');
-            if (!ewbNo) continue;
-            
-            // VALIDATION: Skip dummy/test bills (require real business data)
-            // Only import if: has document number AND has both from/to details AND has value info
-            const hasDocNumber = !!(item.document_number || '').trim();
-            const hasFromData = !!(item.from_gstin || item.from_trade_name || item.from_place || '').trim();
-            const hasToData = !!(item.to_gstin || item.to_trade_name || item.to_place || '').trim();
-            const hasValue = (item.taxable_value > 0 || item.total_invoice_value > 0 || false);
-            
-            // Skip bills that lack essential business data (likely test/dummy)
-            if (!hasDocNumber || !hasFromData || !hasToData) {
-              continue; // Silently skip invalid bills
-            }
-            
-            const parseDate = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
-            const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
-            const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();
-            
-            const result = await sqRun(
-              `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-              ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
-            ).catch(() => null);
-            
-            if (result?.changes > 0) totalNew++;
-          }
-        }
-        if (totalNew > 0) console.log(`[EWB Discovery] ${totalNew} new EWB(s) added from Masters India (last ${daysBack} days)`);
-        return totalNew;
-      } catch(e) { 
-        console.warn('[EWB Discovery]', e.message);
-        return 0;
-      }
-    }
-
     // Keep backward compatibility - original scheduler runs 2-day discovery every 30 min
     async function runFetchTodayEwbs() {
       return await runFetchEwbsForDays(2);
