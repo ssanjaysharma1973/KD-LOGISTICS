@@ -15,8 +15,8 @@ COPY . .
 # Frontend build - outputs to ./build
 RUN npm run build
 
-ENV PORT=5001
-EXPOSE 5001
+ENV PORT=3000
+EXPOSE 3000
 
 # Use full server with backend
 CMD ["node", "server.js"]

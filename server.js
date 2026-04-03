@@ -4081,10 +4081,8 @@ async function mastersPost(path, body) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Use port 5001 (Railway default); override with PORT env var if explicitly set
-const PORT = process.env.PORT || 5001;
-
-console.log(`[PORT-CONFIG] Determined PORT=${PORT} from env.PORT=${process.env.PORT}`);
+// Use PORT env var set by Railway, default to 3000 for local development
+const PORT = process.env.PORT || 3000;
 
 // Global error handlers to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {
