@@ -4054,11 +4054,18 @@ async function mastersPost(path, body) {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Sync server listening on http://0.0.0.0:${PORT}`);
+  console.log(`✅ [SERVER] Listening on http://0.0.0.0:${PORT}`);
 
   // Seed SQLite from seed_data.json if DB is empty (Railway ephemeral filesystem)
   // Run async to not block healthcheck responses
-  setImmediate(() => seedSqliteIfEmpty());
+  setImmediate(() => {
+    try {
+      seedSqliteIfEmpty();
+      console.log('[Seed] Background initialization started');
+    } catch (err) {
+      console.error('[Seed] Initialization error:', err.message);
+    }
+  });
 
   // ── Server-side auto-sync scheduler ────────────────────────────────────
   // Reads all known tenantIds from the JSON db and from env CLIENT*_ID vars,
