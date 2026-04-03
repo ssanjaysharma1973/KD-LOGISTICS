@@ -5,4 +5,6 @@ dockerfilePath = "./Dockerfile"
 [deploy]
 startCommand = "node server.js"
 deployUrl = "https://kd-logistics-production.up.railway.app"
-PORT = 5001
+
+[deploy.environment]
+PORT = "5001"
