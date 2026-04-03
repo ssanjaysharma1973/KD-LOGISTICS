@@ -4108,6 +4108,26 @@ server.listen(PORT, '0.0.0.0', () => {
   // Run async to not block healthcheck responses
   setImmediate(() => {
     try {
+      // CLEANUP: Delete dummy EWBs added from Masters India Discovery
+      const cleanupDummyEwbs = () => {
+        if (!sqlite3) return;
+        const db = new sqlite3.Database(SQLITE_DB_PATH);
+        // Delete EWBs imported in last 10 minutes (the 44 dummy ones from Masters)
+        db.run(
+          `DELETE FROM eway_bills_master WHERE imported_at > datetime('now', '-10 minutes')`,
+          function(err) {
+            if (err) {
+              console.warn('[Cleanup] Failed to delete dummy EWBs:', err.message);
+            } else {
+              console.log(`[Cleanup] Deleted ${this.changes} dummy EWBs added from Masters India`);
+            }
+            db.close();
+          }
+        );
+      };
+      // Run cleanup before seed
+      cleanupDummyEwbs();
+      
       seedSqliteIfEmpty();
       console.log('[Seed] Background initialization started');
     } catch (err) {
