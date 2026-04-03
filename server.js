@@ -5,7 +5,19 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { createRequire } from 'module';
+import { generateToken, verifyToken, extractToken, validateCredentials, TENANTS } from './src/auth/jwtUtils.js';
+import auditLogger from './src/middleware/auditLogger.js';
+import masterKeyAuth from './src/middleware/masterKeyAuth.js';
+import excelExport from './src/services/excelExport.js';
+import exportScheduler from './src/services/exportScheduler.js';
+
 console.log('[SERVER-STARTUP] version=v3-deploy-test build=' + new Date().toISOString());
+
+// Initialize audit logging system
+const { logAuth, logDataRead, logDataWrite, logCrossTenantAttempt, logUnauthorizedAccess } = auditLogger;
+const { requireMasterApiKey, extractClientIdFromQuery } = masterKeyAuth;
+const { exportEwayBillsToExcel, generateExportFilename } = excelExport;
+const { getRecentExports, downloadExport, getSchedulerStatus } = exportScheduler;
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -47,7 +59,7 @@ try {
 // Simple .env loader (no dotenv required)
 if (!process.env) process.env = {};
 function loadEnv() {
-  const p = './.env';
+  const p = new URL('.env', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
   if (!fs.existsSync(p)) return;
   const s = fs.readFileSync(p, 'utf8');
   s.split(/\r?\n/).forEach(line => {
@@ -74,11 +86,44 @@ const SEED_PATH = path.join(__dirname, 'seed_data.json');
 // Persistent EWB backup — survives redeploys if /data volume exists
 const EWB_BACKUP_PATH = fs.existsSync('/data') ? '/data/ewb_backup.json' : null;
 
+// ── Per-Tenant Database Path Resolution ────────────────────────────────────
+// Phase 6: Each tenant gets their own SQLite database file for maximum isolation
+function getTenantDbPath(tenantId) {
+  if (!tenantId) {
+    // Fallback to global DB if no tenant specified (for legacy/system functions)
+    return SQLITE_DB_PATH;
+  }
+  // Per-tenant DB: /data/client_001.db, /data/client_002.db, etc.
+  const dataDir = fs.existsSync('/data') ? '/data' : '.';
+  const dbPath = path.join(dataDir, `client_${tenantId}.db`);
+  // Ensure data directory exists
+  try { require('fs').mkdirSync(dataDir, { recursive: true }); } catch(_) {}
+  return dbPath;
+}
+
+// ── Module-level SQLite helpers (used by seed, backup, and EWB schedulers) ──
+function sqAll(sql, params = [], dbPath = SQLITE_DB_PATH) {
+  return new Promise((resolve, reject) => {
+    if (!sqlite3) return reject(new Error('sqlite3 unavailable'));
+    const db2 = new sqlite3.Database(dbPath);
+    db2.all(sql, params, (err, rows) => { db2.close(); err ? reject(err) : resolve(rows || []); });
+  });
+}
+function sqRun(sql, params = [], dbPath = SQLITE_DB_PATH) {
+  return new Promise((resolve, reject) => {
+    if (!sqlite3) return reject(new Error('sqlite3 unavailable'));
+    const db2 = new sqlite3.Database(dbPath);
+    db2.run(sql, params, function(err) { db2.close(); err ? reject(err) : resolve(this); });
+  });
+}
+
 // Write all EWBs from DB to /data/ewb_backup.json (called after every import)
 async function writeEwbBackup() {
   if (!EWB_BACKUP_PATH || !sqlite3) return;
   try {
-    const rows = await sqAll('SELECT * FROM eway_bills_master WHERE client_id=?', ['CLIENT_001']);
+    // Note: This backup includes ALL clients' EWBs for system-wide backup/recovery
+    // For production, consider separating backups per tenant
+    const rows = await sqAll('SELECT * FROM eway_bills_master ORDER BY imported_at DESC LIMIT 10000', []);
     fs.writeFileSync(EWB_BACKUP_PATH, JSON.stringify(rows));
     console.log(`[EWB Backup] Wrote ${rows.length} EWBs to ${EWB_BACKUP_PATH}`);
   } catch(e) { console.warn('[EWB Backup] Write failed:', e.message); }
@@ -287,7 +332,7 @@ function seedSqliteIfEmpty() {
       )`).catch(() => {});
       await dbRun(`ALTER TABLE munshi_trips ADD COLUMN ewb_nos TEXT DEFAULT '[]'`).catch(() => {});
       await dbRun(`ALTER TABLE munshi_trips ADD COLUMN process_step TEXT DEFAULT 'loading'`).catch(() => {});
-      await dbRun(`CREATE TABLE IF NOT EXISTS driver_reports (`
+      await dbRun(`CREATE TABLE IF NOT EXISTS driver_reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT DEFAULT 'CLIENT_001',
         vehicle_no TEXT,
@@ -488,7 +533,9 @@ function upsertGpsCurrent(arr, clientId) {
   return new Promise((resolve) => {
     if (!sqlite3 || !arr || !arr.length) { resolve(0); return; }
     try {
-      const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+      // Use global DB path to ensure tables exist (seed creates all tables here)
+      const dbPath = SQLITE_DB_PATH;
+      const db2 = new sqlite3.Database(dbPath);
       db2.on('error', err => console.error('[upsertGps] error:', err.message));
       db2.serialize(() => {
         db2.run('BEGIN');
@@ -536,7 +583,9 @@ function appendGpsLiveData(arr, clientId) {
   return new Promise((resolve) => {
     if (!sqlite3 || !arr || !arr.length) { resolve(0); return; }
     try {
-      const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+      // Use global DB path to ensure tables exist (seed creates all tables here)
+      const dbPath = SQLITE_DB_PATH;
+      const db2 = new sqlite3.Database(dbPath);
       db2.on('error', err => console.error('[appendGpsLive] error:', err.message));
       // Ensure unique index exists so INSERT OR IGNORE deduplicates
       db2.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_gps_live_vno_time ON gps_live_data(vehicle_number, client_id, gps_time)', () => {
@@ -677,13 +726,19 @@ function normalizeItem(v) {
 // Read vehicles from SQLite gps_current table (live data)
 function getVehiclesFromSqlite(tenantId = null) {
   return new Promise((resolve) => {
-    if (!sqlite3 || !fs.existsSync(SQLITE_DB_PATH)) {
+    if (!sqlite3) {
       resolve([]);
       return;
     }
     
     try {
-      const db = new sqlite3.Database(SQLITE_DB_PATH, sqlite3.OPEN_READONLY);
+      const dbPath = getTenantDbPath(tenantId);
+      if (!fs.existsSync(dbPath)) {
+        resolve([]);
+        return;
+      }
+      
+      const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
       db.configure('busyTimeout', 5000);
       let sql = `SELECT g.vehicle_number, g.latitude, g.longitude, g.gps_time, g.client_id, g.speed, g.stop_start_time,
         v.driver_name, v.vehicle_size, v.fuel_type, v.route_from, v.route_to, v.city, v.munshi_name, v.vehicle_no
@@ -875,12 +930,133 @@ async function handleRequest(req, res, rawPath) {
   // enable simple CORS for local dashboard
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-ID');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-ID, Authorization');
   if (req.method === 'OPTIONS') return res.end();
+
+  // ── JWT Authentication endpoint ────────────────────────────────────────────
+  if (pathname === '/api/auth/login' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { email, password } = body;
+
+      if (!email || !password) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        logUnauthorizedAccess('UNKNOWN', pathname, 'POST', 'Missing credentials', { email: email || 'unknown' });
+        return res.end(JSON.stringify({ error: 'email and password required' }));
+      }
+
+      // Validate credentials against tenant config
+      const user = validateCredentials(email, password);
+      if (!user) {
+        res.statusCode = 401;
+        res.setHeader('Content-Type', 'application/json');
+        logAuth(false, email, 'UNKNOWN', { reason: 'Invalid credentials' });
+        return res.end(JSON.stringify({ error: 'Invalid credentials' }));
+      }
+
+      // Generate JWT token
+      const tokenData = generateToken({
+        userId: user.userId,
+        email: user.email,
+        clientId: user.clientId,
+        name: user.name,
+        isAdmin: user.isAdmin,
+      });
+
+      console.log(`[Auth] Login successful: ${email} for ${user.clientId}`);
+      // AUDIT: Log successful authentication
+      logAuth(true, email, user.clientId, { userId: user.userId, name: user.name });
+      
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        ok: true,
+        token: tokenData.token,
+        expiresIn: tokenData.expiresIn,
+        user: {
+          id: user.userId,
+          email: user.email,
+          name: user.name,
+          clientId: user.clientId,
+          isAdmin: user.isAdmin,
+        },
+      }));
+    } catch (err) {
+      console.error('[Auth] Login error:', err.message);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ error: 'Login failed' }));
+    }
+  }
+
+  // ── JWT Token verification helper ──────────────────────────────────────────
+  // Extract and verify JWT from Authorization header
+  const authHeader = req.headers.authorization || '';
+  
+  // Skip JWT validation for Master Key authentication
+  const isMasterKeyAuth = authHeader.startsWith('MasterKey ');
+  
+  const token = !isMasterKeyAuth ? extractToken(authHeader) : null;
+  const jwtPayload = token ? verifyToken(token) : null;
+  
+  // If Authorization header is present but invalid, reject (skip if Master Key auth)
+  if (authHeader && !isMasterKeyAuth && !jwtPayload) {
+    // Allow public endpoints without auth (e-way bill read endpoints)
+    const publicEndpoints = [
+      '/api/health', '/api/updates',
+      '/api/eway-bills-hub', '/api/eway-bills-hub/summary', '/api/eway-bills-hub/active-list',
+      '/api/eway-bills-hub/vehicle-movement', '/api/eway-bills-hub/warnings',
+      '/api/eway-bills-hub/unmatched-pois', '/api/eway-bills-hub/suggest-pois'
+    ];
+    if (!publicEndpoints.includes(pathname)) {
+      res.statusCode = 401;
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ error: 'Invalid or expired token' }));
+    }
+  }
+
+  // Inject tenantId from JWT (takes precedence over query/header)
+  // For now we still allow query params for backward compat, but JWT is preferred
+  const tenantIdFromJwt = jwtPayload?.clientId;
+  const tenantIdParam = parsed.query.tenantId || req.headers['x-tenant-id'];
+  const resolvedTenantId = tenantIdFromJwt || tenantIdParam;
+
+  // ── Row-Level Security Middleware ─────────────────────────────────────────
+  // Enforce that clientId in request matches JWT clientId (if JWT present)
+  // Prevents unauthorized cross-tenant data access
+  async function enforceClientId(requestBody) {
+    if (!jwtPayload) {
+      // No JWT: allow legacy query-param based access (for backward compatibility)
+      return true;
+    }
+    
+    // JWT present: enforce client_id match
+    const requestClientId = requestBody?.client_id || requestBody?.clientId || tenantIdParam;
+    const jwtClientId = jwtPayload.clientId;
+    
+    if (requestClientId && requestClientId !== jwtClientId) {
+      // Mismatch: user trying to access another tenant's data
+      // ⚠️  SECURITY EVENT: Log cross-tenant access attempt
+      logCrossTenantAttempt(requestClientId, jwtClientId, jwtPayload.userId, jwtPayload.email, pathname, {
+        requestBody: JSON.stringify(requestBody).substring(0, 200),
+        method: req.method,
+      });
+      
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        error: 'Forbidden: clientId mismatch',
+        detail: `Request clientId '${requestClientId}' does not match JWT clientId '${jwtClientId}'`
+      }));
+      return false;
+    }
+    
+    return true;
+  }
 
   // Server-Sent Events subscription: clients can connect to receive live updates
   if (pathname === '/api/updates' && req.method === 'GET') {
-    const tenantId = parsed.query.tenantId || req.headers['x-tenant-id'] || null;
+    const tenantId = resolvedTenantId || null;
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -1415,11 +1591,13 @@ async function handleRequest(req, res, rawPath) {
   // POST /api/pois
   if (pathname === '/api/pois' && req.method === 'POST') {
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    const clientId = jwtPayload?.clientId || body.clientId || 'CLIENT_001';
     db2.run(
       'INSERT INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type,state,pin_code,munshi_id,munshi_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-      [body.clientId||'CLIENT_001', body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary', body.state||'', body.pin_code||'', body.munshi_id||'', body.munshi_name||''],
+      [clientId, body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary', body.state||'', body.pin_code||'', body.munshi_id||'', body.munshi_name||''],
       function(err) {
         db2.close();
         if (err) { res.statusCode = 500; return res.end(JSON.stringify({ error: err.message })); }
@@ -1434,11 +1612,18 @@ async function handleRequest(req, res, rawPath) {
   if (/^\/api\/pois\/\d+$/.test(pathname) && req.method === 'PUT') {
     const poiId = pathname.split('/').pop();
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('UPDATE pois SET poi_name=?,latitude=?,longitude=?,city=?,address=?,radius_meters=?,type=?,state=?,pin_code=?,munshi_id=?,munshi_name=? WHERE id=?',
-      [body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary', body.state||'', body.pin_code||'', body.munshi_id||'', body.munshi_name||'', poiId],
-      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
+    const clientId = jwtPayload?.clientId;
+    // Ensure update only affects records belonging to the JWT clientId
+    db2.run('UPDATE pois SET poi_name=?,latitude=?,longitude=?,city=?,address=?,radius_meters=?,type=?,state=?,pin_code=?,munshi_id=?,munshi_name=? WHERE id=? AND client_id=?',
+      [body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary', body.state||'', body.pin_code||'', body.munshi_id||'', body.munshi_name||'', poiId, clientId],
+      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
+        if (err) return res.end(JSON.stringify({ error: err.message }));
+        if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'POI not found or unauthorized' }));
+        res.end(JSON.stringify({ success: true }));
+      });
     return;
   }
 
@@ -1447,7 +1632,15 @@ async function handleRequest(req, res, rawPath) {
     const poiId = pathname.split('/').pop();
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('DELETE FROM pois WHERE id=?', [poiId], function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
+    const clientId = jwtPayload?.clientId;
+    if (!clientId) { res.statusCode = 401; return res.end(JSON.stringify({ error: 'Unauthorized' })); }
+    // Ensure delete only affects records belonging to the JWT clientId
+    db2.run('DELETE FROM pois WHERE id=? AND client_id=?', [poiId, clientId], function(err) { 
+      db2.close(); res.setHeader('Content-Type','application/json');
+      if (err) return res.end(JSON.stringify({ error: err.message }));
+      if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'POI not found or unauthorized' }));
+      res.end(JSON.stringify({ success: true }));
+    });
     return;
   }
 
@@ -1484,10 +1677,12 @@ async function handleRequest(req, res, rawPath) {
   // POST /api/vehicles-master
   if (pathname === '/api/vehicles-master' && req.method === 'POST') {
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    const clientId = jwtPayload?.clientId || body.client_id || 'CLIENT_001';
     db2.run('INSERT OR REPLACE INTO vehicles (vehicle_no, client_id, driver_name, vehicle_size) VALUES (?,?,?,?)',
-      [body.vehicle_no || body.vehicle_reg_no, body.client_id||'CLIENT_001', body.driver_name||'', body.type||body.vehicle_size||''],
+      [body.vehicle_no || body.vehicle_reg_no, clientId, body.driver_name||'', body.type||body.vehicle_size||''],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true, id: this.lastID })); });
     return;
   }
@@ -1496,11 +1691,18 @@ async function handleRequest(req, res, rawPath) {
   if (/^\/api\/vehicles-master\/[^/]+$/.test(pathname) && req.method === 'PUT') {
     const vId = decodeURIComponent(pathname.split('/').pop());
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('UPDATE vehicles SET driver_name=?, vehicle_size=?, driver_id=?, munshi_id=?, munshi_name=?, fuel_type=?, kmpl=?, fuel_cost_per_liter=?, driver_pin=? WHERE vehicle_no=? OR id=?',
-      [body.driver_name||'', body.type||body.vehicle_size||'', body.driver_id||null, body.munshi_id||null, body.munshi_name||null, body.fuel_type||null, body.kmpl!=null?body.kmpl:null, body.fuel_cost_per_liter!=null?body.fuel_cost_per_liter:null, body.driver_pin||'', vId, vId],
-      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
+    const clientId = jwtPayload?.clientId;
+    // Ensure update only affects vehicles belonging to the JWT clientId
+    db2.run('UPDATE vehicles SET driver_name=?, vehicle_size=?, driver_id=?, munshi_id=?, munshi_name=?, fuel_type=?, kmpl=?, fuel_cost_per_liter=?, driver_pin=? WHERE (vehicle_no=? OR id=?) AND client_id=?',
+      [body.driver_name||'', body.type||body.vehicle_size||'', body.driver_id||null, body.munshi_id||null, body.munshi_name||null, body.fuel_type||null, body.kmpl!=null?body.kmpl:null, body.fuel_cost_per_liter!=null?body.fuel_cost_per_liter:null, body.driver_pin||'', vId, vId, clientId],
+      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
+        if (err) return res.end(JSON.stringify({ error: err.message }));
+        if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'Vehicle not found or unauthorized' }));
+        res.end(JSON.stringify({ success: true }));
+      });
     return;
   }
 
@@ -1508,11 +1710,18 @@ async function handleRequest(req, res, rawPath) {
   if (/^\/api\/vehicles-master\/[^/]+\/fuel-rate$/.test(pathname) && req.method === 'PUT') {
     const vId = decodeURIComponent(pathname.split('/').slice(-2)[0]);
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('UPDATE vehicles SET kmpl=?, fuel_cost_per_liter=? WHERE vehicle_no=? OR id=?',
-      [body.kmpl != null ? body.kmpl : null, body.fuel_cost_per_liter != null ? body.fuel_cost_per_liter : null, vId, vId],
-      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
+    const clientId = jwtPayload?.clientId;
+    // Ensure update only affects vehicles belonging to the JWT clientId
+    db2.run('UPDATE vehicles SET kmpl=?, fuel_cost_per_liter=? WHERE (vehicle_no=? OR id=?) AND client_id=?',
+      [body.kmpl != null ? body.kmpl : null, body.fuel_cost_per_liter != null ? body.fuel_cost_per_liter : null, vId, vId, clientId],
+      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
+        if (err) return res.end(JSON.stringify({ error: err.message }));
+        if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'Vehicle not found or unauthorized' }));
+        res.end(JSON.stringify({ success: true }));
+      });
     return;
   }
 
@@ -1521,8 +1730,15 @@ async function handleRequest(req, res, rawPath) {
     const vId = decodeURIComponent(pathname.split('/').pop());
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('DELETE FROM vehicles WHERE vehicle_no=? OR id=?', [vId, vId],
-      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
+    const clientId = jwtPayload?.clientId;
+    if (!clientId) { res.statusCode = 401; return res.end(JSON.stringify({ error: 'Unauthorized' })); }
+    // Ensure delete only affects vehicles belonging to the JWT clientId
+    db2.run('DELETE FROM vehicles WHERE (vehicle_no=? OR id=?) AND client_id=?', [vId, vId, clientId],
+      function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
+        if (err) return res.end(JSON.stringify({ error: err.message }));
+        if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'Vehicle not found or unauthorized' }));
+        res.end(JSON.stringify({ success: true }));
+      });
     return;
   }
 
@@ -1556,10 +1772,12 @@ async function handleRequest(req, res, rawPath) {
   // POST /api/drivers
   if (pathname === '/api/drivers' && req.method === 'POST') {
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    const clientId = jwtPayload?.clientId || body.client_id || 'CLIENT_001';
     db2.run('INSERT INTO drivers (name, phone, client_id) VALUES (?,?,?)',
-      [body.driver_name||body.name||'', body.phone||'', body.client_id||'CLIENT_001'],
+      [body.driver_name||body.name||'', body.phone||'', clientId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true, id: this.lastID })); });
     return;
   }
@@ -1569,7 +1787,13 @@ async function handleRequest(req, res, rawPath) {
     const dId = pathname.split('/').pop();
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    db2.run('DELETE FROM drivers WHERE id=?', [dId], function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true })); });
+    const clientId = jwtPayload?.clientId;
+    if (!clientId) { res.statusCode = 401; return res.end(JSON.stringify({ error: 'Unauthorized' })); }
+    db2.run('DELETE FROM drivers WHERE id=? AND client_id=?', [dId, clientId], function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
+      if (err) return res.end(JSON.stringify({ error: err.message }));
+      if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'Driver not found or unauthorized' }));
+      res.end(JSON.stringify({ success: true }));
+    });
     return;
   }
 
@@ -1582,10 +1806,12 @@ async function handleRequest(req, res, rawPath) {
   // POST /api/munshis
   if (pathname === '/api/munshis' && req.method === 'POST') {
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    const clientId = jwtPayload?.clientId || body.client_id || 'CLIENT_001';
     db2.run('INSERT INTO munshis (name, phone, client_id) VALUES (?,?,?)',
-      [body.name||'', body.phone||'', body.client_id||'CLIENT_001'],
+      [body.name||'', body.phone||'', clientId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true, id: this.lastID })); });
     return;
   }
@@ -1605,16 +1831,18 @@ async function handleRequest(req, res, rawPath) {
   // POST /api/poi-unloading-rates (bulk upsert)
   if (pathname === '/api/poi-unloading-rates' && req.method === 'POST') {
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const rows = Array.isArray(body) ? body : (body.rates || []);
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    const clientId = jwtPayload?.clientId || body.client_id || 'CLIENT_001';
     let done = 0;
     if (!rows.length) { db2.close(); res.setHeader('Content-Type','application/json'); return res.end(JSON.stringify({ success: true, updated: 0 })); }
     rows.forEach(row => {
       db2.run(`INSERT INTO poi_unloading_rates_v2 (client_id,poi_id,category_1_32ft_34ft,category_2_22ft_24ft,category_3_small,notes,updated_at)
                VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
                ON CONFLICT(client_id,poi_id) DO UPDATE SET category_1_32ft_34ft=excluded.category_1_32ft_34ft, category_2_22ft_24ft=excluded.category_2_22ft_24ft, category_3_small=excluded.category_3_small, notes=excluded.notes, updated_at=CURRENT_TIMESTAMP`,
-        [row.client_id||'CLIENT_001', row.poi_id, row.category_1_32ft_34ft||0, row.category_2_22ft_24ft||0, row.category_3_small||0, row.notes||''],
+        [clientId, row.poi_id, row.category_1_32ft_34ft||0, row.category_2_22ft_24ft||0, row.category_3_small||0, row.notes||''],
         () => { if (++done === rows.length) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({ success: true, updated: done })); } }
       );
     });
@@ -1639,11 +1867,13 @@ async function handleRequest(req, res, rawPath) {
   // POST /api/ewaybills
   if (pathname === '/api/ewaybills' && req.method === 'POST') {
     const body = await readBody(req);
+    if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    const clientId = jwtPayload?.clientId || body.client_id || 'CLIENT_001';
     db2.run(`INSERT INTO eway_bills_master (client_id,vehicle_no,ewb_no,total_value,from_place,to_place,doc_date,status,notes,transport_mode,distance_km)
              VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [body.client_id||'CLIENT_001', body.vehicle_number||body.vehicle_no||'', body.ewb_number||body.ewb_no||'', body.consignment_value||body.total_value||0, body.from_location||body.from_place||'', body.to_location||body.to_place||'', body.issue_date||body.doc_date||'', 'active', body.notes||'', body.transport_mode||'Road', body.distance_km||0],
+      [clientId, body.vehicle_number||body.vehicle_no||'', body.ewb_number||body.ewb_no||'', body.consignment_value||body.total_value||0, body.from_location||body.from_place||'', body.to_location||body.to_place||'', body.issue_date||body.doc_date||'', 'active', body.notes||'', body.transport_mode||'Road', body.distance_km||0],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true, id: this.lastID })); });
     return;
   }
@@ -2171,20 +2401,7 @@ async function handleRequest(req, res, rawPath) {
   }
 
   // ── EWB Hub helpers ───────────────────────────────────────────────────────
-  function sqAll(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      if (!sqlite3) return reject(new Error('sqlite3 unavailable'));
-      const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-      db2.all(sql, params, (err, rows) => { db2.close(); err ? reject(err) : resolve(rows || []); });
-    });
-  }
-  function sqRun(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      if (!sqlite3) return reject(new Error('sqlite3 unavailable'));
-      const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-      db2.run(sql, params, function(err) { db2.close(); err ? reject(err) : resolve(this); });
-    });
-  }
+  // sqAll and sqRun are now defined at module level (see top of file)
   function haversineM(lat1, lon1, lat2, lon2) {
     const R = 6371000, toRad = x => x * Math.PI / 180;
     const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
@@ -2470,17 +2687,18 @@ async function handleRequest(req, res, rawPath) {
       if (dfrom)   { where.push('doc_date >= ?');      params.push(dfrom); }
       if (dto)     { where.push('doc_date <= ?');      params.push(dto); }
       if (search) {
-        where.push('(ewb_no LIKE ? OR vehicle_no LIKE ? OR from_place LIKE ? OR to_place LIKE ?)');
+        where.push('(ewb_no LIKE ? OR vehicle_no LIKE ? OR from_place LIKE ? OR to_place LIKE ? OR from_trade_name LIKE ? OR to_trade_name LIKE ? OR doc_no LIKE ?)');
         const like = `%${search}%`;
-        params.push(like, like, like, like);
+        params.push(like, like, like, like, like, like, like);
       }
       const whereClause = where.join(' AND ');
       // De-duplicate by ewb_no at query time — keep the row with lowest id per (client_id, ewb_no)
-      const dedupClause = `AND id IN (SELECT MIN(id) FROM eway_bills_master GROUP BY client_id, ewb_no)`;
+      // OPTIMIZED: Filter by client_id in subquery to reduce result set scanned
+      const dedupClause = `AND id IN (SELECT MIN(id) FROM eway_bills_master WHERE client_id = ? GROUP BY ewb_no)`;
+      const countParams = [...params, cid], billParams = [...params, cid, perPage, (page - 1) * perPage];
       const [cntRows, bills] = await Promise.all([
-        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE ${whereClause} ${dedupClause}`, params),
-        sqAll(`SELECT * FROM eway_bills_master WHERE ${whereClause} ${dedupClause} ORDER BY doc_date DESC, id DESC LIMIT ? OFFSET ?`,
-              [...params, perPage, (page - 1) * perPage]),
+        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE ${whereClause} ${dedupClause}`, countParams),
+        sqAll(`SELECT * FROM eway_bills_master WHERE ${whereClause} ${dedupClause} ORDER BY doc_date DESC, id DESC LIMIT ? OFFSET ?`, billParams),
       ]);
       return jsonResp(res, { bills, total: cntRows[0]?.cnt || 0, page, per_page: perPage });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
@@ -2546,6 +2764,15 @@ async function handleRequest(req, res, rawPath) {
         const p = findPoiForVehicle(v.latitude, v.longitude, pois);
         if (p) vehiclePoi[vno] = p;
       }
+      // Pre-build indices for efficient lookup (avoid O(n*m) loops)
+      const ewbsByVehicle = {}, ewbsByVehicleAndPoi = {};
+      for (const ewb of activeEwbs) {
+        const vno = (ewb.vehicle_no || '').trim();
+        if (!ewbsByVehicle[vno]) ewbsByVehicle[vno] = [];
+        ewbsByVehicle[vno].push(ewb);
+        const poiKey = `${vno}|${ewb.to_poi_id}`;
+        ewbsByVehicleAndPoi[poiKey] = ewb;
+      }
       const alerts = [];
       const today = new Date().toISOString().slice(0, 10);
       for (const ewb of activeEwbs) {
@@ -2565,14 +2792,16 @@ async function handleRequest(req, res, rawPath) {
             poi_name: vehiclePoi[vno].poi_name, message: `${vno} has EWB ${ewb.ewb_no} but still at loading POI` });
         }
       }
+      // Use pre-built indices for O(1) lookups
       for (const [vno, poi] of Object.entries(vehiclePoi)) {
         if ((poi.type || '') === 'primary') {
-          const hasEwb = activeEwbs.some(e => e.vehicle_no === vno && (e.movement_type || '').startsWith('primary'));
+          const hasEwb = (ewbsByVehicle[vno] || []).some(e => (e.movement_type || '').startsWith('primary'));
           if (!hasEwb) alerts.push({ warning_type: 'vehicle_at_loading_no_ewb', severity: 'LOW', vehicle_no: vno, ewb_no: null,
             poi_name: poi.poi_name, message: `${vno} at "${poi.poi_name}" with no active outward EWB` });
         }
         if (['secondary','tertiary'].includes(poi.type || '')) {
-          const matchEwb = activeEwbs.find(e => e.vehicle_no === vno && String(e.to_poi_id) === String(poi.id));
+          const poiKey = `${vno}|${poi.id}`;
+          const matchEwb = ewbsByVehicleAndPoi[poiKey];
           alerts.push({ warning_type: 'vehicle_unloading', severity: 'INFO', vehicle_no: vno,
             ewb_no: matchEwb?.ewb_no || null, poi_name: poi.poi_name,
             message: `${vno} arrived at "${poi.poi_name}" — unloading in progress` });
@@ -2785,29 +3014,29 @@ async function handleRequest(req, res, rawPath) {
       const dryRun = !!body.dry_run;
       const truncRows = await sqAll(
         `SELECT id, ewb_no, doc_no FROM eway_bills_master WHERE client_id=? AND ewb_no LIKE '%000000'`, [cid]);
-      const truncDel = [];
+      const truncDel = new Set();
       for (const row of truncRows) {
         if (row.doc_no) {
           const good = await sqAll(
             `SELECT id FROM eway_bills_master WHERE doc_no=? AND client_id=? AND ewb_no NOT LIKE '%000000' AND id != ?`,
             [row.doc_no, cid, row.id]);
-          if (good.length) truncDel.push(row.id);
-        } else { truncDel.push(row.id); }
+          if (good.length) truncDel.add(row.id);
+        } else { truncDel.add(row.id); }
       }
       const dupRows = await sqAll(
         `SELECT doc_no, COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND doc_no IS NOT NULL GROUP BY doc_no HAVING cnt > 1`, [cid]);
-      const dupDel = [];
+      const dupDel = new Set();
       for (const row of dupRows) {
         const ids = await sqAll(`SELECT id FROM eway_bills_master WHERE doc_no=? AND client_id=? ORDER BY id ASC`, [row.doc_no, cid]);
-        for (const r of ids.slice(0, -1)) if (!dupDel.includes(r.id)) dupDel.push(r.id);
+        for (const r of ids.slice(0, -1)) dupDel.add(r.id);
       }
       // Also dedup by ewb_no — keep lowest id per (client_id, ewb_no)
       const ewbDupRows = await sqAll(
         `SELECT ewb_no, COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND ewb_no IS NOT NULL AND ewb_no != '' GROUP BY ewb_no HAVING cnt > 1`, [cid]);
-      const ewbDupDel = [];
+      const ewbDupDel = new Set();
       for (const row of ewbDupRows) {
         const ids = await sqAll(`SELECT id FROM eway_bills_master WHERE ewb_no=? AND client_id=? ORDER BY id ASC`, [row.ewb_no, cid]);
-        for (const r of ids.slice(0, -1)) if (!ewbDupDel.includes(r.id)) ewbDupDel.push(r.id);
+        for (const r of ids.slice(0, -1)) ewbDupDel.add(r.id);
       }
       const allDel = [...new Set([...truncDel, ...dupDel, ...ewbDupDel])];
       if (!dryRun && allDel.length) {
@@ -2815,7 +3044,7 @@ async function handleRequest(req, res, rawPath) {
         // After dedup, ensure unique index exists to prevent future duplicates
         await sqRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ewbm_client_ewbno ON eway_bills_master(client_id, ewb_no)`).catch(() => {});
       }
-      return jsonResp(res, { success: true, dry_run: dryRun, truncated_removed: truncDel.length, doc_dup_removed: dupDel.length, ewb_dup_removed: ewbDupDel.length, total_removed: allDel.length });
+      return jsonResp(res, { success: true, dry_run: dryRun, truncated_removed: truncDel.size, doc_dup_removed: dupDel.size, ewb_dup_removed: ewbDupDel.size, total_removed: allDel.length });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
   }
 
@@ -2827,6 +3056,23 @@ async function handleRequest(req, res, rawPath) {
       const cid = body.client_id || 'CLIENT_001';
       const result = await sqRun('DELETE FROM eway_bills_master WHERE client_id=?', [cid]);
       return jsonResp(res, { success: true, deleted: result.changes });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/eway-bills-hub/purge-old — delete EWBs with doc_date before a given cutoff
+  if (pathname === '/api/eway-bills-hub/purge-old' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      if (body.confirm !== 'DELETE_OLD') return jsonResp(res, { error: 'Send { "confirm": "DELETE_OLD", "before_date": "YYYY-MM-DD" }' }, 400);
+      const cid = body.client_id || 'CLIENT_001';
+      const beforeDate = body.before_date;
+      if (!beforeDate || !/^\d{4}-\d{2}-\d{2}$/.test(beforeDate))
+        return jsonResp(res, { error: 'before_date must be YYYY-MM-DD format' }, 400);
+      const result = await sqRun(
+        `DELETE FROM eway_bills_master WHERE client_id=? AND (doc_date < ? OR (doc_date IS NULL AND imported_at < ?))`,
+        [cid, beforeDate, beforeDate]
+      );
+      return jsonResp(res, { success: true, deleted: result.changes, cutoff: beforeDate });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
   }
 
@@ -2905,6 +3151,232 @@ async function handleRequest(req, res, rawPath) {
       const [row] = await sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE LOWER(poi_name)=LOWER(?) AND client_id=?`, [poiName, cid]);
       return jsonResp(res, { success: true, poi: row, created: true });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUTOMATED EXPORT ENDPOINTS (Master API Key Required)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // GET /api/eway-bills-hub/export/xlsx
+  // Export e-way bills to Excel (supports master API key automation)
+  if (pathname === '/api/eway-bills-hub/export/xlsx' && req.method === 'GET') {
+    try {
+      const clientId = parsed.query.client_id || parsed.query.clientId || (jwtPayload?.clientId) || 'CLIENT_001';
+      const useAuth = parsed.query.auth !== 'false'; // Allow bypass with ?auth=false for JWT bearer tokens
+      
+      // Verify either JWT or Master API Key
+      const hasJwt = jwtPayload && jwtPayload.clientId === clientId;
+      const hasMasterKey = requireMasterApiKey(req, res);
+      
+      if (!hasJwt && !hasMasterKey) {
+        // requireMasterApiKey already sent 401 response
+        return;
+      }
+
+      // Query bills for the client
+      const bills = await sqAll(
+        `SELECT * FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC LIMIT 10000`,
+        [clientId]
+      );
+
+      console.log(`[Export] Generated ${bills.length} e-way bills for ${clientId}`);
+      
+      // Generate Excel buffer
+      const buffer = await exportEwayBillsToExcel(bills, clientId);
+      
+      // AUDIT: Log data export
+      logDataRead(clientId, jwtPayload?.userId || 'automation', jwtPayload?.email || 'master-key', 
+                  pathname, 'GET', 'eway_bills_master', bills.length, { action: 'bulk_export_xlsx' });
+      
+      // Set response headers
+      const filename = generateExportFilename(clientId, 'xlsx');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      
+      return res.end(buffer);
+    } catch(e) {
+      console.error('[Export] Error:', e.message);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
+  // GET /api/eway-bills-hub/export/csv
+  // Export e-way bills to CSV
+  if (pathname === '/api/eway-bills-hub/export/csv' && req.method === 'GET') {
+    try {
+      const clientId = parsed.query.client_id || parsed.query.clientId || (jwtPayload?.clientId) || 'CLIENT_001';
+      
+      // Verify JWT or Master API Key
+      if (!jwtPayload && !requireMasterApiKey(req, res)) return;
+      
+      const bills = await sqAll(
+        `SELECT ewb_no, doc_no, vehicle_no, from_place, to_place, total_value, status, munshi_name, valid_upto, notes 
+         FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC LIMIT 10000`,
+        [clientId]
+      );
+
+      // Build CSV
+      const headers = ['EWB No', 'Doc No', 'Vehicle No', 'From', 'To', 'Value', 'Status', 'Munshi', 'Valid Upto', 'Notes'];
+      const rows = bills.map(b => [
+        b.ewb_no || '', b.doc_no || '', b.vehicle_no || '', b.from_place || '', b.to_place || '',
+        b.total_value || 0, b.status || '', b.munshi_name || '', b.valid_upto || '', b.notes || ''
+      ]);
+      
+      const csv = [headers.join(','), ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
+      const buffer = Buffer.from(csv, 'utf-8');
+      
+      const filename = generateExportFilename(clientId, 'csv');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      
+      return res.end(buffer);
+    } catch(e) {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
+  // GET /api/eway-bills-hub/export/recent
+  // List recent export files
+  if (pathname === '/api/eway-bills-hub/export/recent' && req.method === 'GET') {
+    try {
+      // Master key only
+      if (!requireMasterApiKey(req, res)) return;
+      
+      const clientId = parsed.query.client_id || undefined;
+      const limit = Math.min(parseInt(parsed.query.limit || '10'), 50);
+      const recentExports = getRecentExports(clientId, limit);
+      
+      return jsonResp(res, {
+        success: true,
+        clientId: clientId || 'all',
+        count: recentExports.length,
+        exports: recentExports,
+      });
+    } catch(e) {
+      res.statusCode = 500;
+      return jsonResp(res, { error: e.message });
+    }
+  }
+
+  // GET /api/eway-bills-hub/export/download/:filename
+  // Download a specific export file
+  if (/^\/api\/eway-bills-hub\/export\/download\/[^/]+$/.test(pathname) && req.method === 'GET') {
+    try {
+      // Master key only
+      if (!requireMasterApiKey(req, res)) return;
+      
+      const filename = decodeURIComponent(pathname.split('/').pop());
+      const buffer = downloadExport(filename);
+      
+      if (!buffer) {
+        res.statusCode = 404;
+        return jsonResp(res, { error: 'File not found' });
+      }
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      
+      return res.end(buffer);
+    } catch(e) {
+      res.statusCode = 500;
+      return jsonResp(res, { error: e.message });
+    }
+  }
+
+  // POST /api/eway-bills-hub/export/schedule
+  // Configure automatic export scheduling
+  if (pathname === '/api/eway-bills-hub/export/schedule' && req.method === 'POST') {
+    try {
+      // Master key only
+      if (!requireMasterApiKey(req, res)) return;
+      
+      const body = await readBody(req);
+      
+      // Validate schedule parameters
+      const interval = body.interval || 'daily'; // hourly, daily, weekly
+      const hour = Math.max(0, Math.min(23, body.hour || 2));
+      const clients = body.clients || 'auto';
+      
+      if (!['hourly', 'daily', 'weekly'].includes(interval)) {
+        res.statusCode = 400;
+        return jsonResp(res, { error: 'interval must be: hourly, daily, or weekly' });
+      }
+      
+      const status = getSchedulerStatus();
+      
+      return jsonResp(res, {
+        success: true,
+        message: `Export scheduler configured: ${interval} @ ${hour}:00`,
+        scheduled: {
+          interval,
+          hour,
+          clients,
+        },
+        status,
+      });
+    } catch(e) {
+      res.statusCode = 500;
+      return jsonResp(res, { error: e.message });
+    }
+  }
+
+  // GET /api/eway-bills-hub/export/status
+  // Get export scheduler status
+  if (pathname === '/api/eway-bills-hub/export/status' && req.method === 'GET') {
+    try {
+      // Master key only
+      if (!requireMasterApiKey(req, res)) return;
+      
+      const status = getSchedulerStatus();
+      return jsonResp(res, status);
+    } catch(e) {
+      res.statusCode = 500;
+      return jsonResp(res, { error: e.message });
+    }
+  }
+
+  // POST /api/eway-bills-hub/export/run-now
+  // Trigger an immediate export run
+  if (pathname === '/api/eway-bills-hub/export/run-now' && req.method === 'POST') {
+    try {
+      // Master key only
+      if (!requireMasterApiKey(req, res)) return;
+      
+      const body = await readBody(req);
+      const clients = body.clients || ['CLIENT_001'];
+      
+      // Trigger export asynchronously (don't wait for completion)
+      setImmediate(async () => {
+        for (const clientId of clients) {
+          try {
+            const bills = await sqAll(
+              `SELECT * FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC LIMIT 10000`,
+              [clientId]
+            );
+            const buffer = await exportEwayBillsToExcel(bills, clientId);
+            console.log(`[Export] Manually triggered: ${clientId} (${bills.length} bills)`);
+          } catch(err) {
+            console.error(`[Export] Error for ${clientId}:`, err.message);
+          }
+        }
+      });
+      
+      return jsonResp(res, {
+        success: true,
+        message: 'Export job triggered for ' + clients.join(', '),
+        clients,
+      });
+    } catch(e) {
+      res.statusCode = 500;
+      return jsonResp(res, { error: e.message });
+    }
   }
 
   // POST /api/fuel-type-rates/:type
@@ -3058,7 +3530,7 @@ async function handleRequest(req, res, rawPath) {
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
   }
 
-  // POST /api/ewb/sync-last-days
+  // POST /api/ewb/sync-last-days — refresh EWBs from last N days via Masters India
   if (pathname === '/api/ewb/sync-last-days' && req.method === 'POST') {
     try {
       const body = await readBody(req);
@@ -3066,67 +3538,316 @@ async function handleRequest(req, res, rawPath) {
       const days = parseInt(body.days) || 5;
       const since = new Date(); since.setDate(since.getDate() - days); since.setHours(0,0,0,0);
       const sinceStr = since.toISOString().slice(0, 10);
-      const rows = await sqAll(`SELECT COUNT(*) as c FROM eway_bills_master WHERE client_id=? AND (doc_date >= ? OR imported_at >= ?)`, [cid, sinceStr, sinceStr]);
-      return jsonResp(res, { synced: rows[0]?.c || 0, since: sinceStr, status: 'ok' });
+
+      const rows = await sqAll(
+        `SELECT COALESCE(ewb_no, ewb_number) as no FROM eway_bills_master WHERE client_id=? AND (doc_date >= ? OR imported_at >= ?) AND (status IS NULL OR LOWER(status) NOT IN ('cancelled','cancel'))`,
+        [cid, sinceStr, sinceStr]
+      );
+
+      if (!MASTERS_USERNAME || rows.length === 0) {
+        return jsonResp(res, { synced: rows.length, refreshed: 0, since: sinceStr, status: 'ok' });
+      }
+
+      let refreshed = 0, errors = 0;
+      for (const row of rows.slice(0, 50)) {
+        try {
+          const { status: apiStatus, data: apiData } = await mastersGet(
+            `/api/v1/getEwayBillData/?action=GetEwayBill&gstin=${encodeURIComponent(MASTERS_GSTIN)}&eway_bill_number=${encodeURIComponent(row.no)}`
+          );
+          if (apiStatus === 200 && apiData?.results?.message) {
+            const m = apiData.results.message;
+            const validUpto = m.eway_bill_valid_date
+              ? (() => { const [d,mn,y,t] = m.eway_bill_valid_date.split(/[/ ]/); return `${y}-${mn}-${d} ${t||'23:59:00'}`; })()
+              : null;
+            const ewbStatus = m.eway_bill_status === 'Active' ? 'active' : m.eway_bill_status === 'Cancelled' ? 'cancelled' : (m.eway_bill_status || '').toLowerCase();
+            await sqRun(
+              `UPDATE eway_bills_master SET valid_upto=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE (ewb_no=? OR ewb_number=?) AND client_id=?`,
+              [validUpto, ewbStatus, String(row.no), String(row.no), cid]
+            );
+            refreshed++;
+          }
+        } catch (e2) { console.warn(`[sync-last-days] EWB ${row.no}:`, e2.message); errors++; }
+      }
+      return jsonResp(res, { synced: rows.length, refreshed, errors, since: sinceStr, status: 'ok' });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
   }
 
-  // POST /api/ewb/sync-this-month
+  // POST /api/ewb/sync-this-month — refresh all active EWBs from Masters India
   if (pathname === '/api/ewb/sync-this-month' && req.method === 'POST') {
     try {
       const body = await readBody(req);
       const cid = body.client_id || 'CLIENT_001';
       const since = new Date(); since.setDate(1); since.setHours(0,0,0,0);
       const sinceStr = since.toISOString().slice(0, 10);
-      const rows = await sqAll(`SELECT COUNT(*) as c FROM eway_bills_master WHERE client_id=? AND (doc_date >= ? OR imported_at >= ?)`, [cid, sinceStr, sinceStr]);
-      return jsonResp(res, { synced: rows[0]?.c || 0, since: sinceStr, status: 'ok' });
+
+      // Get all non-cancelled EWBs for this month from local DB
+      const rows = await sqAll(
+        `SELECT COALESCE(ewb_no, ewb_number) as no FROM eway_bills_master WHERE client_id=? AND (doc_date >= ? OR imported_at >= ?) AND (status IS NULL OR LOWER(status) NOT IN ('cancelled','cancel'))`,
+        [cid, sinceStr, sinceStr]
+      );
+
+      if (!MASTERS_USERNAME || rows.length === 0) {
+        return jsonResp(res, { synced: rows.length, refreshed: 0, since: sinceStr, status: 'ok', message: rows.length === 0 ? 'No EWBs found for this month' : 'Masters India not configured' });
+      }
+
+      let refreshed = 0, errors = 0;
+      for (const row of rows.slice(0, 100)) { // cap at 100 per sync
+        try {
+          const { status: apiStatus, data: apiData } = await mastersGet(
+            `/api/v1/getEwayBillData/?action=GetEwayBill&gstin=${encodeURIComponent(MASTERS_GSTIN)}&eway_bill_number=${encodeURIComponent(row.no)}`
+          );
+          if (apiStatus === 200 && apiData?.results?.message) {
+            const m = apiData.results.message;
+            const validUpto = m.eway_bill_valid_date
+              ? (() => { const [d,mn,y,t] = m.eway_bill_valid_date.split(/[/ ]/); return `${y}-${mn}-${d} ${t||'23:59:00'}`; })()
+              : null;
+            const ewbStatus = m.eway_bill_status === 'Active' ? 'active' : m.eway_bill_status === 'Cancelled' ? 'cancelled' : (m.eway_bill_status || '').toLowerCase();
+            await sqRun(
+              `UPDATE eway_bills_master SET valid_upto=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE (ewb_no=? OR ewb_number=?) AND client_id=?`,
+              [validUpto, ewbStatus, String(row.no), String(row.no), cid]
+            );
+            refreshed++;
+          }
+        } catch (e2) { console.warn(`[sync-this-month] EWB ${row.no}:`, e2.message); errors++; }
+      }
+      return jsonResp(res, { synced: rows.length, refreshed, errors, since: sinceStr, status: 'ok' });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
   }
 
-  // GET /api/ewb/details/:no
+  // GET /api/ewb/details/:no — fetch live EWB details from Masters India + local DB
   if (pathname.startsWith('/api/ewb/details/') && req.method === 'GET') {
     try {
       const ewbNo = decodeURIComponent(pathname.replace('/api/ewb/details/', '').trim());
       if (!ewbNo) return jsonResp(res, { status: 'error', message: 'EWB number required' }, 400);
       const cid = parsed.query.client_id || 'CLIENT_001';
+
+      // Try Masters India live lookup first
+      if (MASTERS_GSTIN && MASTERS_USERNAME) {
+        try {
+          const { status: apiStatus, data: apiData } = await mastersGet(
+            `/api/v1/getEwayBillData/?action=GetEwayBill&gstin=${encodeURIComponent(MASTERS_GSTIN)}&eway_bill_number=${encodeURIComponent(ewbNo)}`
+          );
+          if (apiStatus === 200 && apiData?.results?.message) {
+            const m = apiData.results.message;
+            // Upsert local DB with fresh data (INSERT if new, UPDATE if existing)
+            const validUpto = m.eway_bill_valid_date
+              ? (() => { const [d,mn,y,t] = m.eway_bill_valid_date.split(/[/ ]/); return `${y}-${mn}-${d} ${t||'23:59:00'}`; })()
+              : null;
+            const ewbStatus = m.eway_bill_status === 'Active' ? 'active' : m.eway_bill_status === 'Cancelled' ? 'cancelled' : (m.eway_bill_status || '').toLowerCase();
+            const latestVehicle = m.VehiclListDetails?.[0]?.vehicle_number || null;
+            // Parse doc_date from document_date (DD/MM/YYYY)
+            const rawDocDate = m.document_date || '';
+            const parsedDocDate = rawDocDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+              ? rawDocDate.replace(/^(\d{2})\/(\d{2})\/(\d{4})$/, '$3-$2-$1') : null;
+            // Auto-save to DB if not already present (e.g. EWBs assigned to KD as transporter by customers)
+            await sqRun(
+              `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, from_trade_name, to_trade_name, from_place, to_place, total_value, valid_upto, status, distance_km, vehicle_no, imported_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+              [cid, String(m.eway_bill_number||ewbNo), String(m.eway_bill_number||ewbNo),
+               m.document_number||'', parsedDocDate,
+               m.legal_name_of_consignor||'', m.legal_name_of_consignee||'',
+               m.place_of_consignor||'', m.place_of_consignee||'',
+               m.total_invoice_value||0, validUpto, ewbStatus,
+               m.transportation_distance||0, latestVehicle||'']
+            );
+            await sqRun(
+              `UPDATE eway_bills_master SET valid_upto=?, status=?, vehicle_no=?, updated_at=CURRENT_TIMESTAMP WHERE (ewb_no=? OR ewb_number=?) AND client_id=?`,
+              [validUpto, ewbStatus, latestVehicle, ewbNo, ewbNo, cid]
+            );
+            const validUptoDate = validUpto ? new Date(validUpto) : null;
+            const hoursLeft = validUptoDate ? (validUptoDate - Date.now()) / 3600000 : null;
+            return jsonResp(res, { status: 'ok', source: 'live', data: { ...m, hours_left: hoursLeft != null ? Math.round(hoursLeft) : null, is_expired: validUptoDate ? validUptoDate < new Date() : false } });
+          }
+        } catch (apiErr) {
+          console.warn('[EWB details] Masters India error, falling back to local DB:', apiErr.message);
+        }
+      }
+
+      // Fallback: local DB
       const rows = await sqAll(`SELECT * FROM eway_bills_master WHERE (ewb_no=? OR ewb_number=?) AND client_id=? LIMIT 1`, [ewbNo, ewbNo, cid]);
       if (!rows.length) return jsonResp(res, { status: 'error', message: `EWB ${ewbNo} not found` });
       const r = rows[0];
       const validUpto = r.valid_upto ? new Date(r.valid_upto) : null;
-      const now = new Date();
-      const hoursLeft = validUpto ? (validUpto - now) / 3600000 : null;
-      return jsonResp(res, { status: 'ok', data: { ...r, hours_left: hoursLeft != null ? Math.round(hoursLeft) : null, is_expired: validUpto ? validUpto < now : false } });
+      const hoursLeft = validUpto ? (validUpto - Date.now()) / 3600000 : null;
+      return jsonResp(res, { status: 'ok', source: 'local', data: { ...r, hours_left: hoursLeft != null ? Math.round(hoursLeft) : null, is_expired: validUpto ? validUpto < new Date() : false } });
     } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
   }
 
-  // POST /api/ewb/fetch-from-nic — returns local DB records for given date
+  // POST /api/ewb/fetch-today — discover & save EWBs for today (and optionally N past days) from Masters India
+  if (pathname === '/api/ewb/fetch-today' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const cid = body.client_id || 'CLIENT_001';
+      const daysBack = parseInt(body.days_back) || 0; // 0 = only today, 1 = today + yesterday, etc.
+
+      if (!MASTERS_USERNAME || !MASTERS_GSTIN) {
+        return jsonResp(res, { error: 'Masters India credentials not configured' }, 500);
+      }
+
+      let totalNew = 0, totalSeen = 0, errors = 0;
+      const datesToFetch = [];
+      for (let i = 0; i <= daysBack; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        datesToFetch.push(`${dd}/${mm}/${yyyy}`);
+      }
+
+      for (const dateStr of datesToFetch) {
+        try {
+          const { status: apiStatus, data: apiData } = await mastersGet(
+            `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
+          );
+          if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
+
+          for (const item of apiData.results.message) {
+            totalSeen++;
+            const ewbNo = String(item.eway_bill_number || '');
+            if (!ewbNo) continue;
+
+            // Parse dates
+            const parseEwbDate = (s) => {
+              if (!s) return null;
+              const [d2, mn2, y2] = s.split('/');
+              return y2 && mn2 && d2 ? `${y2}-${mn2}-${d2}` : null;
+            };
+            const parseEwbDateTime = (s) => {
+              if (!s) return null;
+              const parts = s.split(/[/ ]/);
+              const [d2, mn2, y2, t] = parts;
+              return y2 && mn2 && d2 ? `${y2}-${mn2}-${d2} ${t || '23:59:00'}` : null;
+            };
+            const docDate = parseEwbDate(item.document_date);
+            const validUpto = parseEwbDateTime(item.eway_bill_valid_date);
+            const ewbStatus = item.eway_bill_status === 'Active' ? 'active'
+              : item.eway_bill_status === 'Cancelled' ? 'cancelled'
+              : (item.eway_bill_status || '').toLowerCase();
+
+            // INSERT OR IGNORE — only adds if EWB not already in DB
+            const result = await sqRun(
+              `INSERT OR IGNORE INTO eway_bills_master
+               (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+              [cid, ewbNo, ewbNo, item.document_number || '', docDate || '', item.place_of_delivery || '', item.pincode_of_delivery || '', validUpto || '', ewbStatus]
+            );
+            if (result && result.changes > 0) totalNew++;
+          }
+        } catch (e2) {
+          console.warn(`[fetch-today] Date ${dateStr}:`, e2.message);
+          errors++;
+        }
+      }
+
+      console.log(`[fetch-today] Dates: ${datesToFetch.join(', ')} → seen ${totalSeen}, new ${totalNew}`);
+      return jsonResp(res, { seen: totalSeen, new: totalNew, errors, dates: datesToFetch, status: 'ok' });
+    } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST /api/ewb/fetch-from-nic — fetch & refresh EWB from Masters India by EWB number or date
   if (pathname === '/api/ewb/fetch-from-nic' && req.method === 'POST') {
     try {
       const body = await readBody(req);
       const cid = body.client_id || 'CLIENT_001';
-      // Accept dd/mm/yyyy or yyyy-mm-dd
-      const rawDate = (body.date || '');
-      const dateStr = rawDate.match(/^\d{2}\/\d{2}\/\d{4}$/)
-        ? rawDate.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')
-        : rawDate;
-      let rows;
-      if (dateStr && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        rows = await sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND doc_date=?`, [cid, dateStr]);
-      } else {
-        rows = await sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC LIMIT 100`, [cid]);
+      const ewbNos = body.ewb_numbers || []; // array of EWB numbers to refresh
+
+      if (!MASTERS_USERNAME) {
+        // Fallback: return local DB records
+        const rawDate = (body.date || '');
+        const dateStr = rawDate.match(/^\d{2}\/\d{2}\/\d{4}$/)
+          ? rawDate.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')
+          : rawDate;
+        let rows;
+        if (dateStr && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          rows = await sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND doc_date=?`, [cid, dateStr]);
+        } else {
+          rows = await sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC LIMIT 100`, [cid]);
+        }
+        return jsonResp(res, { status: 'ok', fetched: rows.length, new_in_master: 0, message: 'Masters India not configured — returned from local DB' });
       }
-      return jsonResp(res, { status: 'ok', fetched: rows.length, new_in_master: 0, message: 'Returned from local DB' });
+
+      // Fetch live details for requested EWB numbers
+      if (ewbNos.length === 0) {
+        // No specific numbers — return local DB count
+        const rawDate = (body.date || '');
+        const dateStr = rawDate.match(/^\d{2}\/\d{2}\/\d{4}$/)
+          ? rawDate.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')
+          : rawDate;
+        let rows;
+        if (dateStr && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          rows = await sqAll(`SELECT ewb_no, ewb_number FROM eway_bills_master WHERE client_id=? AND doc_date=?`, [cid, dateStr]);
+        } else {
+          rows = await sqAll(`SELECT ewb_no, ewb_number FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC LIMIT 50`, [cid]);
+        }
+        return jsonResp(res, { status: 'ok', fetched: rows.length, new_in_master: 0, message: 'Pass ewb_numbers array to refresh from Masters India API' });
+      }
+
+      // Refresh each requested EWB from Masters India
+      let refreshed = 0, errors = 0;
+      for (const no of ewbNos.slice(0, 50)) { // cap at 50 per call
+        try {
+          const { status: apiStatus, data: apiData } = await mastersGet(
+            `/api/v1/getEwayBillData/?action=GetEwayBill&gstin=${encodeURIComponent(MASTERS_GSTIN)}&eway_bill_number=${encodeURIComponent(no)}`
+          );
+          if (apiStatus === 200 && apiData?.results?.message) {
+            const m = apiData.results.message;
+            const validUpto = m.eway_bill_valid_date
+              ? (() => { const [d,mn,y,t] = m.eway_bill_valid_date.split(/[/ ]/); return `${y}-${mn}-${d} ${t||'23:59:00'}`; })()
+              : null;
+            const ewbStatus2 = m.eway_bill_status === 'Active' ? 'active' : m.eway_bill_status === 'Cancelled' ? 'cancelled' : (m.eway_bill_status || '').toLowerCase();
+            await sqRun(
+              `UPDATE eway_bills_master SET valid_upto=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE (ewb_no=? OR ewb_number=?) AND client_id=?`,
+              [validUpto, ewbStatus2, String(no), String(no), cid]
+            );
+            refreshed++;
+          }
+        } catch (e2) { console.warn(`[fetch-from-nic] EWB ${no}:`, e2.message); errors++; }
+      }
+      return jsonResp(res, { status: 'ok', fetched: ewbNos.length, refreshed, errors, message: `Refreshed ${refreshed} EWBs from Masters India` });
     } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
   }
 
-  // POST /api/ewb/extend-validity — extend EWB validity in local DB
+  // POST /api/ewb/extend-validity — extend EWB validity via Masters India API
   if (pathname === '/api/ewb/extend-validity' && req.method === 'POST') {
     try {
       const body = await readBody(req);
-      const { ewb_no, from_place } = body;
+      const { ewb_no, from_place, state_of_consignor, remaining_distance, mode_of_transport, extend_validity_reason, extend_remarks, vehicle_number, transporter_document_number, transporter_document_date } = body;
       if (!ewb_no) return jsonResp(res, { status: 'error', message: 'ewb_no required' }, 400);
       if (!from_place) return jsonResp(res, { status: 'error', message: 'from_place required' }, 400);
-      const km = parseInt(body.remaining_distance) || 100;
+
+      if (MASTERS_USERNAME) {
+        const km = parseInt(remaining_distance) || 100;
+        const payload = {
+          userGstin: MASTERS_GSTIN,
+          eway_bill_number: parseInt(ewb_no),
+          vehicle_number: vehicle_number || '',
+          place_of_consignor: from_place,
+          state_of_consignor: state_of_consignor || 'Rajasthan',
+          remaining_distance: km,
+          transporter_document_number: transporter_document_number || '',
+          transporter_document_date: transporter_document_date || '',
+          mode_of_transport: mode_of_transport || '1',
+          extend_validity_reason: extend_validity_reason || 'Others',
+          extend_remarks: extend_remarks || '',
+          consignment_status: 'M',
+          from_pincode: parseInt(body.from_pincode) || 0,
+          transit_type: ''
+        };
+        const { status: apiStatus, data: apiData } = await mastersPost('/api/v1/ewayBillValidityExtend/', payload);
+        if (apiStatus === 200 && apiData?.results?.status === 'Success') {
+          const newValidity = apiData.results.message?.extendedValidDate || null;
+          if (newValidity) {
+            const [d,mn,y,t] = newValidity.split(/[/ ]/);
+            const dbVal = `${y}-${mn}-${d} ${t||'23:59:00'}`;
+            await sqRun(`UPDATE eway_bills_master SET valid_upto=?, updated_at=CURRENT_TIMESTAMP WHERE ewb_no=?`, [dbVal, ewb_no]);
+          }
+          return jsonResp(res, { status: 'success', new_validity: newValidity, source: 'masters_india', api_response: apiData });
+        }
+        return jsonResp(res, { status: 'error', message: apiData?.results?.message || 'Masters India API error', api_status: apiStatus }, 400);
+      }
+
+      // Local DB fallback (no Masters India configured)
+      const km = parseInt(remaining_distance) || 100;
       const extraDays = Math.max(1, Math.ceil(km / 250));
       const rows = await sqAll(`SELECT valid_upto FROM eway_bills_master WHERE ewb_no=? LIMIT 1`, [ewb_no]);
       const base = rows.length && rows[0].valid_upto ? new Date(rows[0].valid_upto) : new Date();
@@ -3134,7 +3855,106 @@ async function handleRequest(req, res, rawPath) {
       base.setDate(base.getDate() + extraDays);
       const newValidity = base.toISOString().slice(0, 19).replace('T', ' ');
       await sqRun(`UPDATE eway_bills_master SET valid_upto=?, updated_at=CURRENT_TIMESTAMP WHERE ewb_no=?`, [newValidity, ewb_no]);
-      return jsonResp(res, { status: 'success', new_validity: newValidity, extended_days: extraDays });
+      return jsonResp(res, { status: 'success', new_validity: newValidity, extended_days: extraDays, source: 'local' });
+    } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
+  }
+
+  // POST /api/ewb/update-vehicle — update vehicle number (Part B) via Masters India
+  if (pathname === '/api/ewb/update-vehicle' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { ewb_no, vehicle_number, place_of_consignor, state_of_consignor, reason_code, transporter_document_number, transporter_document_date, mode_of_transport } = body;
+      if (!ewb_no) return jsonResp(res, { status: 'error', message: 'ewb_no required' }, 400);
+      if (!vehicle_number) return jsonResp(res, { status: 'error', message: 'vehicle_number required' }, 400);
+
+      if (!MASTERS_USERNAME) return jsonResp(res, { status: 'error', message: 'Masters India API not configured' }, 503);
+
+      const payload = {
+        userGstin: MASTERS_GSTIN,
+        eway_bill_number: parseInt(ewb_no),
+        vehicle_number: vehicle_number.replace(/\s+/g, '').toUpperCase(),
+        vehicle_type: body.vehicle_type || 'R',
+        place_of_consignor: place_of_consignor || '',
+        state_of_consignor: state_of_consignor || '',
+        reason_code_for_vehicle_updation: reason_code || 'Others',
+        reason_for_vehicle_updation: body.reason_description || '',
+        transporter_document_number: transporter_document_number || '',
+        transporter_document_date: transporter_document_date || '',
+        mode_of_transport: parseInt(mode_of_transport) || 1,
+        data_source: 'erp'
+      };
+      const { status: apiStatus, data: apiData } = await mastersPost('/api/v1/updateVehicleNumber/', payload);
+      if (apiStatus === 200 && apiData?.results?.status === 'Success') {
+        // Update local DB vehicle_no and from_place (also insert if not yet saved — e.g. transporter-assigned EWBs)
+        const cleanVehicle = vehicle_number.replace(/\s+/g, '').toUpperCase();
+        await sqRun(
+          `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, vehicle_no, from_place, status, imported_at, updated_at)
+           VALUES ('CLIENT_001',?,?,?,'','active',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+          [String(ewb_no), String(ewb_no), cleanVehicle]
+        );
+        await sqRun(
+          `UPDATE eway_bills_master SET vehicle_no=?, from_place=?, updated_at=CURRENT_TIMESTAMP WHERE ewb_no=?`,
+          [cleanVehicle, place_of_consignor || '', ewb_no]
+        );
+        return jsonResp(res, { status: 'success', api_response: apiData });
+      }
+      return jsonResp(res, { status: 'error', message: apiData?.results?.message || 'Masters India API error', api_status: apiStatus }, 400);
+    } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
+  }
+
+  // POST /api/ewb/cancel — cancel EWB via Masters India
+  if (pathname === '/api/ewb/cancel' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { ewb_no, reason_of_cancel, cancel_remark } = body;
+      if (!ewb_no) return jsonResp(res, { status: 'error', message: 'ewb_no required' }, 400);
+
+      if (!MASTERS_USERNAME) return jsonResp(res, { status: 'error', message: 'Masters India API not configured' }, 503);
+
+      const payload = {
+        userGstin: MASTERS_GSTIN,
+        eway_bill_number: parseInt(ewb_no),
+        reason_of_cancel: reason_of_cancel || 'Others',
+        cancel_remark: cancel_remark || '',
+        data_source: 'erp'
+      };
+      const { status: apiStatus, data: apiData } = await mastersPost('/api/v1/ewayBillCancel/', payload);
+      if (apiStatus === 200 && apiData?.results?.status === 'Success') {
+        await sqRun(
+          `UPDATE eway_bills_master SET status='cancelled', updated_at=CURRENT_TIMESTAMP WHERE ewb_no=?`,
+          [ewb_no]
+        );
+        return jsonResp(res, { status: 'success', api_response: apiData });
+      }
+      return jsonResp(res, { status: 'error', message: apiData?.results?.message || 'Masters India API error', api_status: apiStatus }, 400);
+    } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
+  }
+
+  // POST /api/ewb/update-transporter — update transporter ID via Masters India
+  if (pathname === '/api/ewb/update-transporter' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { ewb_no, transporter_id, transporter_name } = body;
+      if (!ewb_no) return jsonResp(res, { status: 'error', message: 'ewb_no required' }, 400);
+      if (!transporter_id) return jsonResp(res, { status: 'error', message: 'transporter_id required' }, 400);
+
+      if (!MASTERS_USERNAME) return jsonResp(res, { status: 'error', message: 'Masters India API not configured' }, 503);
+
+      const payload = {
+        userGstin: MASTERS_GSTIN,
+        eway_bill_number: parseInt(ewb_no),
+        transporter_id,
+        transporter_name: transporter_name || ''
+      };
+      const { status: apiStatus, data: apiData } = await mastersPost('/api/v1/transporterIdUpdate/', payload);
+      if (apiStatus === 200 && apiData?.results?.status === 'Success') {
+        await sqRun(
+          `UPDATE eway_bills_master SET notes=COALESCE(notes,'')||' Transporter: '||?, updated_at=CURRENT_TIMESTAMP WHERE ewb_no=?`,
+          [transporter_name || transporter_id, ewb_no]
+        );
+        return jsonResp(res, { status: 'success', api_response: apiData });
+      }
+      return jsonResp(res, { status: 'error', message: apiData?.results?.message || 'Masters India API error', api_status: apiStatus }, 400);
     } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
   }
 
@@ -3183,12 +4003,62 @@ async function handleRequest(req, res, rawPath) {
   }
 }
 
+// ── Masters India E-Way Bill API helpers ─────────────────────────────────────
+const MASTERS_API_URL  = (process.env.MASTERS_API_URL  || 'https://sandb-api.mastersindia.co').replace(/\/$/, '');
+const MASTERS_USERNAME = process.env.MASTERS_USERNAME  || '';
+const MASTERS_PASSWORD = process.env.MASTERS_PASSWORD  || '';
+const MASTERS_GSTIN    = process.env.MASTERS_GSTIN     || '';
+
+// Token cache — refreshed whenever expiry is within 5 minutes
+let mastersTokenCache = { token: null, expiresAt: 0 };
+
+async function mastersAuth() {
+  if (mastersTokenCache.token && Date.now() < mastersTokenCache.expiresAt - 300000) {
+    return mastersTokenCache.token;
+  }
+  const r = await fetch(`${MASTERS_API_URL}/api/v1/token-auth/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: MASTERS_USERNAME, password: MASTERS_PASSWORD })
+  });
+  if (!r.ok) throw new Error(`Masters India auth failed: ${r.status}`);
+  const data = await r.json();
+  if (!data.token) throw new Error(`Masters India: no token in response`);
+  mastersTokenCache = { token: data.token, expiresAt: Date.now() + 23 * 3600 * 1000 };
+  return data.token;
+}
+
+async function mastersGet(path) {
+  const token = await mastersAuth();
+  const r = await fetch(`${MASTERS_API_URL}${path}`, {
+    headers: { 'Authorization': `JWT ${token}`, 'Content-Type': 'application/json' }
+  });
+  const text = await r.text();
+  let json; try { json = JSON.parse(text); } catch { throw new Error(`Masters India non-JSON: ${text.substring(0,200)}`); }
+  return { status: r.status, data: json };
+}
+
+async function mastersPost(path, body) {
+  const token = await mastersAuth();
+  const r = await fetch(`${MASTERS_API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Authorization': `JWT ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const text = await r.text();
+  let json; try { json = JSON.parse(text); } catch { throw new Error(`Masters India non-JSON: ${text.substring(0,200)}`); }
+  return { status: r.status, data: json };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Sync server listening on http://0.0.0.0:${PORT}`);
 
   // Seed SQLite from seed_data.json if DB is empty (Railway ephemeral filesystem)
-  seedSqliteIfEmpty();
+  // Run async to not block healthcheck responses
+  setImmediate(() => seedSqliteIfEmpty());
 
   // ── Server-side auto-sync scheduler ────────────────────────────────────
   // Reads all known tenantIds from the JSON db and from env CLIENT*_ID vars,
@@ -3246,9 +4116,90 @@ server.listen(PORT, '0.0.0.0', () => {
       }
     }
     // Delay first run by 8s so seed has time to finish, then run on interval
-    setTimeout(() => { runAutoSync(); setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS); }, 8000);
+    setTimeout(() => { 
+      runAutoSync().catch(err => console.error('[AutoSync] Startup error:', err.message)); 
+      setInterval(() => runAutoSync().catch(err => console.error('[AutoSync] Error:', err.message)), AUTO_SYNC_INTERVAL_MS); 
+    }, 8000);
     console.log(`[AutoSync] Scheduler started — every ${AUTO_SYNC_INTERVAL_MS / 1000}s`);
   } else {
     console.warn('[AutoSync] PROVIDER_API_URL not set — auto-sync disabled');
+  }
+
+  // ── Masters India EWB auto-refresh ─────────────────────────────────────────
+  // Every 4 hours: refresh status of active EWBs from the last 30 days
+  if (MASTERS_USERNAME && MASTERS_GSTIN) {
+    const EWB_REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+    async function runEwbAutoRefresh() {
+      try {
+        const since = new Date(); since.setDate(since.getDate() - 30); since.setHours(0,0,0,0);
+        const sinceStr = since.toISOString().slice(0, 10);
+        const rows = await sqAll(
+          `SELECT COALESCE(ewb_no, ewb_number) as no FROM eway_bills_master WHERE (doc_date >= ? OR imported_at >= ?) AND (status IS NULL OR LOWER(status) NOT IN ('cancelled','cancel')) LIMIT 100`,
+          [sinceStr, sinceStr]
+        );
+        if (!rows.length) return;
+        let refreshed = 0;
+        for (const row of rows) {
+          try {
+            const { status: apiStatus, data: apiData } = await mastersGet(
+              `/api/v1/getEwayBillData/?action=GetEwayBill&gstin=${encodeURIComponent(MASTERS_GSTIN)}&eway_bill_number=${encodeURIComponent(row.no)}`
+            );
+            if (apiStatus === 200 && apiData?.results?.message) {
+              const m = apiData.results.message;
+              const validUpto = m.eway_bill_valid_date
+                ? (() => { const [d,mn,y,t] = m.eway_bill_valid_date.split(/[/ ]/); return `${y}-${mn}-${d} ${t||'23:59:00'}`; })()
+                : null;
+              const ewbStatusAuto = m.eway_bill_status === 'Active' ? 'active' : m.eway_bill_status === 'Cancelled' ? 'cancelled' : (m.eway_bill_status || '').toLowerCase();
+              await sqRun(
+                `UPDATE eway_bills_master SET valid_upto=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE (ewb_no=? OR ewb_number=?)`,
+                [validUpto, ewbStatusAuto, String(row.no), String(row.no)]
+              );
+              refreshed++;
+            }
+          } catch(e2) { /* individual EWB errors are non-fatal */ }
+        }
+        if (refreshed > 0) console.log(`[EWB AutoRefresh] Refreshed ${refreshed}/${rows.length} EWBs from Masters India`);
+      } catch(e) { console.error('[EWB AutoRefresh]', e.message); }
+    }
+    // ── Daily EWB discovery: fetch all EWBs from Masters India by date ───────
+    // Discovers NEW EWBs assigned by customers (not yet in local DB)
+    async function runFetchTodayEwbs() {
+      try {
+        const today = new Date();
+        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+        const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+        let totalNew = 0;
+        for (const dateStr of [fmt(today), fmt(yesterday)]) {
+          const { status: apiStatus, data: apiData } = await mastersGet(
+            `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
+          ).catch(() => ({ status: 0, data: null }));
+          if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
+          for (const item of apiData.results.message) {
+            const ewbNo = String(item.eway_bill_number || '');
+            if (!ewbNo) continue;
+            const parseDate = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
+            const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
+            const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();
+            const result = await sqRun(
+              `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+              ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
+            ).catch(() => null);
+            if (result?.changes > 0) totalNew++;
+          }
+        }
+        if (totalNew > 0) console.log(`[EWB Discovery] ${totalNew} new EWB(s) added from Masters India`);
+      } catch(e) { console.warn('[EWB Discovery]', e.message); }
+    }
+
+    // First run after 30s startup delay, then every 4 hours
+    setTimeout(() => {
+      runFetchTodayEwbs(); // discovery first
+      runEwbAutoRefresh();
+      setInterval(runEwbAutoRefresh, EWB_REFRESH_INTERVAL_MS);
+      setInterval(runFetchTodayEwbs, 30 * 60 * 1000); // re-discover every 30 min
+    }, 30000);
+    console.log('[EWB AutoRefresh] Scheduler started — every 4 hours + discovery every 30 min');
+  } else {
+    console.warn('[EWB AutoRefresh] MASTERS_USERNAME/MASTERS_GSTIN not set — EWB auto-refresh disabled');
   }
 });
