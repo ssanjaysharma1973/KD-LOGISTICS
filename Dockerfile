@@ -1,4 +1,4 @@
-# Build on: 2026-04-03 17:40 UTC - Force rebuild  
+# Build on: 2026-04-04 00:45 UTC - Module scope fix  
 FROM node:20-slim
 
 WORKDIR /app
