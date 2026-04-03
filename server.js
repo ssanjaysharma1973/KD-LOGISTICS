@@ -4298,6 +4298,18 @@ server.listen(PORT, '0.0.0.0', () => {
             const ewbNo = String(item.eway_bill_number || '');
             if (!ewbNo) continue;
             
+            // VALIDATION: Skip dummy/test bills (require real business data)
+            // Only import if: has document number AND has both from/to details AND has value info
+            const hasDocNumber = !!(item.document_number || '').trim();
+            const hasFromData = !!(item.from_gstin || item.from_trade_name || item.from_place || '').trim();
+            const hasToData = !!(item.to_gstin || item.to_trade_name || item.to_place || '').trim();
+            const hasValue = (item.taxable_value > 0 || item.total_invoice_value > 0 || false);
+            
+            // Skip bills that lack essential business data (likely test/dummy)
+            if (!hasDocNumber || !hasFromData || !hasToData) {
+              continue; // Silently skip invalid bills
+            }
+            
             const parseDate = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
             const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
             const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();

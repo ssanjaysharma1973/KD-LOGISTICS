@@ -382,8 +382,9 @@ function SyncMastersTab() {
         <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #e5e7eb' }}>
           <h4 style={{ margin: '0 0 10px', fontSize: 14, color: '#374151' }}>📌 How it works:</h4>
           <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#6b7280', lineHeight: 1.8 }}>
+            <li><strong>Smart filtering:</strong> Only imports real business e-way bills (skips test/incomplete data)</li>
             <li><strong>Custom date range:</strong> Select 2-30 days to search back in Masters India</li>
-            <li><strong>Auto-import:</strong> New e-way bills are automatically imported to your database with full details</li>
+            <li><strong>Auto-import:</strong> New e-way bills with complete details are automatically imported to your database</li>
             <li><strong>Prevent duplicates:</strong> System checks using EWB numbers to avoid duplicate entries</li>
             <li><strong>Background process:</strong> Runs asynchronously — you'll see results instantly, but full sync continues</li>
             <li><strong>Scheduled sync:</strong> Automatic sync checks the last 2 days every 30 minutes</li>
