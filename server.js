@@ -11,7 +11,10 @@ import masterKeyAuth from './src/middleware/masterKeyAuth.js';
 import excelExport from './src/services/excelExport.js';
 import exportScheduler from './src/services/exportScheduler.js';
 
-console.log('[SERVER-STARTUP] version=v3-deploy-test build=' + new Date().toISOString());
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+console.log('[SERVER-STARTUP] PID=' + process.pid + ' cwd=' + process.cwd() + ' version=v3-deploy-test build=' + new Date().toISOString());
 
 // Initialize audit logging system
 const { logAuth, logDataRead, logDataWrite, logCrossTenantAttempt, logUnauthorizedAccess } = auditLogger;
