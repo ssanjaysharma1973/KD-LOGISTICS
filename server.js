@@ -4238,6 +4238,12 @@ server.listen(PORT, '0.0.0.0', () => {
   // Available globally for both scheduler and manual discovery endpoint
   async function runFetchEwbsForDays(daysBack = 2) {
     try {
+      // Guards: require Masters credentials to be configured
+      if (!MASTERS_USERNAME || !MASTERS_GSTIN) {
+        console.warn('[EWB Discovery] Masters India credentials not configured — skipping discovery');
+        return 0;
+      }
+
       const datesToCheck = [];
       const today = new Date();
       const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
