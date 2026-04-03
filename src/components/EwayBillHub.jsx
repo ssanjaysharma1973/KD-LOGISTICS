@@ -275,6 +275,100 @@ function DeduplicatePanel({ onDone }) {
   );
 }
 
+// ─── SYNC FROM MASTERS INDIA TAB ───────────────────────────────────────────────
+function SyncMastersTab() {
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const handleDiscoverNow = async () => {
+    setSyncing(true);
+    setError('');
+    setResult(null);
+    try {
+      const res = await fetch(`${API}/discover-now`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `MasterKey a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult({ success: true, ...data });
+      } else {
+        setError(data.error || data.detail || 'Discovery failed');
+      }
+    } catch (e) {
+      setError('Network error: ' + e.message);
+    }
+    setSyncing(false);
+  };
+
+  return (
+    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 28 }}>
+        <h3 style={{ margin: '0 0 6px', fontSize: 18, color: '#111827' }}>🔄 Sync EWBs from Masters India</h3>
+        <p style={{ margin: '0 0 20px', color: '#6b7280', fontSize: 13 }}>
+          Fetch e-way bills directly from Masters India for today and yesterday. This runs automatically every 30 minutes,
+          but you can trigger it manually to get the latest data immediately.
+        </p>
+
+        <div style={{ padding: '14px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: 20, fontSize: 13, color: '#1e40af' }}>
+          <strong>⚙️ Automatic sync:</strong> Scheduled every 30 minutes. Manual trigger is for immediate updates when needed.
+        </div>
+
+        <button
+          onClick={handleDiscoverNow}
+          disabled={syncing}
+          style={{
+            padding: '12px 32px',
+            background: syncing ? '#9ca3af' : '#16a34a',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontWeight: 700,
+            cursor: syncing ? 'not-allowed' : 'pointer',
+            fontSize: 15,
+            marginBottom: 20,
+          }}
+        >
+          {syncing ? '⏳ Discovering… (checking Masters India)' : '📥 Sync Now'}
+        </button>
+
+        {error && (
+          <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', borderRadius: 8, fontSize: 13 }}>
+            ❌ {error}
+          </div>
+        )}
+
+        {result?.success && (
+          <div style={{ padding: '16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, fontSize: 13 }}>
+            <div style={{ fontWeight: 700, color: '#166534', marginBottom: 8 }}>✅ Sync Complete</div>
+            <div style={{ color: '#15803d', lineHeight: 1.6 }}>
+              {result.message}
+              <br/>
+              <span style={{ fontSize: 12, color: '#6b7280', marginTop: 8, display: 'block' }}>
+                Status: {result.status} • Fetching from today and yesterday
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #e5e7eb' }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: 14, color: '#374151' }}>📌 How it works:</h4>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#6b7280', lineHeight: 1.8 }}>
+            <li><strong>Daily scan:</strong> Checks your Masters India account for new e-way bills created today and yesterday</li>
+            <li><strong>Auto-import:</strong> New e-way bills are automatically imported to your database with full details</li>
+            <li><strong>Prevent duplicates:</strong> System checks using EWB numbers to avoid duplicate entries</li>
+            <li><strong>Background process:</strong> Runs asynchronously — you'll see results instantly, but full sync continues</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── BILLS LIST TAB ───────────────────────────────────────────────────────────
 function BillsListTab() {
   const [bills, setBills] = useState([]);
@@ -2538,6 +2632,7 @@ function AssignVehicleTab() {
 }
 
 const TABS = [
+  { key: 'sync',      label: '🔄 Sync Masters' },
   { key: 'assign',    label: '🚛 Assign Vehicle (Part B)' },
   { key: 'vehicles',  label: '📍 Vehicle Movement' },
   { key: 'summary',   label: '📊 Summary' },
@@ -2604,6 +2699,7 @@ export default function EwayBillHub({ defaultTab = 'assign' }) {
 
       {/* Tab content */}
       <div style={{ marginTop: 12 }}>
+      {activeTab === 'sync'      && <SyncMastersTab />}
       {activeTab === 'assign'    && <AssignVehicleTab />}
       {activeTab === 'import'    && <ImportTab onImported={() => { fetchSummary(); fetchUnmatchedCount(); }} />}
       {activeTab === 'bills'     && <BillsListTab />}
