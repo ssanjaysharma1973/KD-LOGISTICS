@@ -911,9 +911,11 @@ function sendSse(tenantId, payload) {
 // Defined at MODULE SCOPE (outside http.createServer) so it's accessible globally
 async function runFetchEwbsForDays(daysBack = 2) {
   try {
+    console.log(`[EWB Discovery] START: daysBack=${daysBack}, user=${MASTERS_USERNAME || 'NONE'}, gstin=${MASTERS_GSTIN || 'NONE'}`);
+    
     // Guards: require Masters credentials to be configured
     if (!MASTERS_USERNAME || !MASTERS_GSTIN) {
-      console.warn('[EWB Discovery] Masters India credentials not configured — skipping discovery');
+      console.warn('[EWB Discovery] GUARD FAIL: Missing credentials — skipping discovery');
       return 0;
     }
 
@@ -4143,6 +4145,8 @@ const MASTERS_API_URL  = (process.env.MASTERS_API_URL  || 'https://sandb-api.mas
 const MASTERS_USERNAME = process.env.MASTERS_USERNAME  || '';
 const MASTERS_PASSWORD = process.env.MASTERS_PASSWORD  || '';
 const MASTERS_GSTIN    = process.env.MASTERS_GSTIN     || '';
+
+console.log(`[SERVER-STARTUP][Masters] user=${'*'.repeat(Math.max(0, (MASTERS_USERNAME||'').length))} (len=${(MASTERS_USERNAME||'').length}), gstin=${MASTERS_GSTIN}, api=${MASTERS_API_URL}`);
 
 // Token cache — refreshed whenever expiry is within 5 minutes
 let mastersTokenCache = { token: null, expiresAt: 0 };
