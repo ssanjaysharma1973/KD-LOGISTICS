@@ -3407,6 +3407,63 @@ async function handleRequest(req, res, rawPath) {
     }
   }
 
+  // POST /api/eway-bills-hub/discover-now
+  // Trigger immediate e-way bill discovery from Masters India
+  if (pathname === '/api/eway-bills-hub/discover-now' && req.method === 'POST') {
+    try {
+      // Master key only
+      if (!requireMasterApiKey(req, res)) return;
+      
+      console.log('[EWB Discovery] Manual trigger initiated');
+      
+      // Trigger discovery asynchronously (don't wait for completion)
+      setImmediate(async () => {
+        try {
+          const today = new Date();
+          const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+          const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+          let totalNew = 0;
+          
+          for (const dateStr of [fmt(today), fmt(yesterday)]) {
+            const { status: apiStatus, data: apiData } = await mastersGet(
+              `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
+            ).catch(() => ({ status: 0, data: null }));
+            
+            if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
+            
+            for (const item of apiData.results.message) {
+              const ewbNo = String(item.eway_bill_number || '');
+              if (!ewbNo) continue;
+              
+              const parseDate = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
+              const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
+              const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();
+              
+              const result = await sqRun(
+                `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+                ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
+              ).catch(() => null);
+              
+              if (result?.changes > 0) totalNew++;
+            }
+          }
+          console.log(`[EWB Discovery] Manual sync: ${totalNew} new EWB(s) added from Masters India`);
+        } catch(e) {
+          console.warn('[EWB Discovery] Manual sync error:', e.message);
+        }
+      });
+      
+      return jsonResp(res, {
+        success: true,
+        message: 'Manual e-way bill discovery triggered - checking Masters India for new bills',
+        status: 'in-progress',
+      });
+    } catch(e) {
+      res.statusCode = 500;
+      return jsonResp(res, { error: e.message });
+    }
+  }
+
   // POST /api/fuel-type-rates/:type
   if (/^\/api\/fuel-type-rates\/[^/]+$/.test(pathname) && req.method === 'POST') {
     const fuelType = decodeURIComponent(pathname.split('/').pop());
