@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 01:25 UTC - Reverted to working version
+# Build on: 2026-04-04 01:35 UTC - Minimal logging to find API issue
 FROM node:20-slim
 
 WORKDIR /app
