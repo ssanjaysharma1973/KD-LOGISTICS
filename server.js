@@ -936,20 +936,31 @@ async function runFetchEwbsForDays(daysBack = 2) {
         const result = await mastersGet(
           `/api/v1/getEwayBillData/?action=${attempt.action}&gstin=${encodeURIComponent(MASTERS_GSTIN)}`
         );
+        console.log(`[EWB Discovery] ${attempt.label}: status=${result.status}`);
+        
         if (result.status === 200) {
-          listStatus = result.status;
-          listData = result.data;
-          successAction = attempt.label;
-          console.log(`[EWB Discovery] ✓ Found bills via ${attempt.label}`);
-          break;
+          // Check if it has data
+          const hasData = result.data?.results?.message || result.data?.message || result.data?.data;
+          const count = Array.isArray(hasData) ? hasData.length : 0;
+          console.log(`[EWB Discovery] ${attempt.label}: ${count} items found`);
+          
+          if (count > 0) {
+            listStatus = result.status;
+            listData = result.data;
+            successAction = attempt.label;
+            console.log(`[EWB Discovery] ✓ Using ${attempt.label}`);
+            break;
+          }
+        } else {
+          console.log(`[EWB Discovery] ${attempt.label}: non-200 status, response keys: ${Object.keys(result.data || {}).join(',')}`);
         }
       } catch (e) {
-        // Try next action
+        console.log(`[EWB Discovery] ${attempt.label}: exception - ${e.message}`);
       }
     }
 
-    if (listStatus !== 200) {
-      console.warn(`[EWB Discovery] No API action returned bills`);
+    if (!successAction) {
+      console.warn(`[EWB Discovery] All API actions either failed or returned 0 bills. GSTIN=${MASTERS_GSTIN} may have no bills.`);
       return 0;
     }
 
