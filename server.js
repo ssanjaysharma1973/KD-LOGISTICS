@@ -930,15 +930,20 @@ async function runFetchEwbsForDays(daysBack = 2) {
     });
 
     if (listStatus !== 200) {
-      console.warn(`[EWB Discovery] GetAssignedEwayBills returned status ${listStatus}, response:`, listData);
+      console.warn(`[EWB Discovery] GetAssignedEwayBills status ${listStatus}, response:`, JSON.stringify(listData).substring(0, 500));
       return 0;
     }
 
+    // DEBUG: See what Masters actually returned
+    console.log(`[EWB Discovery] API response keys:`, Object.keys(listData || {}).join(','));
+    if (listData?.results) console.log(`[EWB Discovery] results keys:`, Object.keys(listData.results || {}).join(','));
+    if (listData?.results?.message) console.log(`[EWB Discovery] message type: ${typeof listData.results.message}, is-array: ${Array.isArray(listData.results.message)}, length: ${listData.results.message?.length || 'N/A'}`);
+
     const billNumbers = listData?.results?.message || [];
-    console.log(`[EWB Discovery] Found ${billNumbers.length} assigned e-way bills, raw type: ${typeof billNumbers}`);
+    console.log(`[EWB Discovery] Parsed billNumbers: ${billNumbers.length} items, type: ${typeof billNumbers}`);
 
     if (!Array.isArray(billNumbers) || billNumbers.length === 0) {
-      console.log(`[EWB Discovery] No assigned bills found`);
+      console.log(`[EWB Discovery] No bills found. Full API response:`, JSON.stringify(listData, null, 2).substring(0, 1000));
       return 0;
     }
 
