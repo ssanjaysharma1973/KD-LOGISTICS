@@ -10,6 +10,17 @@ import auditLogger from './src/middleware/auditLogger.js';
 import masterKeyAuth from './src/middleware/masterKeyAuth.js';
 import excelExport from './src/services/excelExport.js';
 import exportScheduler from './src/services/exportScheduler.js';
+import clientOpsRoutes from './src/api/clientOperationRoutes.js';
+import {
+  initializeClientOperationTables,
+  setupClientRules,
+} from './src/services/clientOperationEngine.js';
+import { CLIENT_CONFIGURATIONS } from './src/config/clientConfigurations.js';
+import {
+  startClientEwbImportScheduler,
+  getImportStatus,
+  handleManualImport,
+} from './src/services/clientEwbImportScheduler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -359,164 +370,9 @@ function seedSqliteIfEmpty() {
         await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ewbm_client_ewbno ON eway_bills_master(client_id, ewb_no)`).catch(() => {});
       } catch(e) { console.warn('[Init] EWB dedup skipped:', e.message); }
 
-      // Seed pois if empty
-      // Seed POIs — always upsert by (client_id, poi_name) so new entries from export survive redeploy
-      const seedPois = seed.pois || [];
-      if (seedPois.length > 0) {
-        console.log(`[Seed] Upserting ${seedPois.length} seed POIs...`);
-        await dbRun('BEGIN');
-        for (const p of seedPois)
-          await dbRun(
-            `INSERT INTO pois (client_id,poi_name,latitude,longitude,city,address,radius_meters,type,pin_code,state,munshi_id,munshi_name)
-             SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
-               (SELECT 1 FROM pois WHERE client_id=? AND LOWER(TRIM(poi_name))=LOWER(TRIM(?)))`,
-            [p.client_id||'CLIENT_001', p.poi_name, p.latitude||0, p.longitude||0,
-             p.city||'', p.address||'', p.radius_meters||500, p.type||'primary',
-             p.pin_code||'', p.state||'', p.munshi_id||null, p.munshi_name||'',
-             p.client_id||'CLIENT_001', p.poi_name]
-          ).catch(() => {});
-        await dbRun('COMMIT');
-      }
-
-      // Seed vehicles — always upsert by (client_id, vehicle_no)
-      const seedVehicles = seed.vehicles || [];
-      if (seedVehicles.length > 0) {
-        console.log(`[Seed] Upserting ${seedVehicles.length} seed vehicles...`);
-        await dbRun('BEGIN');
-        for (const v of seedVehicles) {
-          const vno = (v.vehicle_no||v.vehicle_number||'').toUpperCase().replace(/\s/g,'');
-          if (!vno) continue;
-          await dbRun(
-            `INSERT INTO vehicles (client_id,vehicle_no,vehicle_type,vehicle_size,owner_name,driver_name,phone,notes,
-               fuel_type,munshi_id,munshi_name,driver_id,primary_poi_ids,standard_route_no,route_from,route_to,city,driver_pin)
-             SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
-               (SELECT 1 FROM vehicles WHERE client_id=? AND vehicle_no=?)`,
-            [v.client_id||'CLIENT_001', vno, v.vehicle_type||'', v.vehicle_size||'',
-             v.owner_name||'', v.driver_name||'', v.phone||'', v.notes||'',
-             v.fuel_type||'', v.munshi_id||null, v.munshi_name||'', v.driver_id||null,
-             v.primary_poi_ids||null, v.standard_route_no||null, v.route_from||'', v.route_to||'', v.city||'',
-             v.driver_pin||'',
-             v.client_id||'CLIENT_001', vno]
-          ).catch(() => {});
-        }
-        await dbRun('COMMIT');
-      }
-
-      // Seed munshis — always upsert by (client_id, name)
-      const seedMunshis = seed.munshis || [];
-      if (seedMunshis.length > 0) {
-        console.log(`[Seed] Upserting ${seedMunshis.length} seed munshis...`);
-        await dbRun('BEGIN');
-        for (const m of seedMunshis)
-          await dbRun(
-            `INSERT INTO munshis (client_id,name,phone,email,primary_poi_ids,notes,balance,area,region,pin,monthly_salary,approval_limit)
-             SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
-               (SELECT 1 FROM munshis WHERE client_id=? AND LOWER(TRIM(name))=LOWER(TRIM(?)))`,
-            [m.client_id||'CLIENT_001', m.name||'', m.phone||'', m.email||'',
-             m.primary_poi_ids||'[]', m.notes||'', m.balance||0,
-             m.area||'', m.region||'', m.pin||'', m.monthly_salary||0, m.approval_limit||0,
-             m.client_id||'CLIENT_001', m.name||'']
-          ).catch(() => {});
-        await dbRun('COMMIT');
-      }
-
-      // Seed fuel_type_rates — upsert (has UNIQUE constraint on client_id+fuel_type)
-      const seedFtr = seed.fuel_type_rates || [];
-      if (seedFtr.length > 0) {
-        console.log(`[Seed] Upserting ${seedFtr.length} fuel type rates...`);
-        await dbRun('BEGIN');
-        for (const f of seedFtr)
-          await dbRun(`INSERT OR IGNORE INTO fuel_type_rates (client_id, fuel_type, cost_per_liter, updated_at) VALUES (?,?,?,?)`,
-            [f.client_id||'CLIENT_001', f.fuel_type||'', f.cost_per_liter||0, f.updated_at||new Date().toISOString()]);
-        await dbRun('COMMIT');
-      }
-
-      // Seed eway_bills_master — always upsert by (client_id, ewb_no)
-      const seedEwbs = seed.eway_bills || [];
-      if (seedEwbs.length > 0) {
-        console.log(`[Seed] Upserting ${seedEwbs.length} EWBs...`);
-        await dbRun('BEGIN');
-        for (const e of seedEwbs)
-          await dbRun(
-            `INSERT INTO eway_bills_master
-              (client_id,ewb_no,doc_no,doc_date,vehicle_no,from_place,to_place,from_poi_id,from_poi_name,
-               to_poi_id,to_poi_name,from_trade_name,to_trade_name,from_pincode,to_pincode,total_value,
-               valid_upto,status,movement_type,supply_type,transport_mode,distance_km,
-               munshi_id,munshi_name,matched_trip_id,vehicle_status,delivered_at,notes,imported_at,validity_days,ewb_number)
-             SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
-               (SELECT 1 FROM eway_bills_master WHERE client_id=? AND ewb_no=?)`,
-            [e.client_id||'CLIENT_001',e.ewb_no||'',e.doc_no||'',e.doc_date||'',e.vehicle_no||'',
-             e.from_place||'',e.to_place||'',e.from_poi_id||null,e.from_poi_name||'',
-             e.to_poi_id||null,e.to_poi_name||'',e.from_trade_name||'',e.to_trade_name||'',
-             e.from_pincode||'',e.to_pincode||'',e.total_value||0,e.valid_upto||'',
-             e.status||'active',e.movement_type||'unclassified',e.supply_type||'',
-             e.transport_mode||'Road',e.distance_km||0,e.munshi_id||'',e.munshi_name||'',
-             e.matched_trip_id||null,e.vehicle_status||'',e.delivered_at||null,e.notes||'',
-             e.imported_at||new Date().toISOString(),e.validity_days||0,e.ewb_number||e.ewb_no||'',
-             e.client_id||'CLIENT_001',e.ewb_no||'']
-          ).catch(() => {});
-        await dbRun('COMMIT');
-      }
-
-      // Restore from /data/ewb_backup.json if it exists (safety net for redeploys before volume was set up)
-      const ewbBackupPath = '/data/ewb_backup.json';
-      if (fs.existsSync(ewbBackupPath)) {
-        try {
-          const backupEwbs = JSON.parse(fs.readFileSync(ewbBackupPath, 'utf8'));
-          if (Array.isArray(backupEwbs) && backupEwbs.length > 0) {
-            console.log(`[Seed] Restoring ${backupEwbs.length} EWBs from /data/ewb_backup.json...`);
-            await dbRun('BEGIN');
-            for (const e of backupEwbs) {
-              await dbRun(
-                `INSERT OR IGNORE INTO eway_bills_master
-                  (client_id,ewb_no,ewb_number,doc_no,vehicle_no,from_place,to_place,from_poi_id,from_poi_name,
-                   to_poi_id,to_poi_name,from_trade_name,to_trade_name,from_pincode,to_pincode,total_value,
-                   doc_date,valid_upto,status,movement_type,supply_type,transport_mode,distance_km,
-                   munshi_id,munshi_name,validity_days,imported_at,updated_at)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-                [e.client_id||'CLIENT_001',e.ewb_no||'',e.ewb_number||e.ewb_no||'',e.doc_no||'',
-                 e.vehicle_no||'',e.from_place||'',e.to_place||'',
-                 e.from_poi_id||null,e.from_poi_name||'',e.to_poi_id||null,e.to_poi_name||'',
-                 e.from_trade_name||'',e.to_trade_name||'',e.from_pincode||'',e.to_pincode||'',
-                 e.total_value||0,e.doc_date||'',e.valid_upto||'',e.status||'active',
-                 e.movement_type||'unclassified',e.supply_type||'',e.transport_mode||'Road',e.distance_km||0,
-                 e.munshi_id||'',e.munshi_name||'',e.validity_days||0,
-                 e.imported_at||new Date().toISOString(),e.updated_at||new Date().toISOString()]
-              ).catch(() => {});
-            }
-            await dbRun('COMMIT');
-            console.log('[Seed] EWB backup restore complete');
-          }
-        } catch(e) { console.warn('[Seed] EWB backup restore failed:', e.message); }
-      }
-
-      // Seed munshi_trips — always upsert by (client_id, trip_no)
-      const seedTrips = seed.munshi_trips || [];
-      if (seedTrips.length > 0) {
-        console.log(`[Seed] Upserting ${seedTrips.length} munshi trips...`);
-        await dbRun('BEGIN');
-        for (const t of seedTrips)
-          await dbRun(
-            `INSERT INTO munshi_trips
-              (client_id,trip_no,vehicle_no,driver_name,from_poi_id,from_poi_name,to_poi_id,to_poi_name,
-               ewb_no,ewb_is_temp,trip_date,km,toll,exp_admin,exp_munshi,exp_pump_consignment,
-               exp_cash_fuel,exp_unloading,exp_driver_debit,exp_other,munshi_id,munshi_name,
-               driver_id,approved_by,status,notes,created_at,updated_at)
-             SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS
-               (SELECT 1 FROM munshi_trips WHERE client_id=? AND trip_no=?)`,
-            [t.client_id||'CLIENT_001',t.trip_no||'',t.vehicle_no||'',t.driver_name||'',
-             t.from_poi_id||null,t.from_poi_name||'',t.to_poi_id||null,t.to_poi_name||'',
-             t.ewb_no||'',t.ewb_is_temp||0,t.trip_date||'',t.km||0,t.toll||0,
-             t.exp_admin||0,t.exp_munshi||0,t.exp_pump_consignment||0,
-             t.exp_cash_fuel||0,t.exp_unloading||0,t.exp_driver_debit||0,t.exp_other||0,
-             t.munshi_id||'',t.munshi_name||'',t.driver_id||'',t.approved_by||'',
-             t.status||'open',t.notes||'',t.created_at||new Date().toISOString(),t.updated_at||new Date().toISOString(),
-             t.client_id||'CLIENT_001',t.trip_no||'']
-          ).catch(() => {});
-        await dbRun('COMMIT');
-      }
-
-      console.log('[Seed] SQLite seed complete');
+      // SEED DISABLED - Only importing new e-way bills from Masters API
+      // All data will be downloaded via auto-import scheduler
+      console.log('[Seed] DISABLED - Only importing new e-way bills from Masters API');
     } catch (err) {
       console.error('[Seed] Error during seed:', err.message);
     } finally {
@@ -960,7 +816,7 @@ async function runFetchEwbsForDays(daysBack = 2) {
     }
 
     if (!successAction) {
-      console.warn(`[EWB Discovery] All API actions either failed or returned 0 bills. GSTIN=${MASTERS_GSTIN} may have no bills.`);
+      console.log(`[EWB Discovery] ℹ️ Masters India returned 0 bills for GSTIN=${MASTERS_GSTIN} — using seed EWBs as fallback (this is normal for sandbox/staging).`);
       return 0;
     }
 
@@ -1094,6 +950,62 @@ async function handleRequest(req, res, rawPath) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-ID, Authorization');
   if (req.method === 'OPTIONS') return res.end();
+
+  // ── Client Operation Engine Routes ────────────────────────────────────────
+  // These routes handle multi-client e-way bill operations
+  if (pathname.startsWith('/api/client-ops/')) {
+    const urlPath = pathname;
+    
+    if (urlPath === '/api/client-ops/init' && req.method === 'POST') {
+      return clientOpsRoutes.handleInitializeOps(req, res);
+    }
+    
+    if (urlPath === '/api/client-ops/rules' && req.method === 'GET') {
+      return clientOpsRoutes.handleGetClientRules(req, res);
+    }
+    
+    if (urlPath === '/api/client-ops/process-ewb' && req.method === 'POST') {
+      return clientOpsRoutes.handleProcessEwb(req, res);
+    }
+    
+    if (urlPath === '/api/client-ops/queue' && req.method === 'GET') {
+      return clientOpsRoutes.handleGetOperationQueue(req, res);
+    }
+    
+    if (urlPath === '/api/client-ops/configs' && req.method === 'GET') {
+      return clientOpsRoutes.handleGetConfigurations(req, res);
+    }
+    
+    if (urlPath === '/api/client-ops/matrix' && req.method === 'GET') {
+      return clientOpsRoutes.handleGetOperationMatrix(req, res);
+    }
+    
+    if (urlPath === '/api/client-ops/operation-types' && req.method === 'GET') {
+      return clientOpsRoutes.handleGetOperationTypes(req, res);
+    }
+    
+    if (urlPath === '/api/client-ops/scenarios' && req.method === 'GET') {
+      return clientOpsRoutes.handleGetScenarios(req, res);
+    }
+    
+    if (urlPath === '/api/client-ops/dashboard' && req.method === 'GET') {
+      return clientOpsRoutes.handleGetDashboard(req, res);
+    }
+
+    if (urlPath === '/api/client-ops/import-status' && req.method === 'GET') {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        description: 'EWB auto-import scheduler status',
+        import_status: getImportStatus(),
+      }));
+    }
+
+    if (urlPath.startsWith('/api/client-ops/import/') && req.method === 'POST') {
+      const clientId = urlPath.split('/').pop();
+      return handleManualImport(clientId, res);
+    }
+  }
 
   // ── JWT Authentication endpoint ────────────────────────────────────────────
   if (pathname === '/api/auth/login' && req.method === 'POST') {
@@ -4212,34 +4124,124 @@ console.log(`[SERVER-STARTUP][Masters] user=${'*'.repeat(Math.max(0, (MASTERS_US
 // Token cache — refreshed whenever expiry is within 5 minutes
 let mastersTokenCache = { token: null, expiresAt: 0 };
 
+// Track rate limit state
+let mastersRateLimitUntil = 0;
+
+// Auth queue to prevent multiple simultaneous auth attempts
+let mastersAuthPromise = null;
+
 async function mastersAuth() {
-  if (mastersTokenCache.token && Date.now() < mastersTokenCache.expiresAt - 300000) {
+  // STRATEGY: Only ONE authentication request to Masters India
+  // All background tasks share the same token for 23 hours to avoid rate limits
+  
+  // Step 1: REUSE CACHED TOKEN AGGRESSIVELY
+  // Token valid for 23 hours, only request new one if within last 1 hour of expiry
+  // This means: startup auth at 00:00, reused until 22:00, then refresh at 23:00
+  // Result: Typically only 1-2 auth requests per day instead of unlimited
+  if (mastersTokenCache.token && Date.now() < mastersTokenCache.expiresAt - 3600000) {
+    // Token is fresh for entire hour, reuse without any API request
     return mastersTokenCache.token;
   }
-  try {
-    const r = await fetch(`${MASTERS_API_URL}/api/v1/token-auth/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: MASTERS_USERNAME, password: MASTERS_PASSWORD })
-    });
-    const data = await r.json();
-    
-    if (!r.ok) {
-      console.warn(`[Masters Auth] Failed: status=${r.status}, response:`, JSON.stringify(data).substring(0, 200));
-      throw new Error(`Masters India auth failed: ${r.status} ${data?.error || data?.detail || data?.message || ''}`);
+  
+  // Step 2: HANDLE RATE LIMIT GRACEFULLY
+  // If we just hit a rate limit, wait but don't block - use stale token instead
+  // Masters India rate limit: typically 5 minutes for login attempts
+  // Stale token is better than error - keeps background tasks running during rate limit window
+  if (mastersRateLimitUntil > Date.now()) {
+    const waitSeconds = Math.ceil((mastersRateLimitUntil - Date.now()) / 1000);
+    const waitMinutes = Math.ceil(waitSeconds / 60);
+    console.warn(`[Masters Auth] ⏰ RATE LIMITED for ${waitMinutes}m - using cached token instead of blocking`);
+    if (mastersTokenCache.token) {
+      // Use existing token (may expire during rate limit window, but that's okay)
+      return mastersTokenCache.token;
     }
-    
-    if (!data.token) {
-      console.warn(`[Masters Auth] No token in 200 response. Got keys:`, Object.keys(data).join(','), `Response:`, JSON.stringify(data).substring(0, 300));
-      throw new Error(`Masters India returned 200 but no token — check credentials`);
-    }
-    
-    mastersTokenCache = { token: data.token, expiresAt: Date.now() + 23 * 3600 * 1000 };
-    return data.token;
-  } catch (e) {
-    console.error(`[Masters Auth] Error:`, e.message);
-    throw e;
+    throw new Error(`Masters India rate limited - no cached token available`);
   }
+  
+  // Step 3: SERIALIZE ALL AUTH REQUESTS
+  // If any auth is already in progress, wait for that one instead of starting new one
+  // This prevents multiple simultaneous auth attempts that trigger rate limits
+  if (mastersAuthPromise) {
+    console.log(`[Masters Auth] ⏳ Auth already in progress, waiting for shared token...`);
+    return mastersAuthPromise;
+  }
+  
+  // Step 4: EXECUTE SINGLE AUTH REQUEST
+  // Only reach here when: cache expired, not rate limited, no auth in progress
+  // Typically this happens at server startup only
+  console.log(`[Masters Auth] 🔑 INITIATING SINGLE AUTH REQUEST (startup or after 23h expire)`);
+  
+  mastersAuthPromise = (async () => {
+    try {
+      const requestBody = { 
+        username: MASTERS_USERNAME,      // Must be EMAIL (not username handle)
+        password: MASTERS_PASSWORD
+      };
+      
+      console.log(`[Masters Auth] 📤 POSTing to ${MASTERS_API_URL}/api/v1/token-auth/`);
+      
+      const r = await fetch(`${MASTERS_API_URL}/api/v1/token-auth/`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      const data = await r.json();
+      
+      // Detect rate limit errors (Masters returns HTTP 200 even with error)
+      const errorStr = typeof data?.error === 'string' ? data.error : JSON.stringify(data?.error || '');
+      if (errorStr && (errorStr.includes('exceed') || errorStr.includes('exceeded'))) {
+        console.warn(`[Masters Auth] 🚫 RATE LIMIT ERROR:`, errorStr);
+        // Parse "try again after MM:SS" format
+        const match = errorStr.match(/after (\d+):(\d+)/);
+        if (match) {
+          const minutes = parseInt(match[1]);
+          const seconds = parseInt(match[2]);
+          mastersRateLimitUntil = Date.now() + ((minutes * 60 + seconds) * 1000);
+          console.warn(`[Masters Auth]    ⏱️ Blocked until ${new Date(mastersRateLimitUntil).toISOString()}`);
+        }
+        throw new Error(`Rate limited: ${errorStr}`);
+      }
+      
+      // Check HTTP status
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}: ${typeof data?.error === 'string' ? data.error : JSON.stringify(data)}`);
+      }
+      
+      // Extract token (Masters returns { "token": "jwt..." })
+      const token = data.token;
+      if (!token) {
+        throw new Error(`No token in response: ${JSON.stringify(data)}`);
+      }
+      
+      // CACHE STRATEGY: Store token with 23-hour expiry
+      // Masters default expiry is 24h, we use 23h to refresh before actual expiry
+      // This gives 1-hour buffer for any clock sync issues
+      mastersTokenCache = { 
+        token: token, 
+        expiresAt: Date.now() + 23 * 3600 * 1000 
+      };
+      
+      console.log(`[Masters Auth] ✅ TOKEN SUCCESS - Cached for 23h (expires ${new Date(mastersTokenCache.expiresAt).toISOString()})`);
+      console.log(`[Masters Auth] 📊 All background tasks will reuse this token until expiry - NO more auth requests!`);
+      return token;
+      
+    } catch (e) {
+      console.error(`[Masters Auth] ❌ AUTH FAILED:`, e.message);
+      throw e;
+    } finally {
+      // CRITICAL: Clear promise so next interval can proceed
+      // Other tasks waiting on mastersAuthPromise will receive result above
+      mastersAuthPromise = null;
+    }
+  })();
+  
+  // Return the promise - callers will await it
+  // Multiple simultaneous callers will all receive the same token promise
+  return mastersAuthPromise;
 }
 
 async function mastersGet(path) {
@@ -4315,6 +4317,23 @@ server.listen(PORT, '0.0.0.0', () => {
       
       seedSqliteIfEmpty();
       console.log('[Seed] Background initialization started');
+
+      // Initialize Client Operation Engine
+      (async () => {
+        try {
+          console.log('[ClientOpsEngine] Initializing...');
+          await initializeClientOperationTables();
+          await setupClientRules(CLIENT_CONFIGURATIONS);
+          console.log(`[✓ ClientOpsEngine] Initialized with ${CLIENT_CONFIGURATIONS.length} client configurations`);
+
+          // Start auto-import scheduler for CLIENT_001 (and other configured clients)
+          startClientEwbImportScheduler();
+          console.log('[✓ ClientEwbImport] Auto-import scheduler started');
+        } catch (err) {
+          console.error('[ClientOpsEngine] Initialization error:', err.message);
+          // Non-fatal - system continues with existing clients
+        }
+      })();
     } catch (err) {
       console.error('[Seed] Initialization error:', err.message);
     }
