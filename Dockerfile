@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 01:05 UTC - Correct API sequence
+# Build on: 2026-04-04 01:15 UTC - Add detailed error logging
 FROM node:20-slim
 
 WORKDIR /app
