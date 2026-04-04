@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 01:05 UTC - Correct API sequence
+# Build on: 2026-04-04 01:25 UTC - Reverted to working version
 FROM node:20-slim
 
 WORKDIR /app
