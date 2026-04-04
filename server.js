@@ -930,12 +930,12 @@ async function runFetchEwbsForDays(daysBack = 2) {
     });
 
     if (listStatus !== 200) {
-      console.warn(`[EWB Discovery] GetAssignedEwayBills returned status ${listStatus}`);
+      console.warn(`[EWB Discovery] GetAssignedEwayBills returned status ${listStatus}, response:`, listData);
       return 0;
     }
 
     const billNumbers = listData?.results?.message || [];
-    console.log(`[EWB Discovery] Found ${billNumbers.length} assigned e-way bills`);
+    console.log(`[EWB Discovery] Found ${billNumbers.length} assigned e-way bills, raw type: ${typeof billNumbers}`);
 
     if (!Array.isArray(billNumbers) || billNumbers.length === 0) {
       console.log(`[EWB Discovery] No assigned bills found`);
@@ -975,7 +975,7 @@ async function runFetchEwbsForDays(daysBack = 2) {
         const hasToData = !!(item.to_gstin || item.to_trade_name || item.to_place || '').trim();
         
         if (!hasDocNumber || !hasFromData || !hasToData) {
-          console.log(`[EWB Discovery] Skipping ${ewbNo}: incomplete data (doc=${hasDocNumber}, from=${hasFromData}, to=${hasToData})`);
+          console.log(`[EWB Discovery] SKIP ${ewbNo}: no-doc=${!hasDocNumber} no-from=${!hasFromData} no-to=${!hasToData}`);
           continue;
         }
 
