@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 02:25 UTC - Detailed API action logging
+# Build on: 2026-04-04 02:35 UTC - Better auth error logging for AutoSync
 FROM node:20-slim
 
 WORKDIR /app
