@@ -3520,24 +3520,39 @@ async function handleRequest(req, res, rawPath) {
       const body = await readBody(req);
       const daysBack = Math.min(Math.max(parseInt(body.days_back) || 5, 1), 30); // 1-30 days, default 5
       
-      console.log(`[EWB Discovery] Manual trigger initiated (last ${daysBack} days)`);
+      console.log(`[EWB Discovery] Manual discovery: last ${daysBack} days from Masters India`);
       
-      // Trigger discovery asynchronously (don't wait for completion)
-      setImmediate(async () => {
-        try {
-          const totalNew = await runFetchEwbsForDays(daysBack);
-          console.log(`[EWB Discovery] Manual sync complete: ${totalNew} new EWB(s) added`);
-        } catch(e) {
-          console.warn('[EWB Discovery] Manual sync error:', e.message);
-        }
-      });
+      // Run sync NOW (synchronously) with timeout - don't make frontend poll
+      const timeout = 25000; // 25 sec timeout for HTTP response
+      const startTime = Date.now();
       
-      return jsonResp(res, {
-        success: true,
-        message: `Manual e-way bill discovery triggered - checking last ${daysBack} days from Masters India`,
-        status: 'in-progress',
-        days_requested: daysBack,
-      });
+      try {
+        const totalNew = await runFetchEwbsForDays(daysBack);
+        const elapsed = Date.now() - startTime;
+        
+        console.log(`[EWB Discovery] Manual sync complete: ${totalNew} new EWB(s) in ${elapsed}ms`);
+        
+        // Return complete response immediately - no polling needed
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return jsonResp(res, {
+          success: true,
+          message: `E-way bill discovery complete`,
+          status: 'complete',
+          bills_imported: totalNew,
+          elapsed_ms: elapsed,
+          days_checked: daysBack,
+        });
+      } catch(e) {
+        const elapsed = Date.now() - startTime;
+        console.warn(`[EWB Discovery] Manual sync error after ${elapsed}ms:`, e.message);
+        res.statusCode = 500;
+        return jsonResp(res, { 
+          success: false,
+          error: e.message,
+          status: 'error',
+          elapsed_ms: elapsed,
+        });
+      }
     } catch(e) {
       res.statusCode = 500;
       return jsonResp(res, { error: e.message });
