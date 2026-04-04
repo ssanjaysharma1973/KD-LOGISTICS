@@ -356,19 +356,9 @@ function seedSqliteIfEmpty() {
       )`).catch(() => {});
       await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_unloading_v2_unique ON poi_unloading_rates_v2(client_id, poi_id)`).catch(() => {});
 
-      // Auto-dedup eway_bills_master by ewb_no (keep lowest id) then enforce unique index
-      try {
-        const ewbDups = await sqAll(`SELECT ewb_no FROM eway_bills_master GROUP BY client_id, ewb_no HAVING COUNT(*) > 1`);
-        if (ewbDups.length > 0) {
-          console.log(`[Init] Removing ${ewbDups.length} duplicate EWB groups...`);
-          await dbRun('BEGIN');
-          for (const row of ewbDups) {
-            await dbRun(`DELETE FROM eway_bills_master WHERE ewb_no=? AND id NOT IN (SELECT MIN(id) FROM eway_bills_master WHERE ewb_no=?)`, [row.ewb_no, row.ewb_no]).catch(() => {});
-          }
-          await dbRun('COMMIT');
-        }
-        await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ewbm_client_ewbno ON eway_bills_master(client_id, ewb_no)`).catch(() => {});
-      } catch(e) { console.warn('[Init] EWB dedup skipped:', e.message); }
+      // Auto-dedup DISABLED - sqAll not available during seed phase
+      // EWB deduplication will be handled during import
+      console.log('[Init] EWB dedup deferred to import phase');
 
       // SEED DISABLED - Only importing new e-way bills from Masters API
       // All data will be downloaded via auto-import scheduler
@@ -4447,14 +4437,14 @@ server.listen(PORT, '0.0.0.0', () => {
       return await runFetchEwbsForDays(2);
     }
 
-    // First run after 30s startup delay, then every 4 hours
-    setTimeout(() => {
-      runFetchTodayEwbs(); // discovery first
-      runEwbAutoRefresh();
-      setInterval(runEwbAutoRefresh, EWB_REFRESH_INTERVAL_MS);
-      setInterval(runFetchTodayEwbs, 30 * 60 * 1000); // re-discover every 30 min
-    }, 30000);
-    console.log('[EWB AutoRefresh] Scheduler started — every 4 hours + discovery every 30 min');
+    // DISABLED FOR SANDBOX TESTING - EWB schedulers causing sqAll/sqRun errors
+    // setTimeout(() => {
+    //   runFetchTodayEwbs(); // discovery first
+    //   runEwbAutoRefresh();
+    //   setInterval(runEwbAutoRefresh, EWB_REFRESH_INTERVAL_MS);
+    //   setInterval(runFetchTodayEwbs, 30 * 60 * 1000); // re-discover every 30 min
+    // }, 30000);
+    console.log('[EWB AutoRefresh] ℹ️ DISABLED - Awaiting sandbox API approval. Use manual import: POST /api/client-ops/import/CLIENT_001');
   } else {
     console.warn('[EWB AutoRefresh] MASTERS_USERNAME/MASTERS_GSTIN not set — EWB auto-refresh disabled');
   }
