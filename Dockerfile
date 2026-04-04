@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 01:45 UTC - Sync waits for response (no polling)
+# Build on: 2026-04-04 01:55 UTC - Reverted broken sync optimization
 FROM node:20-slim
 
 WORKDIR /app
