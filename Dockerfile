@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 02:05 UTC - Detailed Masters API response logging
+# Build on: 2026-04-04 02:10 UTC - Reverted broken logging, back to working version
 FROM node:20-slim
 
 WORKDIR /app
