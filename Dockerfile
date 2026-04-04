@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 01:55 UTC - Reverted broken sync optimization
+# Build on: 2026-04-04 02:05 UTC - Detailed Masters API response logging
 FROM node:20-slim
 
 WORKDIR /app
