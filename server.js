@@ -916,26 +916,36 @@ async function runFetchEwbsForDays(daysBack = 2) {
     
     // Guards: require Masters credentials to be configured
     if (!MASTERS_USERNAME || !MASTERS_GSTIN) {
-      console.warn('[EWB Discovery] GUARD FAIL: Missing credentials — skipping discovery');
+      console.warn('[EWB Discovery] GUARD FAIL: Missing credentials (user='+(MASTERS_USERNAME||'NONE')+', gstin='+(MASTERS_GSTIN||'NONE')+')');
       return 0;
     }
 
     // STEP 1: Get list of assigned e-way bills
     console.log(`[EWB Discovery] STEP 1: Fetching assigned e-way bills...`);
-    const { status: listStatus, data: listData } = await mastersGet(
-      `/api/v1/getEwayBillData/?action=GetAssignedEwayBills&gstin=${encodeURIComponent(MASTERS_GSTIN)}`
-    ).catch((err) => {
-      console.warn(`[EWB Discovery] GetAssignedEwayBills failed: ${err.message}`);
-      return { status: 0, data: null };
-    });
+    let listStatus, listData;
+    try {
+      const result = await mastersGet(
+        `/api/v1/getEwayBillData/?action=GetAssignedEwayBills&gstin=${encodeURIComponent(MASTERS_GSTIN)}`
+      );
+      listStatus = result.status;
+      listData = result.data;
+      console.log(`[EWB Discovery] STEP 1 response: status=${listStatus}, keys=${Object.keys(listData || {}).join(',')}`);
+    } catch (err) {
+      console.error(`[EWB Discovery] GetAssignedEwayBills ERROR: ${err.message}`);
+      console.error(`[EWB Discovery] Stack:`, err.stack);
+      return 0;
+    }
 
     if (listStatus !== 200) {
-      console.warn(`[EWB Discovery] GetAssignedEwayBills returned status ${listStatus}`);
+      console.error(`[EWB Discovery] GetAssignedEwayBills status=${listStatus}, response:`, JSON.stringify(listData, null, 2));
       return 0;
     }
 
     const billNumbers = listData?.results?.message || [];
     console.log(`[EWB Discovery] Found ${billNumbers.length} assigned e-way bills`);
+    if (!Array.isArray(billNumbers)) {
+      console.warn(`[EWB Discovery] billNumbers is not array:`, typeof billNumbers, billNumbers);
+    }
 
     if (!Array.isArray(billNumbers) || billNumbers.length === 0) {
       console.log(`[EWB Discovery] No assigned bills found`);
@@ -949,23 +959,32 @@ async function runFetchEwbsForDays(daysBack = 2) {
     for (const billNo of billNumbers) {
       try {
         console.log(`[EWB Discovery] Fetching details for EWB ${billNo}...`);
-        const { status: detailStatus, data: detailData } = await mastersGet(
-          `/api/v1/getEwayBillData/?action=GetEwayBillDetails&gstin=${encodeURIComponent(MASTERS_GSTIN)}&ewb_no=${encodeURIComponent(billNo)}`
-        ).catch((err) => {
-          console.warn(`[EWB Discovery] GetEwayBillDetails for ${billNo} failed: ${err.message}`);
-          return { status: 0, data: null };
-        });
+        let detailStatus, detailData;
+        try {
+          const result = await mastersGet(
+            `/api/v1/getEwayBillData/?action=GetEwayBillDetails&gstin=${encodeURIComponent(MASTERS_GSTIN)}&ewb_no=${encodeURIComponent(billNo)}`
+          );
+          detailStatus = result.status;
+          detailData = result.data;
+          console.log(`[EWB Discovery]   Response: status=${detailStatus}, response_keys=${Object.keys(detailData || {}).join(',')}`);
+        } catch (err) {
+          console.error(`[EWB Discovery]   GetEwayBillDetails ERROR for ${billNo}: ${err.message}`);
+          console.error(`[EWB Discovery]   Stack:`, err.stack);
+          continue;
+        }
 
         if (detailStatus !== 200) {
-          console.warn(`[EWB Discovery] GetEwayBillDetails for ${billNo} returned ${detailStatus}`);
+          console.error(`[EWB Discovery]   GetEwayBillDetails status=${detailStatus} for ${billNo}, full response:`, JSON.stringify(detailData, null, 2));
           continue;
         }
 
         const item = detailData?.results?.message?.[0]; // Usually single result
         if (!item) {
-          console.warn(`[EWB Discovery] No details returned for ${billNo}`);
+          console.warn(`[EWB Discovery]   No details returned for ${billNo}, full response:`, JSON.stringify(detailData, null, 2));
           continue;
         }
+
+        console.log(`[EWB Discovery]   Bill data loaded: ewb=${item.eway_bill_number}, doc=${item.document_number}, status=${item.eway_bill_status}`);
 
         const ewbNo = String(item.eway_bill_number || billNo);
         
@@ -974,8 +993,10 @@ async function runFetchEwbsForDays(daysBack = 2) {
         const hasFromData = !!(item.from_gstin || item.from_trade_name || item.from_place || '').trim();
         const hasToData = !!(item.to_gstin || item.to_trade_name || item.to_place || '').trim();
         
+        console.log(`[EWB Discovery]   Validation: doc=${hasDocNumber} (${item.document_number||'empty'}), from=${hasFromData}, to=${hasToData}`);
+        
         if (!hasDocNumber || !hasFromData || !hasToData) {
-          console.log(`[EWB Discovery] Skipping ${ewbNo}: incomplete data (doc=${hasDocNumber}, from=${hasFromData}, to=${hasToData})`);
+          console.log(`[EWB Discovery]   Skipping ${ewbNo}: incomplete data (doc=${hasDocNumber}, from=${hasFromData}, to=${hasToData})`);
           continue;
         }
 
@@ -983,29 +1004,36 @@ async function runFetchEwbsForDays(daysBack = 2) {
         const parseDateTime = (s) => { if (!s) return null; const p = s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
         const ewbStatus = item.eway_bill_status === 'Active' ? 'active' : item.eway_bill_status === 'Cancelled' ? 'cancelled' : (item.eway_bill_status||'').toLowerCase();
         
-        const result = await sqRun(
-          `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-          ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
-        ).catch((err) => {
-          console.warn(`[EWB Discovery] DB insert error for ${ewbNo}: ${err.message}`);
-          return null;
-        });
+        let insertResult;
+        try {
+          insertResult = await sqRun(
+            `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+            ['CLIENT_001', ewbNo, ewbNo, item.document_number||'', parseDate(item.document_date)||'', item.place_of_delivery||'', item.pincode_of_delivery||'', parseDateTime(item.eway_bill_valid_date)||'', ewbStatus]
+          );
+          console.log(`[EWB Discovery]   Insert result: changes=${insertResult?.changes || 0}`);
+        } catch (dbErr) {
+          console.error(`[EWB Discovery]   DB insert ERROR for ${ewbNo}: ${dbErr.message}`);
+          console.error(`[EWB Discovery]   Stack:`, dbErr.stack);
+          continue;
+        }
         
-        if (result?.changes > 0) {
-          console.log(`[EWB Discovery] ✓ Imported EWB ${ewbNo} (doc#${item.document_number})`);
+        if (insertResult?.changes > 0) {
+          console.log(`[EWB Discovery]   ✓ Imported EWB ${ewbNo} (doc#${item.document_number})`);
           totalNew++;
         } else {
           console.log(`[EWB Discovery] ~ EWB ${ewbNo} already in DB`);
         }
       } catch (billErr) {
-        console.warn(`[EWB Discovery] Error processing bill ${billNo}:`, billErr.message);
+        console.error(`[EWB Discovery] Error processing bill ${billNo}: ${billErr.message}`);
+        console.error(`[EWB Discovery] Stack:`, billErr.stack);
       }
     }
 
     console.log(`[EWB Discovery] Discovery complete: ${totalNew} new EWB(s) imported`);
     return totalNew;
   } catch(e) { 
-    console.warn('[EWB Discovery] Fatal error:', e.message);
+    console.error('[EWB Discovery] FATAL ERROR:', e.message);
+    console.error('[EWB Discovery] Stack:', e.stack);
     return 0;
   }
 }
