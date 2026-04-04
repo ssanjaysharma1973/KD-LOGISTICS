@@ -3872,13 +3872,14 @@ async function handleRequest(req, res, rawPath) {
   // POST /api/ewb/fetch-today — discover & save EWBs for today (and optionally N past days) from Masters India
   if (pathname === '/api/ewb/fetch-today' && req.method === 'POST') {
     try {
+      if (!MASTERS_USERNAME || !MASTERS_GSTIN) {
+        console.warn(`[fetch-today] GUARD FAIL: Missing credentials (user=${MASTERS_USERNAME||'NONE'}, gstin=${MASTERS_GSTIN||'NONE'})`);
+        return jsonResp(res, { error: 'Masters India credentials not configured', status: 'error' }, 503);
+      }
+
       const body = await readBody(req);
       const cid = body.client_id || 'CLIENT_001';
       const daysBack = parseInt(body.days_back) || 0; // 0 = only today, 1 = today + yesterday, etc.
-
-      if (!MASTERS_USERNAME || !MASTERS_GSTIN) {
-        return jsonResp(res, { error: 'Masters India credentials not configured' }, 500);
-      }
 
       let totalNew = 0, totalSeen = 0, errors = 0;
       const datesToFetch = [];
@@ -4215,16 +4216,30 @@ async function mastersAuth() {
   if (mastersTokenCache.token && Date.now() < mastersTokenCache.expiresAt - 300000) {
     return mastersTokenCache.token;
   }
-  const r = await fetch(`${MASTERS_API_URL}/api/v1/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: MASTERS_USERNAME, password: MASTERS_PASSWORD })
-  });
-  if (!r.ok) throw new Error(`Masters India auth failed: ${r.status}`);
-  const data = await r.json();
-  if (!data.token) throw new Error(`Masters India: no token in response`);
-  mastersTokenCache = { token: data.token, expiresAt: Date.now() + 23 * 3600 * 1000 };
-  return data.token;
+  try {
+    const r = await fetch(`${MASTERS_API_URL}/api/v1/token-auth/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: MASTERS_USERNAME, password: MASTERS_PASSWORD })
+    });
+    const data = await r.json();
+    
+    if (!r.ok) {
+      console.warn(`[Masters Auth] Failed: status=${r.status}, response:`, JSON.stringify(data).substring(0, 200));
+      throw new Error(`Masters India auth failed: ${r.status} ${data?.error || data?.detail || data?.message || ''}`);
+    }
+    
+    if (!data.token) {
+      console.warn(`[Masters Auth] No token in 200 response. Got keys:`, Object.keys(data).join(','), `Response:`, JSON.stringify(data).substring(0, 300));
+      throw new Error(`Masters India returned 200 but no token — check credentials`);
+    }
+    
+    mastersTokenCache = { token: data.token, expiresAt: Date.now() + 23 * 3600 * 1000 };
+    return data.token;
+  } catch (e) {
+    console.error(`[Masters Auth] Error:`, e.message);
+    throw e;
+  }
 }
 
 async function mastersGet(path) {
