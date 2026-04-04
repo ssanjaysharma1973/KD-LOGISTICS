@@ -920,25 +920,45 @@ async function runFetchEwbsForDays(daysBack = 2) {
       return 0;
     }
 
-    // STEP 1: Get list of assigned e-way bills
-    console.log(`[EWB Discovery] STEP 1: Fetching assigned e-way bills...`);
-    const { status: listStatus, data: listData } = await mastersGet(
-      `/api/v1/getEwayBillData/?action=GetAssignedEwayBills&gstin=${encodeURIComponent(MASTERS_GSTIN)}`
-    ).catch((err) => {
-      console.warn(`[EWB Discovery] GetAssignedEwayBills failed: ${err.message}`);
-      return { status: 0, data: null };
-    });
+    // STEP 1: Get list of e-way bills - try different API actions
+    console.log(`[EWB Discovery] STEP 1: Requesting e-way bills from Masters...`);
+    
+    // Try multiple possible API action names (Masters documentation may vary)
+    const apiAttempts = [
+      { action: 'GetPendingEwayBills', label: 'Pending Bills' },
+      { action: 'GetEwayBills', label: 'All Bills' },
+      { action: 'GetAssignedEwayBills', label: 'Assigned Bills' }
+    ];
+    
+    let listStatus = 0, listData = null, successAction = null;
+    for (const attempt of apiAttempts) {
+      try {
+        const result = await mastersGet(
+          `/api/v1/getEwayBillData/?action=${attempt.action}&gstin=${encodeURIComponent(MASTERS_GSTIN)}`
+        );
+        if (result.status === 200) {
+          listStatus = result.status;
+          listData = result.data;
+          successAction = attempt.label;
+          console.log(`[EWB Discovery] ✓ Found bills via ${attempt.label}`);
+          break;
+        }
+      } catch (e) {
+        // Try next action
+      }
+    }
 
     if (listStatus !== 200) {
-      console.warn(`[EWB Discovery] GetAssignedEwayBills returned status ${listStatus}, response:`, listData);
+      console.warn(`[EWB Discovery] No API action returned bills`);
       return 0;
     }
 
-    const billNumbers = listData?.results?.message || [];
-    console.log(`[EWB Discovery] Found ${billNumbers.length} assigned e-way bills, raw type: ${typeof billNumbers}`);
+    // Parse response - try different structures
+    const billNumbers = listData?.results?.message || listData?.message || listData?.data || [];
+    console.log(`[EWB Discovery] Got ${billNumbers.length} bills (${successAction})`);
 
     if (!Array.isArray(billNumbers) || billNumbers.length === 0) {
-      console.log(`[EWB Discovery] No assigned bills found`);
+      console.log(`[EWB Discovery] No bills to process`);
       return 0;
     }
 
