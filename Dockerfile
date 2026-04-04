@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 01:35 UTC - Minimal logging to find API issue
+# Build on: 2026-04-04 01:45 UTC - Sync waits for response (no polling)
 FROM node:20-slim
 
 WORKDIR /app
