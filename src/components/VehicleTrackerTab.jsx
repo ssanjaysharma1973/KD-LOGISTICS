@@ -637,7 +637,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
         )}
       </div>
 
-      {/* Map with VehicleTracker component */}
+      {/* Map with VehicleTracker component - Always show map with all vehicles */}
       <div style={{ 
         flex: 1, 
         borderRadius: isFullView ? 0 : 8, 
@@ -646,36 +646,15 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
         minHeight: isFullView ? 'calc(100vh - 200px)' : 500,
         height: isFullView ? '100%' : 500
       }}>
-        {selectedVehicle ? (
-          <VehicleTracker
-            vehicles={vehicles}
-            highlightNumbers={[selectedVehicle]}
-            allVehiclesPaths={allVehiclesPaths}
-            trackingVehicleId={selectedVehicle}
-            trackedPathDirect={filteredPath}
-            trackLoading={trackLoading}
-            trackError={trackError}
-          />
-        ) : (
-          <div style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#f1f5f9',
-            flexDirection: 'column',
-            gap: 16
-          }}>
-            <div style={{ fontSize: 48 }}>🗺️</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#475569' }}>
-              {selectedVehicle && trackedPath.length === 0 && trackLoading ? 'Loading...' : 'Select a vehicle to view GPS track'}
-            </div>
-            <div style={{ fontSize: 13, color: '#64748b', maxWidth: 400, textAlign: 'center' }}>
-              Choose a vehicle from the dropdown above to see its GPS history with path animation, stop detection, and playback controls.
-            </div>
-          </div>
-        )}
+        <VehicleTracker
+          vehicles={vehicles}
+          highlightNumbers={selectedVehicle ? [selectedVehicle] : []}
+          allVehiclesPaths={allVehiclesPaths}
+          trackingVehicleId={selectedVehicle || null}
+          trackedPathDirect={filteredPath}
+          trackLoading={trackLoading}
+          trackError={trackError}
+        />
       </div>
 
       {/* Info Panel - HIDDEN for professional look */}
