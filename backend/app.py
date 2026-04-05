@@ -25,6 +25,13 @@ try:
 except Exception as e:
     print(f"Warning: Could not load pois blueprint: {e}")
 
+try:
+    from api.fuelRoutes import fuel_bp
+    app.register_blueprint(fuel_bp)
+    print("[INFO] Fuel Control Module loaded successfully")
+except Exception as e:
+    print(f"Warning: Could not load fuel routes: {e}")
+
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
