@@ -637,6 +637,23 @@ function App() {
                       {v.label}
                     </button>
                   ))}
+                  {dashboardView === 'poi' && (
+                    <button
+                      onClick={() => setShowAllPois(!showAllPois)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        padding: '5px 14px', fontSize: 12, fontWeight: 600,
+                        borderRadius: 6, border: '1px solid',
+                        background: showAllPois ? '#059669' : '#fff',
+                        color: showAllPois ? '#fff' : '#4b5563',
+                        borderColor: showAllPois ? '#059669' : '#d1d5db',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                        marginLeft: 'auto',
+                      }}
+                    >
+                      👁️ Show All POI
+                    </button>
+                  )}
                 </div>
               );
             })()}

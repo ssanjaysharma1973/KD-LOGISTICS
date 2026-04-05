@@ -386,7 +386,7 @@ function RoutingTab({ munshi, vehicles, pois, onGoToTrip }) {
             {label} <span style={{ fontWeight: 800, fontSize: 13 }}>{val}</span>
           </div>
         ))}
-        <button onClick={fetchRoute} style={{ marginLeft: 'auto', background: '#1e293b', border: '1px solid #334155', color: '#64748b', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>🔄</button>
+        <button onClick={fetchRoute} style={{ marginLeft: 'auto', background: '#1e293b', border: '1px solid #334155', color: '#64748b', borderRadius: 7, padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}>🔄</button>
       </div>
 
       {loading && <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Loading vehicle positions…</div>}
@@ -523,7 +523,7 @@ function MunshiDeliverModal({ ewb, munshi, onClose, onDone }) {
         {err && <div style={{ color: '#f87171', fontSize: 12, marginBottom: 8 }}>❌ {err}</div>}
         {done && <div style={{ color: '#4ade80', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>✅ Delivered & trip saved!</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '7px 16px', borderRadius: 7, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '7px 16px', borderRadius: 7, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
           <button onClick={handleSave} disabled={saving || done}
             style={{ padding: '7px 18px', borderRadius: 7, border: 'none', background: done ? '#166534' : '#16a34a', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
             {saving ? '⏳ Saving…' : done ? '✅ Done' : '✅ Save & Deliver'}
@@ -852,7 +852,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
           </span>
           {selectedVehicle && (
             <button onClick={() => { setSelectedVehicle(null); setShowForm(false); }}
-              style={{ fontSize: 10, color: '#60a5fa', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontWeight: 700 }}>← All</button>
+              style={{ fontSize: 11, color: '#60a5fa', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontWeight: 700 }}>← All</button>
           )}
         </div>
         {myVehicles.length === 0 && <div style={{ fontSize: 11, color: '#334155', padding: '8px 10px' }}>No vehicles</div>}
@@ -917,11 +917,11 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
                       <button onClick={() => { openNew(ewb, null); setShowForm(true); }}
-                        style={{ fontSize: 10, color: '#fff', background: '#0284c7', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>Use →</button>
+                        style={{ fontSize: 11, color: '#fff', background: '#0284c7', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>Use →</button>
                       <button onClick={() => setDeliverEwb(ewb)}
-                        style={{ fontSize: 10, color: '#fff', background: ewb.status === 'at_destination' ? '#16a34a' : '#166534', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>✅ Deliver</button>
+                        style={{ fontSize: 11, color: '#fff', background: ewb.status === 'at_destination' ? '#16a34a' : '#166534', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>✅ Deliver</button>
                       <button onClick={() => closeEwb(ewb.id)}
-                        style={{ fontSize: 10, color: '#f87171', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>🔒 Close</button>
+                        style={{ fontSize: 11, color: '#f87171', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>🔒 Close</button>
                     </div>
                   </div>
                 );
@@ -984,7 +984,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                       <span key={n} style={{ background: '#1d4ed8', color: '#fff', borderRadius: 12, padding: '2px 10px', fontSize: 11, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4 }}>
                         {n}
                         <button onClick={() => setForm(f => ({ ...f, ewb_nos: f.ewb_nos.filter(x => x !== n) }))}
-                          style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+                          style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}>×</button>
                       </span>
                     ))}
                   </div>
@@ -1107,8 +1107,8 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
             <Field label="Notes" name="notes" />
             {msg && <div style={{ fontSize: 12, marginBottom: 8, color: msg.startsWith('✅') ? '#4ade80' : '#f87171', fontWeight: 700 }}>{msg}</div>}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
-              <button onClick={() => setShowForm(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={saveTrip} disabled={saving} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{saving ? '⏳...' : '💾 Save'}</button>
+              <button onClick={() => setShowForm(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={saveTrip} disabled={saving} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving ? '⏳...' : '💾 Save'}</button>
             </div>
           </div>
         )}
@@ -1132,7 +1132,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                   {selectedVehicle.driver_name && <div style={{ fontSize: 11, color: '#a3e635' }}>👤 {selectedVehicle.driver_name}</div>}
                 </div>
                 <button onClick={() => openNew(null, selectedVehicle)}
-                  style={{ background: '#1d4ed8', border: 'none', borderRadius: 8, padding: '8px 14px', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>+ New Trip</button>
+                  style={{ background: '#1d4ed8', border: 'none', borderRadius: 8, padding: '8px 14px', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+ New Trip</button>
               </div>
 
               {/* Vehicle-specific active EWBs */}
@@ -1153,7 +1153,7 @@ function TripsTab({ munshi, vehicles, pois, tripPrefill, onPrefillDone }) {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
                         <button onClick={() => openNew(ewb, selectedVehicle)}
-                          style={{ fontSize: 10, color: '#fff', background: '#1d4ed8', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>Use →</button>
+                          style={{ fontSize: 11, color: '#fff', background: '#1d4ed8', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>Use →</button>
                         <button onClick={(ev) => { ev.stopPropagation(); setDeliverEwb(ewb); }}
                           style={{ fontSize: 10, color: '#fff', background: ewb.status === 'at_destination' ? '#16a34a' : '#166534', border: 'none', borderRadius: 6, padding: '4px 8px', fontWeight: 700, cursor: 'pointer' }}>✅ Deliver</button>
                       </div>

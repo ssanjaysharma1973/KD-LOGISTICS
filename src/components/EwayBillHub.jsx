@@ -105,11 +105,11 @@ function ImportTab({ onImported }) {
           <button
             onClick={handleUpload}
             disabled={loading || !file}
-            style={{ padding: '10px 24px', background: loading ? '#9ca3af' : '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 14 }}
+            style={{ padding: '10px 24px', background: loading ? '#9ca3af' : '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11 }}
           >
             {loading ? '⏳ Importing…' : '⬆️ Import'}
           </button>
-          {file && <button onClick={() => { setFile(null); setResult(null); setError(''); }} style={{ padding: '10px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>✕ Clear</button>}
+          {file && <button onClick={() => { setFile(null); setResult(null); setError(''); }} style={{ padding: '10px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 11 }}>✕ Clear</button>}
         </div>
 
         {result && (
@@ -450,7 +450,7 @@ function BillsListTab() {
           {searchInput && (
             <button onClick={clearSearch} title="Clear" style={{ padding: '0 8px', border: 'none', background: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
           )}
-          <button onClick={commitSearch} style={{ padding: '7px 14px', background: '#2563eb', color: '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>Search</button>
+          <button onClick={commitSearch} style={{ padding: '7px 14px', background: '#2563eb', color: '#fff', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>Search</button>
         </div>
         <select value={filters.movement_type} onChange={e => fld('movement_type', e.target.value)}
           style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }}>
@@ -472,7 +472,7 @@ function BillsListTab() {
         <span style={{ fontSize: 11, color: '#9ca3af', alignSelf: 'center' }}>to</span>
         <input type="date" value={filters.date_to} onChange={e => fld('date_to', e.target.value)}
           style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }} />
-        <button onClick={handleReclassify} style={{ padding: '7px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>🔄 Re-classify All</button>
+        <button onClick={handleReclassify} style={{ padding: '7px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, cursor: 'pointer' }}>🔄 Re-classify All</button>
         <div style={{ marginLeft: 'auto', fontSize: 13, color: '#6b7280', alignSelf: 'center' }}>{total} bills</div>
       </div>
 
@@ -919,7 +919,7 @@ function VehicleMovementTab() {
           <option value="">All Sizes</option>
           {sizes.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button onClick={fetch_} style={{ padding: '5px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, cursor: 'pointer', fontSize: 12 }}>🔄</button>
+        <button onClick={fetch_} style={{ padding: '5px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, cursor: 'pointer', fontSize: 11 }}>🔄</button>
         <span style={{ fontSize: 10, color: '#9ca3af' }}>auto 30s</span>
         {/* Status pills inline */}
         <div style={{ display: 'flex', gap: 6, marginLeft: 4, flexWrap: 'wrap' }}>
@@ -1087,7 +1087,7 @@ function WarningsTab() {
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center' }}>
         <div style={{ fontWeight: 600, fontSize: 15, color: '#374151' }}>⚠️ Live Warnings</div>
-        <button onClick={fetch_} style={{ padding: '5px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>🔄 Refresh</button>
+        <button onClick={fetch_} style={{ padding: '5px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontSize: 11 }}>🔄 Refresh</button>
         <span style={{ fontSize: 11, color: '#9ca3af' }}>Auto-refreshes every 60s</span>
         <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 600, color: warnings.filter(w => w.severity === 'HIGH').length > 0 ? '#dc2626' : '#6b7280' }}>
           {warnings.length} total ({warnings.filter(w => w.severity === 'HIGH').length} HIGH)
@@ -1482,7 +1482,7 @@ function UnmatchedPoisTab() {
                 style={{ flex: 1, fontSize: 11, padding: '4px 6px', border: '1px solid #d1d5db', borderRadius: 5, fontWeight: 600 }}
               />
               <button onClick={() => cancelCreate(bill.id, side)}
-                style={{ padding: '3px 7px', fontSize: 12, border: 'none', background: '#f3f4f6', borderRadius: 5, cursor: 'pointer', color: '#6b7280' }}>✕</button>
+                style={{ padding: '3px 7px', fontSize: 11, border: 'none', background: '#f3f4f6', borderRadius: 5, cursor: 'pointer', color: '#6b7280' }}>✕</button>
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
               <input
@@ -1752,9 +1752,9 @@ function ExtendModal({ ewb, onClose, onExtended }) {
         )}
 
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
           <button onClick={handleExtend} disabled={loading}
-            style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: loading ? '#93c5fd' : '#2563eb', color: '#fff', fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontSize: 13 }}>
+            style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: loading ? '#93c5fd' : '#2563eb', color: '#fff', fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontSize: 11 }}>>
             {loading ? 'Extending...' : 'Extend Validity'}
           </button>
         </div>
@@ -1865,9 +1865,9 @@ function CompleteModal({ ewb, onClose, onCompleted }) {
         {done && <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontSize: 13, fontWeight: 700 }}>✅ EWB marked delivered & trip expense saved!</div>}
 
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
           <button onClick={handleSave} disabled={loading || done}
-            style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: loading || done ? '#86efac' : '#16a34a', color: '#fff', fontWeight: 700, cursor: loading || done ? 'default' : 'pointer', fontSize: 13 }}>
+            style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: loading || done ? '#86efac' : '#16a34a', color: '#fff', fontWeight: 700, cursor: loading || done ? 'default' : 'pointer', fontSize: 11 }}>
             {loading ? 'Saving…' : done ? '✅ Done' : '✅ Save & Mark Delivered'}
           </button>
         </div>
@@ -2097,7 +2097,7 @@ function NicLiveTab() {
                 </button>
               );
             })}
-            <button onClick={loadList} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, cursor: 'pointer', background: '#fff' }}>🔄 Refresh</button>
+            <button onClick={loadList} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, cursor: 'pointer', background: '#fff' }}>🔄 Refresh</button>
             <button onClick={handleFetchToday} disabled={syncing}
               style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #2563eb', fontSize: 12, cursor: 'pointer', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700 }}>
               {syncing ? '⏳ Fetching…' : '📥 Fetch Today\'s EWBs'}
@@ -2110,7 +2110,7 @@ function NicLiveTab() {
         </div>
 
         {syncMsg && <div style={{ fontSize: 12, marginBottom: 8, color: syncMsg.startsWith('✅') ? '#15803d' : '#dc2626' }}>{syncMsg}</div>}
-        {listError && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 8 }}>❌ {listError} — <button onClick={loadList} style={{ border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 12 }}>Retry</button></div>}
+        {listError && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 8 }}>❌ {listError} — <button onClick={loadList} style={{ border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 11 }}>Retry</button></div>}
         {listLoading && <div style={{ color: '#6b7280', fontSize: 12 }}>Loading...</div>}
 
         {!listLoading && activeList.length === 0 && (

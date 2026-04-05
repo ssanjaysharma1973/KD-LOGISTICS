@@ -571,8 +571,8 @@ export default function DriverPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => load()} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, padding: '7px 12px', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>🔄</button>
-          <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, padding: '6px 12px', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>🔒</button>
+          <button onClick={() => load()} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, padding: '7px 12px', color: '#fff', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>🔄</button>
+          <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, padding: '6px 12px', color: '#fff', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>🔒</button>
         </div>
       </div>
 
@@ -612,7 +612,7 @@ export default function DriverPage() {
                   <div style={{ fontSize: 16, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>No active trip</div>
                   <div style={{ fontSize: 13 }}>Contact your munshi to assign a trip</div>
                   {trips.length > 0 && (
-                    <button onClick={() => setTab('history')} style={{ marginTop: 16, background: '#1e3a8a', border: 'none', borderRadius: 10, padding: '10px 20px', color: '#93c5fd', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    <button onClick={() => setTab('history')} style={{ marginTop: 16, background: '#1e3a8a', border: 'none', borderRadius: 10, padding: '10px 20px', color: '#93c5fd', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                       View Trip History →
                     </button>
                   )}

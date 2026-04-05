@@ -788,7 +788,7 @@ export default function DevAdmin() {
               <h3 style={{ margin: 0, color: '#93c5fd', fontSize: 14 }}>
                 {dbLoading ? '⏳ Loading…' : `${dbVehicles.length} vehicles in DB`}
               </h3>
-              <button onClick={loadDB} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+              <button onClick={loadDB} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>
                 🔄 Refresh
               </button>
             </div>
@@ -811,8 +811,8 @@ export default function DevAdmin() {
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button onClick={saveEdit} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>💾 Save</button>
-                  <button onClick={() => setEditRow(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={saveEdit} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>💾 Save</button>
+                  <button onClick={() => setEditRow(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
             )}
@@ -859,7 +859,7 @@ export default function DevAdmin() {
                   style={{ padding: '5px 14px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>
                   ➕ Add New
                 </button>
-                <button onClick={loadMunshis} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                <button onClick={loadMunshis} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>
                   🔄 Refresh
                 </button>
               </div>
@@ -880,8 +880,8 @@ export default function DevAdmin() {
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button onClick={createMunshi} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>💾 Save</button>
-                  <button onClick={() => setAddMunshi(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={createMunshi} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>💾 Save</button>
+                  <button onClick={() => setAddMunshi(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
             )}
@@ -900,8 +900,8 @@ export default function DevAdmin() {
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button onClick={saveMunshi} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>💾 Save</button>
-                  <button onClick={() => setEditMunshi(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={saveMunshi} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>💾 Save</button>
+                  <button onClick={() => setEditMunshi(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
             )}
@@ -954,7 +954,7 @@ export default function DevAdmin() {
                   style={{ padding: '5px 14px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>
                   ➕ Add New
                 </button>
-                <button onClick={loadDrivers} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                <button onClick={loadDrivers} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>
                   🔄 Refresh
                 </button>
               </div>
@@ -975,8 +975,8 @@ export default function DevAdmin() {
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button onClick={createDriver} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>💾 Save</button>
-                  <button onClick={() => setAddDriver(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={createDriver} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>💾 Save</button>
+                  <button onClick={() => setAddDriver(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
             )}
@@ -995,8 +995,8 @@ export default function DevAdmin() {
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button onClick={saveDriver} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>💾 Save</button>
-                  <button onClick={() => setEditDriver(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={saveDriver} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>💾 Save</button>
+                  <button onClick={() => setEditDriver(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
             )}
@@ -1049,7 +1049,7 @@ export default function DevAdmin() {
                   placeholder="Search name / city / state…"
                   style={{ padding: '5px 10px', background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, fontSize: 12, width: 200 }}
                 />
-                <button onClick={loadPOIs} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                <button onClick={loadPOIs} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>
                   🔄 Refresh
                 </button>
               </div>
@@ -1085,8 +1085,8 @@ export default function DevAdmin() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button onClick={savePoi} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>💾 Save</button>
-                  <button onClick={() => setEditPoi(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={savePoi} style={{ padding: '7px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>💾 Save</button>
+                  <button onClick={() => setEditPoi(null)} style={{ padding: '7px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
             )}
@@ -1139,7 +1139,7 @@ export default function DevAdmin() {
               <h3 style={{ margin: 0, color: '#93c5fd', fontSize: 14 }}>
                 {assignLoading ? '⏳ Loading…' : `${assignVehicles.length} vehicles — select munshi and click Assign`}
               </h3>
-              <button onClick={loadAssignData} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>🔄 Refresh</button>
+              <button onClick={loadAssignData} style={{ padding: '5px 14px', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>🔄 Refresh</button>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>

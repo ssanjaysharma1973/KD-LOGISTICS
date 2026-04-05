@@ -152,7 +152,7 @@ export default function BulkUnloadingCharges() {
     return { bg: '#f1f5f9', color: '#475569' };
   };
 
-  const fmtAmt = (v) => v > 0 ? `?${v.toLocaleString('en-IN')}` : (v === 0 ? '—' : '');
+  const fmtAmt = (v) => v > 0 ? `?${v.toLocaleString('en-IN')}` : (v === 0 ? 'ï¿½' : '');
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>
@@ -183,7 +183,7 @@ export default function BulkUnloadingCharges() {
             {selected.size > 0 ? `${selected.size} POI${selected.size !== 1 ? 's' : ''} selected` : 'Select POIs from table below'}
           </span>
           {selected.size > 0 && (
-            <button onClick={() => setSelected(new Set())} style={{ fontSize: '12px', padding: '2px 8px', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer', color: '#475569' }}>
+            <button onClick={() => setSelected(new Set())} style={{ fontSize: '11px', padding: '2px 8px', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer', color: '#475569' }}>
               Clear selection
             </button>
           )}
@@ -216,7 +216,7 @@ export default function BulkUnloadingCharges() {
             style={{
               padding: '9px 24px',
               background: selected.size > 0 && (cat1 || cat2 || cat3) ? '#2563eb' : '#94a3b8',
-              color: '#fff', border: 'none', borderRadius: '6px', fontSize: '14px',
+              color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px',
               fontWeight: 700, cursor: selected.size > 0 && (cat1 || cat2 || cat3) ? 'pointer' : 'not-allowed'
             }}>
             {saving ? 'Saving...' : ` Save to ${selected.size} POI${selected.size !== 1 ? 's' : ''}`}
@@ -251,7 +251,7 @@ export default function BulkUnloadingCharges() {
 
         {(cityFilter || typeFilter || search) && (
           <button onClick={() => { setCityFilter(''); setTypeFilter(''); setSearch(''); }}
-            style={{ padding: '8px 14px', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            style={{ padding: '8px 14px', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '6px', fontSize: '11px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
             ? Clear
           </button>
         )}

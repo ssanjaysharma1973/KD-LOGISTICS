@@ -47,6 +47,7 @@ export default function POIManagement() {
   const [poiAssignments, setPoiAssignments] = useState([]);
   const [allVehicles, setAllVehicles] = useState([]);
   const [assignVehicleNo, setAssignVehicleNo] = useState('');
+  const [openActionMenu, setOpenActionMenu] = useState(null); // Track which POI has open action menu
 
   const [formData, setFormData] = useState({
     poi_name: '',
@@ -273,7 +274,11 @@ export default function POIManagement() {
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Delete POI "${name || 'Unknown'}"?`)) return;
     try {
-      const response = await fetch(`${APP_API}/api/pois/${id}`, { method: 'DELETE' });
+      const response = await fetch(`${APP_API}/api/pois/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: CLIENT_ID })
+      });
       if (response.ok) {
         setError('');
         fetchPOIs();
@@ -655,7 +660,7 @@ export default function POIManagement() {
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 'bold',
               }}
             >
@@ -670,7 +675,7 @@ export default function POIManagement() {
                 color: 'white',
                 borderRadius: '4px',
                 display: 'inline-block',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 'bold',
               }}>
                 Upload CSV
@@ -686,7 +691,7 @@ export default function POIManagement() {
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 'bold',
               }}
             >
@@ -702,7 +707,7 @@ export default function POIManagement() {
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 'bold',
               }}
             >
@@ -723,7 +728,7 @@ export default function POIManagement() {
                 color: !filterType ? '#fff' : '#475569',
                 border: `1px solid ${!filterType ? '#4338ca' : '#cbd5e1'}`,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
               }}
             >
               All ({pois.length})
@@ -738,7 +743,7 @@ export default function POIManagement() {
                 color: filterType === 'primary' ? '#fff' : '#1e40af',
                 border: `1px solid #93c5fd`,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
               }}
             >
               🏭 Primary ({pois.filter(p => (p.type || 'primary') === 'primary').length})
@@ -753,7 +758,7 @@ export default function POIManagement() {
                 color: filterType === 'secondary' ? '#fff' : '#92400e',
                 border: `1px solid #fcd34d`,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
               }}
             >
               🔄 Distributor ({pois.filter(p => (p.type || 'primary') === 'secondary').length})
@@ -768,7 +773,7 @@ export default function POIManagement() {
                 color: filterType === 'tertiary' ? '#fff' : '#065f46',
                 border: `1px solid #6ee7b7`,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
               }}
             >
               📦 Dealer ({pois.filter(p => (p.type || 'primary') === 'tertiary').length})
@@ -783,7 +788,7 @@ export default function POIManagement() {
                 color: filterType === 'other' ? '#fff' : '#6b7280',
                 border: `1px solid #d1d5db`,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
               }}
             >
               📍 Other ({pois.filter(p => (p.type || 'primary') === 'other').length})
@@ -798,7 +803,7 @@ export default function POIManagement() {
                 color: filterType === 'pending' ? '#fff' : '#b45309',
                 border: `1px solid #fcd34d`,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
               }}
             >
               ⏳ Pending ({pois.filter(p => !p.type || p.type === '').length})
@@ -919,7 +924,7 @@ export default function POIManagement() {
                 border: 'none',
                 borderRadius: 6,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
                 cursor: 'pointer'
               }}>
                 ✓ Change Status
@@ -931,7 +936,7 @@ export default function POIManagement() {
                 border: 'none',
                 borderRadius: 6,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
                 cursor: 'pointer'
               }}>
                 ✕ Clear Selection
@@ -1000,13 +1005,87 @@ export default function POIManagement() {
                           🚛 Vehicles
                         </button>
                       </td>
-                      <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => handleEdit(poi)} style={{ padding: '4px 8px', marginRight: 4, fontSize: 11, backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: 3, cursor: 'pointer' }}>
-                          ✏️ Edit
+                      <td style={{ padding: '8px', position: 'relative' }}>
+                        {/* Dropdown Menu Button */}
+                        <button
+                          onClick={() => setOpenActionMenu(openActionMenu === poi.id ? null : poi.id)}
+                          style={{
+                            padding: '5px 12px',
+                            fontSize: 11,
+                            backgroundColor: '#8b5cf6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: 4,
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          ⋮ Actions
                         </button>
-                        <button onClick={() => handleDelete(poi.id, poi.poi_name || poi.name)} style={{ padding: '4px 8px', fontSize: 11, backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: 3, cursor: 'pointer' }}>
-                          🗑️ Delete
-                        </button>
+                        {/* Dropdown Menu Items */}
+                        {openActionMenu === poi.id && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            right: 0,
+                            background: 'white',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 6,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                            zIndex: 100,
+                            minWidth: 140,
+                            marginTop: 2
+                          }}>
+                            <button
+                              onClick={() => {
+                                handleEdit(poi);
+                                setOpenActionMenu(null);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                textAlign: 'left',
+                                fontSize: 11,
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: '#2196F3',
+                                fontWeight: 500,
+                                borderBottom: '1px solid #f0f0f0',
+                                borderRadius: '4px 4px 0 0',
+                                transition: 'background 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.target.style.background = '#f0f9ff'}
+                              onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleDelete(poi.id, poi.poi_name || poi.name);
+                                setOpenActionMenu(null);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                textAlign: 'left',
+                                fontSize: 11,
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: '#f44336',
+                                fontWeight: 500,
+                                borderRadius: '0 0 4px 4px',
+                                transition: 'background 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.target.style.background = '#ffebee'}
+                              onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                            >
+                              🗑️ Delete
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

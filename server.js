@@ -1695,15 +1695,24 @@ async function handleRequest(req, res, rawPath) {
   if (/^\/api\/pois\/\d+$/.test(pathname) && req.method === 'DELETE') {
     const poiId = pathname.split('/').pop();
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
-    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    const clientId = jwtPayload?.clientId;
-    if (!clientId) { res.statusCode = 401; return res.end(JSON.stringify({ error: 'Unauthorized' })); }
-    // Ensure delete only affects records belonging to the JWT clientId
-    db2.run('DELETE FROM pois WHERE id=? AND client_id=?', [poiId, clientId], function(err) { 
-      db2.close(); res.setHeader('Content-Type','application/json');
-      if (err) return res.end(JSON.stringify({ error: err.message }));
-      if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'POI not found or unauthorized' }));
-      res.end(JSON.stringify({ success: true }));
+    let bodyData = '';
+    req.on('data', chunk => { bodyData += chunk; });
+    req.on('end', () => {
+      try {
+        const body = bodyData ? JSON.parse(bodyData) : {};
+        const clientId = jwtPayload?.clientId || body.clientId || 'CLIENT_001';
+        const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+        // Ensure delete only affects records belonging to the clientId
+        db2.run('DELETE FROM pois WHERE id=? AND client_id=?', [poiId, clientId], function(err) { 
+          db2.close(); res.setHeader('Content-Type','application/json');
+          if (err) return res.end(JSON.stringify({ error: err.message }));
+          if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'POI not found or unauthorized' }));
+          res.end(JSON.stringify({ success: true }));
+        });
+      } catch (e) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: 'Invalid request body' }));
+      }
     });
     return;
   }
