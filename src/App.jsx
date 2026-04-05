@@ -708,8 +708,9 @@ function App() {
                   };
                   const s = S[vehicle.status] || S.OFFLINE;
                   const stopTime = vehicle.gps_time ? formatDurationSince(vehicle.gps_time) : null;
+                  const vNum = vehicle.vehicle_number || vehicle.number || vehicle.vehicleNumber || vehicle.id || 'Unknown';
                   return (
-                    <div key={vehicle.vehicle_number || index} style={{
+                    <div key={vNum} style={{
                       background: s.bg, borderRadius: 8,
                       border: '1px solid #e5e7eb', borderLeft: `4px solid ${s.left}`,
                       padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 3,
@@ -721,7 +722,7 @@ function App() {
                           background: s.badge, color: s.badgeText, letterSpacing: 0.5,
                         }}>{s.label}</span>
                         <Truck size={14} color="#9ca3af" />
-                        <span style={{ fontWeight: 700, fontSize: 13, color: '#111', flex: 1 }}>{vehicle.vehicle_number}</span>
+                        <span style={{ fontWeight: 700, fontSize: 13, color: '#111', flex: 1 }}>{vNum}</span>
                         {vehicle.vehicle_size && (
                           <span style={{
                             fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
@@ -751,7 +752,7 @@ function App() {
                       </div>
                       {/* EWB Load Status + mini History link */}
                       {(() => {
-                        const ewb = ewbVehicleMap[vehicle.vehicle_number];
+                        const ewb = ewbVehicleMap[vNum];
                         const LOAD_STATUS = {
                           unloading_at_delivery: { icon: '🔴', label: 'Unloading', color: '#dc2626', bg: '#fee2e2' },
                           in_transit_loaded:     { icon: '🟢', label: 'In Transit', color: '#166534', bg: '#dcfce7' },
