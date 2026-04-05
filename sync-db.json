@@ -18,7 +18,7 @@
         "dttimeInEpoch": 1775280813,
         "angle": 0,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.488Z"
+        "_syncedAt": "2026-04-05T01:24:41.445Z"
       },
       {
         "vehicleNumber": "HR69C5918",
@@ -37,7 +37,7 @@
         "dttimeInEpoch": 1775284645,
         "angle": 0,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C9464",
@@ -56,7 +56,7 @@
         "dttimeInEpoch": 1773437442,
         "angle": 298,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69D7839",
@@ -75,7 +75,7 @@
         "dttimeInEpoch": 1775347622,
         "angle": 173,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C7503",
@@ -94,7 +94,7 @@
         "dttimeInEpoch": 1775209032,
         "angle": 47,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C1069",
@@ -104,17 +104,17 @@
         "latitude": 28.482556111111112,
         "longitude": 76.80252166666668,
         "speed": 0,
-        "createdDate": 1775351742,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352178,
+        "createdDateReadable": "05 Apr, 2026, 06:52 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351742,
+        "dttime": "05 Apr, 2026, 06:52 AM",
+        "dttimeInEpoch": 1775352178,
         "angle": 10,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C9426",
@@ -134,7 +134,7 @@
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C2404",
@@ -153,7 +153,7 @@
         "dttimeInEpoch": 1775350273,
         "angle": 54,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C5462",
@@ -172,7 +172,7 @@
         "dttimeInEpoch": 1775301134,
         "angle": 33,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C1469",
@@ -191,7 +191,7 @@
         "dttimeInEpoch": 1774933363,
         "angle": 227,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C0322",
@@ -210,7 +210,7 @@
         "dttimeInEpoch": 1773726404,
         "angle": 0,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C3792",
@@ -230,7 +230,7 @@
         "angle": 186,
         "chargeOn": false,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69D5218",
@@ -249,7 +249,7 @@
         "dttimeInEpoch": 1775318099,
         "angle": 335,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69D2105",
@@ -259,17 +259,17 @@
         "latitude": 28.5773733,
         "longitude": 76.8076616,
         "speed": 0,
-        "createdDate": 1775351743,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352223,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351743,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352223,
         "angle": 111,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69B0047",
@@ -289,7 +289,7 @@
         "angle": 0,
         "chargeOn": false,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E6508",
@@ -299,17 +299,17 @@
         "latitude": 28.39695111111111,
         "longitude": 76.82588444444444,
         "speed": 0,
-        "createdDate": 1775351763,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352244,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351763,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352244,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E6091",
@@ -328,7 +328,7 @@
         "dttimeInEpoch": 1775341446,
         "angle": 44,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E9759",
@@ -347,7 +347,7 @@
         "dttimeInEpoch": 1775350542,
         "angle": 249,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E3449",
@@ -366,27 +366,27 @@
         "dttimeInEpoch": 1775336645,
         "angle": 180,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E3098",
         "deviceNumber": "866992051916485",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 28.477193333333332,
-        "longitude": 76.81149333333333,
+        "latitude": 28.477104444444443,
+        "longitude": 76.81123555555556,
         "speed": 0,
-        "createdDate": 1775351744,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352219,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "NA",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351744,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352219,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E3221",
@@ -406,7 +406,7 @@
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E7043",
@@ -425,66 +425,66 @@
         "dttimeInEpoch": 1775322374,
         "angle": 79,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E0704",
         "deviceNumber": "864445061038321",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 28.51025388888889,
-        "longitude": 76.76451833333334,
+        "latitude": 28.50811333333333,
+        "longitude": 76.76638,
         "speed": 0,
-        "createdDate": 1775351775,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352263,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "NA",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351775,
-        "angle": 87,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352263,
+        "angle": 294,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E1367",
         "deviceNumber": "866992051778919",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 28.264453333333332,
-        "longitude": 77.16466666666666,
+        "latitude": 28.26424666666667,
+        "longitude": 77.16457777777778,
         "speed": 0,
-        "createdDate": 1775351773,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352256,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "NA",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351773,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352256,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E5116",
         "deviceNumber": "867010071221163",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 28.379473333333333,
-        "longitude": 76.83020444444445,
-        "speed": 34,
-        "createdDate": 1775351791,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "latitude": 28.358215555555557,
+        "longitude": 76.80492444444444,
+        "speed": 28,
+        "createdDate": 1775352271,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351791,
-        "angle": 181,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352271,
+        "angle": 211,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C0543",
@@ -503,7 +503,7 @@
         "dttimeInEpoch": 1756899835,
         "angle": 285,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69C1766",
@@ -523,7 +523,7 @@
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69D6198",
@@ -542,7 +542,7 @@
         "dttimeInEpoch": 1775247301,
         "angle": 235,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E4155",
@@ -562,27 +562,27 @@
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E3185",
         "deviceNumber": "864445060226547",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 28.376554444444444,
-        "longitude": 76.87222277777778,
-        "speed": 48,
-        "createdDate": 1775351797,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "latitude": 28.322154444444443,
+        "longitude": 76.89172333333333,
+        "speed": 47,
+        "createdDate": 1775352277,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": true,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351797,
-        "angle": 163,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352277,
+        "angle": 160,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E1046",
@@ -592,17 +592,17 @@
         "latitude": 28.39687888888889,
         "longitude": 76.82501944444445,
         "speed": 0,
-        "createdDate": 1775351740,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352220,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351740,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352220,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E8928",
@@ -612,17 +612,17 @@
         "latitude": 28.984496666666665,
         "longitude": 77.04249555555556,
         "speed": 0,
-        "createdDate": 1775351773,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352253,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351773,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352253,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E5768",
@@ -632,17 +632,17 @@
         "latitude": 28.31534,
         "longitude": 76.78096722222222,
         "speed": 0,
-        "createdDate": 1775351779,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352259,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351779,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352259,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E7719",
@@ -652,17 +652,17 @@
         "latitude": 28.396833333333333,
         "longitude": 76.8248061111111,
         "speed": 0,
-        "createdDate": 1775351743,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352223,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351743,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352223,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E7086",
@@ -672,17 +672,17 @@
         "latitude": 28.480867222222223,
         "longitude": 76.80139888888888,
         "speed": 0,
-        "createdDate": 1775351758,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352238,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351758,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352238,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E4986",
@@ -692,17 +692,17 @@
         "latitude": 28.314590555555558,
         "longitude": 76.78076888888889,
         "speed": 0,
-        "createdDate": 1775351747,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352216,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351747,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352216,
         "angle": 181,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E6429",
@@ -712,17 +712,17 @@
         "latitude": 28.235006111111108,
         "longitude": 77.02671000000001,
         "speed": 0,
-        "createdDate": 1775351760,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352240,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351760,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352240,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E7650",
@@ -732,17 +732,17 @@
         "latitude": 29.640800000000002,
         "longitude": 77.07352888888889,
         "speed": 0,
-        "createdDate": 1775351762,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352242,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351762,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352242,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E0550",
@@ -761,7 +761,7 @@
         "dttimeInEpoch": 1775350576,
         "angle": 0,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E3484",
@@ -771,16 +771,16 @@
         "latitude": 28.476904444444447,
         "longitude": 76.81080888888889,
         "speed": 0,
-        "createdDate": 1775318159,
-        "createdDateReadable": "04 Apr, 2026, 09:25 PM",
+        "createdDate": 1775352029,
+        "createdDateReadable": "05 Apr, 2026, 06:50 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "04 Apr, 2026, 09:25 PM",
-        "dttimeInEpoch": 1775318159,
+        "dttime": "05 Apr, 2026, 06:50 AM",
+        "dttimeInEpoch": 1775352029,
         "angle": 178,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E8390",
@@ -799,7 +799,7 @@
         "dttimeInEpoch": 1775322431,
         "angle": 305,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E5792",
@@ -818,27 +818,27 @@
         "dttimeInEpoch": 1775324732,
         "angle": 10,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E2172",
         "deviceNumber": "864445067149254",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 28.375305555555556,
-        "longitude": 76.71734277777777,
-        "speed": 25,
-        "createdDate": 1775351786,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "latitude": 28.38065611111111,
+        "longitude": 76.69777,
+        "speed": 14,
+        "createdDate": 1775352262,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": true,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351786,
-        "angle": 297,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352262,
+        "angle": 142,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E1008",
@@ -857,7 +857,7 @@
         "dttimeInEpoch": 1775280160,
         "angle": 236,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E4399",
@@ -876,7 +876,7 @@
         "dttimeInEpoch": 1775334805,
         "angle": 55,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E9600",
@@ -886,17 +886,17 @@
         "latitude": 28.100295000000003,
         "longitude": 73.19406611111111,
         "speed": 0,
-        "createdDate": 1775351759,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352239,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351759,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352239,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E4346",
@@ -915,7 +915,7 @@
         "dttimeInEpoch": 1775312874,
         "angle": 83,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E8323",
@@ -934,7 +934,7 @@
         "dttimeInEpoch": 1775321376,
         "angle": 213,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E5882",
@@ -954,7 +954,7 @@
         "angle": 12,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E4728",
@@ -973,7 +973,7 @@
         "dttimeInEpoch": 1775202260,
         "angle": 147,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E1307",
@@ -992,7 +992,7 @@
         "dttimeInEpoch": 1773209623,
         "angle": 194,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E6500",
@@ -1011,7 +1011,7 @@
         "dttimeInEpoch": 1775282836,
         "angle": 11,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E0353",
@@ -1030,7 +1030,7 @@
         "dttimeInEpoch": 1775309730,
         "angle": 300,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69E3420",
@@ -1049,7 +1049,7 @@
         "dttimeInEpoch": 1775309252,
         "angle": 358,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR58D3260",
@@ -1059,17 +1059,17 @@
         "latitude": 28.354558,
         "longitude": 76.803008,
         "speed": 0,
-        "createdDate": 1775351788,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352268,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351788,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352268,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR58D9365",
@@ -1089,7 +1089,7 @@
         "angle": 81,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR58D6065",
@@ -1099,17 +1099,17 @@
         "latitude": 25.934403888888887,
         "longitude": 74.6306811111111,
         "speed": 0,
-        "createdDate": 1775351753,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352233,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351753,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352233,
         "angle": 19,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR58D5241",
@@ -1119,17 +1119,17 @@
         "latitude": 25.15948277777778,
         "longitude": 82.40428166666668,
         "speed": 0,
-        "createdDate": 1775351773,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352253,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "NA",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351773,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352253,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.489Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR58D7754",
@@ -1139,17 +1139,17 @@
         "latitude": 28.23536888888889,
         "longitude": 77.0277038888889,
         "speed": 0,
-        "createdDate": 1775351784,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352264,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "NA",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351784,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352264,
         "angle": 9,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F4569",
@@ -1169,27 +1169,27 @@
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F8786",
         "deviceNumber": "861185070668139",
         "vendorCode": "WE855048",
         "venndorName": "Pardeep Sharma",
-        "latitude": 25.108348888888887,
-        "longitude": 75.86117277777777,
-        "speed": 0,
-        "createdDate": 1775351749,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "latitude": 25.108073333333333,
+        "longitude": 75.861175,
+        "speed": 11,
+        "createdDate": 1775352275,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
-        "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351749,
-        "angle": 177,
+        "ignition": true,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352275,
+        "angle": 174,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F4116",
@@ -1199,17 +1199,17 @@
         "latitude": 28.077751111111112,
         "longitude": 79.18963666666667,
         "speed": 0,
-        "createdDate": 1775351742,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352222,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351742,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352222,
         "angle": 59,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F3148",
@@ -1229,7 +1229,7 @@
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F7839",
@@ -1239,17 +1239,17 @@
         "latitude": 25.179758333333332,
         "longitude": 75.85532444444445,
         "speed": 0,
-        "createdDate": 1775351736,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352216,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351736,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352216,
         "angle": 81,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F9221",
@@ -1259,17 +1259,17 @@
         "latitude": 28.47706833333333,
         "longitude": 76.81122777777777,
         "speed": 0,
-        "createdDate": 1775351758,
-        "createdDateReadable": "05 Apr, 2026, 06:45 AM",
+        "createdDate": 1775352238,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:45 AM",
-        "dttimeInEpoch": 1775351758,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352238,
         "angle": 77,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F6651",
@@ -1279,17 +1279,17 @@
         "latitude": 29.577960555555553,
         "longitude": 77.14061277777778,
         "speed": 0,
-        "createdDate": 1775351761,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352241,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351761,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352241,
         "angle": 45,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F4359",
@@ -1308,27 +1308,27 @@
         "dttimeInEpoch": 1775312139,
         "angle": 55,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F1744",
         "deviceNumber": "861185071100439",
         "vendorCode": "WE855048",
         "venndorName": "Pardeep Sharma",
-        "latitude": 28.35173166666667,
-        "longitude": 76.75716333333334,
-        "speed": 12,
-        "createdDate": 1775351791,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "latitude": 28.366219444444443,
+        "longitude": 76.73443777777779,
+        "speed": 0,
+        "createdDate": 1775352269,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
-        "ignition": true,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351791,
-        "angle": 335,
+        "ignition": false,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352269,
+        "angle": 318,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F8790",
@@ -1347,46 +1347,46 @@
         "dttimeInEpoch": 1775350110,
         "angle": 25,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F4174",
         "deviceNumber": "357591100117362",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 29.640897777777777,
+        "latitude": 29.640904444444445,
         "longitude": 77.07358222222223,
-        "speed": 1,
-        "createdDate": 1775351635,
-        "createdDateReadable": "05 Apr, 2026, 06:43 AM",
+        "speed": 0,
+        "createdDate": 1775351819,
+        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:43 AM",
-        "dttimeInEpoch": 1775351635,
-        "angle": 359,
+        "dttime": "05 Apr, 2026, 06:46 AM",
+        "dttimeInEpoch": 1775351819,
+        "angle": 85,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F9208",
         "deviceNumber": "861185071053182",
         "vendorCode": "WE855048",
         "venndorName": "Pardeep Sharma",
-        "latitude": 28.38173,
-        "longitude": 76.84201277777778,
-        "speed": 10,
-        "createdDate": 1775351785,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "latitude": 28.38996388888889,
+        "longitude": 76.82681444444444,
+        "speed": 0,
+        "createdDate": 1775352269,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
-        "ignition": true,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351785,
-        "angle": 242,
+        "ignition": false,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352269,
+        "angle": 330,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR45D5887",
@@ -1406,7 +1406,7 @@
         "angle": 327,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR45D2287",
@@ -1416,17 +1416,17 @@
         "latitude": 29.641228888888886,
         "longitude": 77.07369777777778,
         "speed": 0,
-        "createdDate": 1775350542,
-        "createdDateReadable": "05 Apr, 2026, 06:25 AM",
+        "createdDate": 1775351830,
+        "createdDateReadable": "05 Apr, 2026, 06:47 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:25 AM",
-        "dttimeInEpoch": 1775350542,
+        "dttime": "05 Apr, 2026, 06:47 AM",
+        "dttimeInEpoch": 1775351830,
         "angle": 98,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F5645",
@@ -1445,7 +1445,7 @@
         "dttimeInEpoch": 1775323765,
         "angle": 165,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F4307",
@@ -1465,7 +1465,7 @@
         "angle": 62,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69F0136",
@@ -1475,17 +1475,17 @@
         "latitude": 28.3971435546875,
         "longitude": 76.82638346354166,
         "speed": 0,
-        "createdDate": 1775351669,
-        "createdDateReadable": "05 Apr, 2026, 06:44 AM",
+        "createdDate": 1775352239,
+        "createdDateReadable": "05 Apr, 2026, 06:53 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:44 AM",
-        "dttimeInEpoch": 1775351669,
-        "angle": 127,
+        "dttime": "05 Apr, 2026, 06:53 AM",
+        "dttimeInEpoch": 1775352239,
+        "angle": 1,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G9012",
@@ -1495,17 +1495,17 @@
         "latitude": 25.934402465820312,
         "longitude": 74.63069915771484,
         "speed": 0,
-        "createdDate": 1775351798,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352278,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351798,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352278,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G7186GPS1",
@@ -1515,37 +1515,37 @@
         "latitude": 28.315244674682617,
         "longitude": 76.78084564208984,
         "speed": 0,
-        "createdDate": 1775351790,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352270,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351790,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352270,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G8113",
         "deviceNumber": "867542080150496",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 25.843467712402344,
-        "longitude": 75.5062255859375,
-        "speed": 61,
-        "createdDate": 1775351791,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "latitude": 25.885908126831055,
+        "longitude": 75.57123565673828,
+        "speed": 59,
+        "createdDate": 1775352271,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": true,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351791,
-        "angle": 61,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352271,
+        "angle": 47,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G9109",
@@ -1555,17 +1555,17 @@
         "latitude": 28.48199462890625,
         "longitude": 76.80451965332031,
         "speed": 0,
-        "createdDate": 1775351798,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352278,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351798,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352278,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G4183",
@@ -1575,17 +1575,17 @@
         "latitude": 28.477113723754883,
         "longitude": 76.81130981445312,
         "speed": 0,
-        "createdDate": 1775351791,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352271,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351791,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352271,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G7569",
@@ -1595,17 +1595,17 @@
         "latitude": 28.235055923461914,
         "longitude": 77.02659606933594,
         "speed": 0,
-        "createdDate": 1775351800,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352280,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351800,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352280,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G8046",
@@ -1615,17 +1615,17 @@
         "latitude": 28.314685821533203,
         "longitude": 76.78074645996094,
         "speed": 0,
-        "createdDate": 1775351799,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352279,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351799,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352279,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G0618",
@@ -1635,37 +1635,37 @@
         "latitude": 27.230497360229492,
         "longitude": 77.49365234375,
         "speed": 0,
-        "createdDate": 1775351797,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352277,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351797,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352277,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G5914",
         "deviceNumber": "867542080213468",
         "vendorCode": "WE660326",
         "venndorName": "Atul Kumar",
-        "latitude": 27.5999755859375,
-        "longitude": 80.60400390625,
-        "speed": 58,
-        "createdDate": 1775351792,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "latitude": 27.555320739746094,
+        "longitude": 80.66568756103516,
+        "speed": 61,
+        "createdDate": 1775352272,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Open",
         "ignition": true,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351792,
-        "angle": 116,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352272,
+        "angle": 129,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       },
       {
         "vehicleNumber": "HR69G5379",
@@ -1675,17 +1675,17 @@
         "latitude": 28.476978302001953,
         "longitude": 76.81105041503906,
         "speed": 0,
-        "createdDate": 1775351800,
-        "createdDateReadable": "05 Apr, 2026, 06:46 AM",
+        "createdDate": 1775352280,
+        "createdDateReadable": "05 Apr, 2026, 06:54 AM",
         "provider": "WHEELSEYE",
         "vehicleType": "Container",
         "ignition": false,
-        "dttime": "05 Apr, 2026, 06:46 AM",
-        "dttimeInEpoch": 1775351800,
+        "dttime": "05 Apr, 2026, 06:54 AM",
+        "dttimeInEpoch": 1775352280,
         "angle": 0,
         "chargeOn": true,
         "accurate": false,
-        "_syncedAt": "2026-04-05T01:16:41.490Z"
+        "_syncedAt": "2026-04-05T01:24:41.446Z"
       }
     ]
   }
