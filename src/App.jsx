@@ -40,6 +40,7 @@ import MunshiPortal from "./components/MunshiPortal.jsx";
 import EwayBillHub from "./components/EwayBillHub.jsx";
 import DevAdmin from "./components/DevAdmin.jsx";
 import RouteMemoryAdmin from "./components/RouteMemoryAdmin.jsx";
+import FuelManagementPage from "./components/FuelManagementPage.jsx";
 import { formatDurationSince } from './utils.js';
 import { sortVehiclesByTime } from './utils/vehicle.js';
 
@@ -1042,6 +1043,10 @@ function App() {
 
         {activeTab === 'ewaybill' && (
           <EwayBillHub defaultTab="vehicles" />
+        )}
+
+        {activeTab === 'fuel-management' && (
+          <FuelManagementPage userRole="driver" userId="currentUser" clientId="CLIENT_001" tripId="" />
         )}
 
         {(activeTab === 'unloading-rates' || activeTab === 'bulk-unloading-charges') && (

@@ -11,6 +11,7 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
     { key: 'ewaybill', label: 'E-Way Bill Hub', emoji: '📄' },
     { key: 'trip-dispatch', label: 'Trip Dispatch', emoji: '🚚' },
     { key: 'munshi-ops', label: 'Munshi Hub', emoji: '📋' },
+    { key: 'fuel-management', label: 'Fuel Control', emoji: '⛽' },
     { key: 'route-ops', label: 'Route Ops', emoji: '🚦' },
   ];
 
