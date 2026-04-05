@@ -197,51 +197,26 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
   function FitBounds({ vehicles, trackedPath, trackingVehicleId }) {
     const map = useMap();
     const initialFitRef = React.useRef(false);
-    const lastTrackingIdRef = React.useRef(null);
     
     React.useEffect(() => {
-      // Only fit bounds on initial load or when vehicle selection CHANGES
-      // Don't fit if user is manually interacting OR playing animation
-      if (userInteractingRef.current || isPlaying) return;
-
-      // Detect vehicle selection CHANGE (not just update of same vehicle)
-      const vehicleChanged = lastTrackingIdRef.current !== trackingVehicleId;
-      lastTrackingIdRef.current = trackingVehicleId;
-
-      // When a specific vehicle is being tracked and its path has loaded,
-      // zoom to the MOST RECENT end of the path (current location), not all historical data.
-      if (trackingVehicleId && Array.isArray(trackedPath) && trackedPath.length > 0 && vehicleChanged) {
-        // Use last 20 points to determine the current area (avoids old historical regions pulling the view)
-        const recent = trackedPath.slice(-20);
-        const pathCoords = recent
-          .map(p => [Number(p.lat), Number(p.lng)])
-          .filter(c => !isNaN(c[0]) && !isNaN(c[1]));
-        if (pathCoords.length > 0) {
-          try {
-            // Use animate: false to prevent jittery behavior, reduced padding to keep zoom stable
-            map.fitBounds(pathCoords, { padding: [40, 40], animate: false, maxZoom: 13 });
-          } catch { /* ignore */ }
-        }
-        initialFitRef.current = true;
-        return;
-      }
+      // ONLY fit bounds on FIRST load, NEVER adjust again
+      // This keeps zoom completely stable while user can manually zoom/pan
+      if (initialFitRef.current) return;
       
-      // No track active — fit to all fleet vehicles (only on first load)
-      if (!trackingVehicleId && !initialFitRef.current) {
-        const coords = vehicles
-          .filter((v) => v && v.lat != null && v.lng != null)
-          .map((v) => [Number(v.lat), Number(v.lng)]);
-        
-        if (coords.length === 0) return;
-        
-        try {
-          map.fitBounds(coords, { padding: [50, 50], animate: false, maxZoom: 12 });
-          initialFitRef.current = true;
-        } catch {
-          // ignore fit errors
-        }
+      // Initial fit: show all fleet vehicles
+      const coords = vehicles
+        .filter((v) => v && v.lat != null && v.lng != null)
+        .map((v) => [Number(v.lat), Number(v.lng)]);
+      
+      if (coords.length === 0) return;
+      
+      try {
+        map.fitBounds(coords, { padding: [50, 50], animate: false, maxZoom: 12 });
+        initialFitRef.current = true;
+      } catch {
+        // ignore fit errors
       }
-    }, [trackingVehicleId]); // Only re-fit when vehicle selection CHANGES, not on every path update
+    }, []); // Empty dependency — only run once on mount
     
     return (
       <MapInteractionHandler 

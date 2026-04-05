@@ -660,6 +660,19 @@ function App() {
 
             {/* ── Vehicle Grid / Map ── */}
             {dashboardView === 'grid' ? (
+              <>
+                {loading && (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b', fontSize: 14 }}>
+                    ⏳ Loading vehicles...
+                  </div>
+                )}
+                {!loading && vehicles.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                    <div style={{ fontSize: 48, marginBottom: 8 }}>🚛</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>No vehicles available</div>
+                  </div>
+                )}
+                {!loading && vehicles.length > 0 && (
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
@@ -790,6 +803,8 @@ function App() {
                   );
                 })}
             </div>
+                )}
+              </>
             ) : dashboardView === 'poi' ? (
               <div style={{ padding: '0 8px' }}>
                 {(() => {
