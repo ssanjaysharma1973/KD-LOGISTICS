@@ -276,11 +276,6 @@ function DeduplicatePanel({ onDone }) {
   );
 }
 
-// ─── SYNC FROM MASTERS INDIA TAB ───────────────────────────────────────────────
-    </div>
-  );
-}
-
 // ─── BILLS LIST TAB ────────────────────────────────────────────────────────────
 function BillsListTab() {
   const [bills, setBills] = useState([]);
