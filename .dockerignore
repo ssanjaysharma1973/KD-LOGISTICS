@@ -9,3 +9,15 @@ dist
 .venv
 __pycache__
 *.py
+backend/
+server.js
+server.minimal.js
+Bootstrap-project/
+migrations/
+tests/
+tools/
+.github/
+.vscode/
+*.sqlite
+*.sqlite3
+

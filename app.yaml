@@ -1,0 +1,20 @@
+name: kd-logistics-frontend
+services:
+- name: web
+  github:
+    repo: ssanjaysharma1973/KD-LOGISTICS
+    branch: main
+  build_command: npm install && npm run build
+  run_command: npm run start:prod
+  source_dir: .
+  http_port: 8080
+  envs:
+  - key: VITE_API_BASE_URL
+    value: https://kd-logistics-production.up.railway.app
+    scope: BUILD_AND_RUN_TIME
+  - key: NODE_ENV
+    value: production
+    scope: BUILD_AND_RUN_TIME
+  resource_type: web
+  instance_count: 1
+
