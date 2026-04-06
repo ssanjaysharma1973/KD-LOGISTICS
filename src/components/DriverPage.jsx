@@ -201,26 +201,37 @@ const ISSUE_TYPES = [
   'Other',
 ];
 
-function ReportTab({ vehicle }) {
-  const [issueType, setIssueType] = useState(ISSUE_TYPES[0]);
-  const [desc,      setDesc]      = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [msg,       setMsg]       = useState(null);
-  const [reports,   setReports]   = useState([]);
-  const [loadingR,  setLoadingR]  = useState(false);
+const ISSUE_TEMPLATES = {
+  'Breakdown / Engine Failure': 'Engine failure detected. Vehicle is not moving. Immediate assistance needed.',
+  'Tyre Puncture': 'Vehicle has a tyre puncture. Unable to continue. Requesting roadside assistance.',
+  'Accident': 'Vehicle involved in an accident. Assessing damage and safety situation.',
+  'Route Blocked / Diversion': 'Original route is blocked due to construction/accident. Taking alternate route.',
+  'Delivery Dispute at Party': 'Customer refusing delivery. Discussing resolution with party.',
+  'Vehicle Not Moving / Stuck': 'Vehicle is stuck and unable to move forward.',
+  'Other': 'Issue details to be provided.',
+};
+
+function ReportTab({ vehicle, issueType, setIssueType, desc, setDesc, submitting, setSubmitting, msg, setMsg, reports, setReports, loading: loadingR, setLoading: setLoadingR, activeTrip, stops }) {
 
   const vno = vehicle?.vehicle_no || '';
+  
+  // Get current POI from first incomplete stop
+  const currentStop = stops?.find(s => s.stop_status !== 'arrived' && s.stop_status !== 'completed');
+  const currentPoi = currentStop?.poi_name || (stops && stops.length > 0 ? stops[0]?.poi_name : null);
+  
+  // Show trip destination if no POI/stops
+  const displayLocation = currentPoi || activeTrip?.to_place || activeTrip?.to_poi_name || 'Active Trip';
 
   const loadReports = useCallback(async () => {
     if (!vno) return;
     setLoadingR(true);
     try {
-      const res = await fetch(`${API}/driver/reports?vehicle_no=${encodeURIComponent(vno)}`);
+      const res = await fetch(`${API}/drivers/reports?vehicle_no=${encodeURIComponent(vno)}`);
       const d = await res.json();
       setReports(Array.isArray(d) ? d : []);
     } catch { setReports([]); }
     setLoadingR(false);
-  }, [vno]);
+  }, [vno, setLoadingR, setReports]);
 
   useEffect(() => { loadReports(); }, [loadReports]);
 
@@ -228,7 +239,7 @@ function ReportTab({ vehicle }) {
     if (!desc.trim()) { setMsg({ ok: false, text: 'Please describe the issue' }); return; }
     setSubmitting(true); setMsg(null);
     try {
-      const res = await fetch(`${API}/driver/report`, {
+      const res = await fetch(`${API}/drivers/report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -257,12 +268,24 @@ function ReportTab({ vehicle }) {
       {/* Submit form */}
       <div style={{ background: '#1e293b', borderRadius: 14, padding: '18px 18px', marginBottom: 20, border: '1px solid #334155' }}>
         <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9', marginBottom: 14 }}>🚨 Report an Issue</div>
+        
+        {/* Current POI/Location */}
+        {displayLocation && (
+          <div style={{ background: '#0f172a', borderRadius: 10, padding: '10px 12px', marginBottom: 14, borderLeft: '3px solid #60a5fa' }}>
+            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>📍 Location</div>
+            <div style={{ fontSize: 13, color: '#60a5fa', fontWeight: 700 }}>{displayLocation}</div>
+            {currentStop && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Stop {stops?.indexOf(currentStop) + 1 || 1} of {stops?.length || 1}</div>}
+          </div>
+        )}
 
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Issue Type</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {ISSUE_TYPES.map(t => (
-              <button key={t} onClick={() => setIssueType(t)} style={{
+              <button key={t} onClick={() => {
+                setIssueType(t);
+                setDesc(ISSUE_TEMPLATES[t] || '');
+              }} style={{
                 padding: '8px 12px', fontSize: 12, fontWeight: 700,
                 borderRadius: 10, cursor: 'pointer', border: 'none',
                 background: issueType === t ? '#3b82f6' : '#0f172a',
@@ -362,7 +385,30 @@ function DriverPinLogin({ onLogin }) {
   const [pin,       setPin]       = useState('');
   const [error,     setError]     = useState('');
   const [loading,   setLoading]   = useState(false);
+  const [vehicles,  setVehicles]  = useState([]);
   const pinRef = useRef(null);
+
+  // Load available vehicles
+  useEffect(() => {
+    const loadVehicles = async () => {
+      try {
+        const res = await fetch(`${API}/vehicles?client_id=CLIENT_001`);
+        const data = await res.json();
+        let vehicleList = [];
+        if (data.vehicles && Array.isArray(data.vehicles)) {
+          vehicleList = data.vehicles.map(v => ({
+            vehicle_no: v.vehicle_number || v.vehicle_no || '',
+            vehicle_number: v.vehicle_number || v.vehicle_no || '',
+          })).filter(v => v.vehicle_no).slice(0, 5);
+        }
+        setVehicles(vehicleList);
+      } catch (e) {
+        console.error('Failed to load vehicles:', e);
+        setVehicles([]);
+      }
+    };
+    loadVehicles();
+  }, []);
 
   async function handleLogin() {
     if (!vehicleNo.trim()) { setError('Enter your vehicle number'); return; }
@@ -393,8 +439,36 @@ function DriverPinLogin({ onLogin }) {
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
         <div style={{ fontSize: 52, marginBottom: 10 }}>🚛</div>
         <div style={{ fontWeight: 900, fontSize: 22, color: '#fff', letterSpacing: '0.06em' }}>DRIVER PORTAL</div>
-        <div style={{ fontSize: 13, color: '#64748b', marginTop: 6 }}>Atul Logistics — Enter vehicle & PIN</div>
+        <div style={{ fontSize: 13, color: '#64748b', marginTop: 6 }}>Atul Logistics — Select vehicle & enter PIN</div>
       </div>
+
+      {/* Available vehicles list */}
+      {vehicles.length > 0 && (
+        <div style={{ width: '100%', maxWidth: 320, marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.05em' }}>Select Vehicle</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {vehicles.map((v, i) => {
+              const vno = v.vehicle_no || v.vehicle_number || '';
+              return (
+                <button
+                  key={i}
+                  onClick={() => { setVehicleNo(vno); setError(''); pinRef.current?.focus(); }}
+                  style={{
+                    padding: '8px 12px', borderRadius: 10, border: 'none',
+                    background: vehicleNo === vno ? '#3b82f6' : '#1e293b',
+                    color: vehicleNo === vno ? '#fff' : '#60a5fa',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    boxShadow: vehicleNo === vno ? '0 2px 8px #3b82f655' : 'none',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  🚗 {vno}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Vehicle number input */}
       <input
@@ -470,7 +544,7 @@ const SESSION_KEY = 'driverPortal_session';
 
 export default function DriverPage() {
   const [vehicle,   setVehicle]   = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)) || null; }
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY)) || null; }
     catch { return null; }
   });
   const [trips,     setTrips]     = useState([]);
@@ -478,6 +552,15 @@ export default function DriverPage() {
   const [ledger,    setLedger]    = useState([]);
   const [loading,   setLoading]   = useState(false);
   const [tab,       setTab]       = useState('trip');
+  
+  // Report tab state (kept in parent to persist across tab switches)
+  const [reportIssueType, setReportIssueType] = useState('Breakdown / Engine Failure');
+  const [reportDesc, setReportDesc] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportMsg, setReportMsg] = useState(null);
+  const [reports, setReports] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  
   const intervalRef = useRef(null);
 
   function handleLogin(v) {
@@ -486,9 +569,19 @@ export default function DriverPage() {
     setTab('trip');
   }
   function handleLogout() {
+    // Clear all session data
     setVehicle(null);
     sessionStorage.removeItem(SESSION_KEY);
     setTrips([]); setStops([]); setLedger([]);
+    
+    // Clear persistent localStorage sessions to go back to role selection
+    localStorage.removeItem('driverPortal_session');
+    localStorage.removeItem('munshiPortal_session');
+    localStorage.removeItem('clientPortal_session');
+    localStorage.removeItem('adminPINLogin');
+    
+    // Redirect to home to get role selection screen
+    window.location.href = '/';
   }
 
   const selVehicle = vehicle?.vehicle_no || '';
@@ -627,7 +720,7 @@ export default function DriverPage() {
             </div>
           )}
 
-          {tab === 'report'  && <ReportTab vehicle={vehicle} />}
+          {tab === 'report'  && <ReportTab vehicle={vehicle} issueType={reportIssueType} setIssueType={setReportIssueType} desc={reportDesc} setDesc={setReportDesc} submitting={reportSubmitting} setSubmitting={setReportSubmitting} msg={reportMsg} setMsg={setReportMsg} reports={reports} setReports={setReports} loading={reportLoading} setLoading={setReportLoading} activeTrip={activeTrip} stops={stops} />}
           {tab === 'history' && <HistoryTab trips={trips} />}
           {tab === 'pay'     && <PayTab ledger={ledger} />}
         </>

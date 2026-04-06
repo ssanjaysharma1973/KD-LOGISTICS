@@ -37,6 +37,7 @@ import MunshiPage from "./components/MunshiPage.jsx";
 import Ledgers from "./components/Ledgers.jsx";
 import DriverPage from "./components/DriverPage.jsx";
 import MunshiPortal from "./components/MunshiPortal.jsx";
+import ClientPortal from "./components/ClientPortal.jsx";
 import EwayBillHub from "./components/EwayBillHub.jsx";
 import DevAdmin from "./components/DevAdmin.jsx";
 import RouteMemoryAdmin from "./components/RouteMemoryAdmin.jsx";
@@ -126,15 +127,25 @@ function App() {
   const { vehicles, pois, munshis, stats, loading, refresh: refreshVehicleContext } = useVehicleData();
   const [trackModalVehicle, setTrackModalVehicle] = useState(null);
   const [activeTab, setActiveTab] = useState(() => {
+    // Check URL parameter first (for backward compatibility)
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('portal') === 'driver') return 'driver-portal';
     if (urlParams.get('portal') === 'munshi') return 'munshi-portal';
+    if (urlParams.get('portal') === 'client') return 'client-portal';
+    
+    // Check localStorage for persistent login (survives page refresh)
+    if (localStorage.getItem('driverPortal_session')) return 'driver-portal';
+    if (localStorage.getItem('munshiPortal_session')) return 'munshi-portal';
+    if (localStorage.getItem('clientPortal_session')) return 'client-portal';
+    if (localStorage.getItem('adminPINLogin')) return 'admin-portal';
+    
     return 'ewaybill';
   });
 
   // ── Standalone portals — full-screen, no admin shell ─────────────────────
   if (activeTab === 'driver-portal') return <DriverPage />;
   if (activeTab === 'munshi-portal') return <MunshiPortal />;
+  if (activeTab === 'client-portal') return <ClientPortal />;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // const [routes] = useState([]); // unused
   const [poiRadiusMeters] = useState(1000);

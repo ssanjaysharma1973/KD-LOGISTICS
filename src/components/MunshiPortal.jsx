@@ -15,8 +15,55 @@ function fmtDate(s) {
 }
 
 
+// ─── Email Login Screen ──────────────────────────────────────────────────────
+function EmailLogin({ onNext }) {
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
+
+  function handleNext() {
+    if (!email.trim()) { setError('Enter your email'); return; }
+    if (!email.includes('@')) { setError('Invalid email format'); return; }
+    onNext(email.trim());
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ textAlign: 'center', marginBottom: 36 }}>
+        <div style={{ fontSize: 52, marginBottom: 10 }}>👨‍💼</div>
+        <div style={{ fontWeight: 900, fontSize: 22, color: '#fff', letterSpacing: '0.06em' }}>MUNSHI PORTAL</div>
+        <div style={{ fontSize: 13, color: '#64748b', marginTop: 6 }}>Atul Logistics — Enter your email</div>
+      </div>
+
+      <input
+        type="email"
+        placeholder="Enter your email"
+        value={email}
+        onChange={e => { setEmail(e.target.value); setError(''); }}
+        onKeyDown={e => e.key === 'Enter' && handleNext()}
+        style={{
+          width: '100%', maxWidth: 280, padding: '14px 16px',
+          background: '#1e293b', border: `2px solid ${email ? '#3b82f6' : '#334155'}`,
+          borderRadius: 12, color: '#f1f5f9', fontSize: 16, fontWeight: 700,
+          outline: 'none', textAlign: 'center',
+          marginBottom: 20, boxSizing: 'border-box',
+        }}
+      />
+
+      {error && <div style={{ color: '#f87171', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{error}</div>}
+
+      <button onClick={handleNext} disabled={!email.trim()} style={{
+        width: '100%', maxWidth: 240, padding: 16,
+        background: email.trim() ? 'linear-gradient(135deg,#3b82f6,#2563eb)' : '#1e293b',
+        border: 'none', borderRadius: 14, color: '#fff',
+        fontSize: 16, fontWeight: 800, cursor: email.trim() ? 'pointer' : 'not-allowed',
+        boxShadow: email.trim() ? '0 4px 20px #3b82f655' : 'none',
+      }}>→ Next</button>
+    </div>
+  );
+}
+
 // ─── PIN Login Screen ─────────────────────────────────────────────────────────
-function PinLogin({ onLogin }) {
+function PinLogin({ onLogin, email, onBack }) {
   const [pin, setPin]       = useState('');
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,13 +72,13 @@ function PinLogin({ onLogin }) {
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   async function handleLogin() {
-    if (pin.length < 4) { setError('PIN must be at least 4 digits'); return; }
+    if (pin.length < 3) { setError('PIN must be at least 3 digits'); return; }
     setLoading(true); setError('');
     try {
       const res  = await fetch(`${API}/munshis/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin, client_id: 'CLIENT_001' }),
+        body: JSON.stringify({ identifier: email, pin, client_id: 'CLIENT_001' }),
       });
       const data = await res.json();
       if (data.success && data.munshi) {
@@ -53,11 +100,12 @@ function PinLogin({ onLogin }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
-      {/* Logo */}
-      <div style={{ textAlign: 'center', marginBottom: 36 }}>
+      {/* Logo & Email */}
+      <div style={{ textAlign: 'center', marginBottom: 36, width: '100%' }}>
         <div style={{ fontSize: 52, marginBottom: 10 }}>👨‍💼</div>
         <div style={{ fontWeight: 900, fontSize: 22, color: '#fff', letterSpacing: '0.06em' }}>MUNSHI PORTAL</div>
-        <div style={{ fontSize: 13, color: '#64748b', marginTop: 6 }}>Atul Logistics — Enter your PIN</div>
+        <div style={{ fontSize: 13, color: '#60a5fa', marginTop: 6, fontWeight: 700 }}>{email}</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Enter your PIN</div>
       </div>
 
       {/* PIN display */}
@@ -114,17 +162,28 @@ function PinLogin({ onLogin }) {
 
       <button
         onClick={handleLogin}
-        disabled={loading || pin.length < 4}
+        disabled={loading || pin.length < 3}
         style={{
           width: '100%', maxWidth: 240, padding: '16px',
-          background: pin.length >= 4 ? 'linear-gradient(135deg, #1d4ed8, #2563eb)' : '#1e293b',
+          background: pin.length >= 3 ? 'linear-gradient(135deg, #1d4ed8, #2563eb)' : '#1e293b',
           border: 'none', borderRadius: 14, color: '#fff',
-          fontSize: 16, fontWeight: 800, cursor: pin.length >= 4 ? 'pointer' : 'not-allowed',
-          boxShadow: pin.length >= 4 ? '0 4px 20px #2563eb55' : 'none',
+          fontSize: 16, fontWeight: 800, cursor: pin.length >= 3 ? 'pointer' : 'not-allowed',
+          boxShadow: pin.length >= 3 ? '0 4px 20px #2563eb55' : 'none',
           transition: 'all 0.2s',
         }}
       >
         {loading ? '⏳ Checking...' : '🔓 Login'}
+      </button>
+
+      <button
+        onClick={onBack}
+        style={{
+          marginTop: 12, width: '100%', maxWidth: 240, padding: '12px',
+          background: '#1e293b', border: '1px solid #334155', borderRadius: 10,
+          color: '#64748b', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+        }}
+      >
+        ← Back to Email
       </button>
     </div>
   );
@@ -1534,13 +1593,20 @@ function ReportsTab({ munshi, vehicles }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch(`${API}/driver/reports`);
-      const data = await res.json();
-      const all  = Array.isArray(data) ? data : [];
-      setReports(all.filter(r => myVehicleNos.has(r.vehicle_no)));
+      // Fetch reports for all vehicles assigned to this munshi
+      const reportPromises = Array.from(myVehicleNos).map(vno =>
+        fetch(`${API}/drivers/reports?vehicle_no=${encodeURIComponent(vno)}`)
+          .then(r => r.json())
+          .then(data => Array.isArray(data) ? data : [])
+          .catch(() => [])
+      );
+      
+      const allReports = await Promise.all(reportPromises);
+      const merged = allReports.flat();
+      setReports(merged);
     } catch { setReports([]); }
     setLoading(false);
-  }, [munshi.id, vehicles.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [munshi.id, myVehicleNos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -1564,25 +1630,25 @@ function ReportsTab({ munshi, vehicles }) {
       {filtered.length === 0 ? (
         <Empty msg={filter === 'open' ? 'No open issues — all clear! ✅' : 'No reports filed yet'} sub="Driver reports will appear here" />
       ) : filtered.map((r, i) => (
-        <div key={r.id || i} style={{ background: '#1e293b', borderRadius: 10, padding: '12px 14px', marginBottom: 10, border: `1px solid ${r.admin_reply ? '#334155' : '#7f1d1d'}` }}>
+        <div key={r.id || i} style={{ background: '#1e293b', borderRadius: 10, padding: '12px 14px', marginBottom: 10, border: `1px solid ${r.admin_notes ? '#334155' : '#7f1d1d'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
             <div>
               <span style={{ fontSize: 12, fontWeight: 800, color: '#f87171' }}>{r.issue_type}</span>
               {r.vehicle_no && <span style={{ fontSize: 11, color: '#60a5fa', marginLeft: 8, fontFamily: 'monospace' }}>🚛 {r.vehicle_no}</span>}
             </div>
-            <span style={{ fontSize: 10, color: r.admin_reply ? '#4ade80' : '#f59e0b', fontWeight: 700, background: r.admin_reply ? '#14532d' : '#78350f', padding: '2px 7px', borderRadius: 10 }}>
-              {r.admin_reply ? '✅ Replied' : '⏳ Open'}
+            <span style={{ fontSize: 10, color: r.admin_notes ? '#4ade80' : '#f59e0b', fontWeight: 700, background: r.admin_notes ? '#14532d' : '#78350f', padding: '2px 7px', borderRadius: 10 }}>
+              {r.status === 'resolved' ? '✅ Resolved' : '⏳ Open'}
             </span>
           </div>
           {r.driver_name && <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>👤 {r.driver_name}</div>}
-          <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: r.admin_reply ? 8 : 0 }}>{r.description}</div>
-          {r.admin_reply && (
+          <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: r.admin_notes ? 8 : 0 }}>{r.description}</div>
+          {r.admin_notes && (
             <div style={{ background: '#0f172a', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: '#4ade80', borderLeft: '3px solid #16a34a' }}>
-              📋 Admin: {r.admin_reply}
+              📋 Admin: {r.admin_notes}
             </div>
           )}
           <div style={{ fontSize: 10, color: '#475569', marginTop: 6 }}>
-            {r.created_at ? new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+            {r.reported_at ? new Date(r.reported_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
           </div>
         </div>
       ))}
@@ -1603,9 +1669,10 @@ const TABS = [
 
 export default function MunshiPortal() {
   const [munshi,   setMunshi]   = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)) || null; }
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY)) || null; }
     catch { return null; }
   });
+  const [email,    setEmail]    = useState(''); // For 2-layer login
   const [vehicles, setVehicles] = useState([]);
   const [pois,     setPois]     = useState([]);
   const [tab,      setTab]      = useState('trips');
@@ -1614,12 +1681,21 @@ export default function MunshiPortal() {
 
   function handleLogin(m) {
     setMunshi(m);
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(m));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(m));
     setTab('trips');
   }
   function handleLogout() {
     setMunshi(null);
-    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    
+    // Clear persistent localStorage sessions to go back to role selection
+    localStorage.removeItem('driverPortal_session');
+    localStorage.removeItem('munshiPortal_session');
+    localStorage.removeItem('clientPortal_session');
+    localStorage.removeItem('adminPINLogin');
+    
+    // Redirect to home to get role selection screen
+    window.location.href = '/';
   }
 
   // Load vehicles
@@ -1635,7 +1711,9 @@ export default function MunshiPortal() {
       .catch(() => {});
   }, [munshi]);
 
-  if (!munshi) return <PinLogin onLogin={handleLogin} />;
+  // ── Show login screens if not logged in ────────────────────────────────────
+  if (!munshi && !email) return <EmailLogin onNext={setEmail} />;
+  if (!munshi && email) return <PinLogin onLogin={handleLogin} email={email} onBack={() => setEmail('')} />;
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9', fontFamily: 'system-ui, sans-serif', maxWidth: ['trips','routing'].includes(tab) ? '100%' : 520, margin: '0 auto' }}>

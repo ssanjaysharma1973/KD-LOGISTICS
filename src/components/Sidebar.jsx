@@ -16,7 +16,9 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
   ];
 
   const settingsItems = [
+    { key: 'drivers', label: 'Drivers', emoji: '👨‍🚗' },
     { key: 'vehicles', label: 'Vehicles', emoji: '🚗' },
+    { key: 'munshis', label: 'Munshis', emoji: '👨‍💼' },
     { key: 'bulk-unloading-charges', label: 'Unloading Charges', emoji: '💰' },
     { key: 'poimanagement', label: 'POI & Discovery', emoji: '📍' },
     { key: 'route-memory', label: 'Learned Routes', emoji: '🧠' },
@@ -25,6 +27,10 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
 
   const isSettingsActive = settingsItems.some(item => activeTab === item.key);
   const [settingsOpen, setSettingsOpen] = React.useState(isSettingsActive);
+  
+  // Check if user is logged in as admin
+  const isAdminLoggedIn = sessionStorage.getItem('adminPINLogin') !== null;
+  const isAdminTabActive = activeTab === 'central-control';
 
   const CLIENT_NAME = 'ATUL LOGISTICS';
 
@@ -70,6 +76,26 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
         })}
 
       </div>
+
+      {/* Admin Panel Button - Only show if logged in as admin */}
+      {isAdminLoggedIn && (
+        <button
+          onClick={() => setActiveTab('central-control')}
+          style={{
+            padding: '5px 11px', borderRadius: 6, border: 'none',
+            background: isAdminTabActive ? '#fecaca' : 'transparent',
+            color: isAdminTabActive ? '#dc2626' : '#7c2d12',
+            fontWeight: isAdminTabActive ? 700 : 600, fontSize: 12,
+            cursor: 'pointer', whiteSpace: 'nowrap',
+            borderBottom: isAdminTabActive ? '2px solid #dc2626' : '2px solid transparent',
+            transition: 'all 0.12s',
+            marginRight: 8, flexShrink: 0,
+          }}
+          title="Admin Control Panel"
+        >
+          🔐 Admin Panel
+        </button>
+      )}
 
       {/* Client Admin dropdown */}
       <div style={{ position: 'relative', flexShrink: 0 }}>

@@ -4,6 +4,12 @@
  * NOT shown in sidebar. NOT visible to clients.
  */
 import React, { useState, useEffect } from 'react';
+import CentralControlCenter from './CentralControlCenter.jsx';
+import AnalyticsDashboard from './AnalyticsDashboard.jsx';
+import VehicleManagementDashboard from './VehicleManagementDashboard.jsx';
+import DriverManagementDashboard from './DriverManagementDashboard.jsx';
+import TripManagementDashboard from './TripManagementDashboard.jsx';
+import BillingDashboard from './BillingDashboard.jsx';
 
 const API = '/api';
 
@@ -38,7 +44,7 @@ export default function DevAdmin() {
   const [loading, setLoading] = useState(false);
   const [dbVehicles, setDbVehicles] = useState([]);
   const [dbLoading, setDbLoading] = useState(false);
-  const [tab, setTab] = useState('import'); // 'import' | 'review' | 'munshis' | 'drivers' | 'pois' | 'assign'
+  const [tab, setTab] = useState('import'); // 'import' | 'review' | 'munshis' | 'drivers' | 'pois' | 'assign' | 'central-control'
 
   // Assign-munshi tab state
   const [assignVehicles, setAssignVehicles] = useState([]);
@@ -683,6 +689,12 @@ export default function DevAdmin() {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           {[
+            ['central-control', '🎛️ CENTRAL CONTROL'],
+            ['analytics', '📊 ANALYTICS'],
+            ['vehicles', '🚗 VEHICLES'],
+            ['drivers-mgmt', '👥 DRIVERS'],
+            ['trips', '📋 TRIPS'],
+            ['billing', '💰 BILLING'],
             ['import', '📥 Bulk Import'],
             ['review', '📋 Vehicles'],
             ['assign', '🔗 Assign Munshi'],
@@ -703,6 +715,24 @@ export default function DevAdmin() {
             </button>
           ))}
         </div>
+
+        {/* ── CENTRAL CONTROL TAB ── */}
+        {tab === 'central-control' && <CentralControlCenter />}
+
+        {/* ── ANALYTICS TAB ── */}
+        {tab === 'analytics' && <AnalyticsDashboard />}
+
+        {/* ── VEHICLES TAB ── */}
+        {tab === 'vehicles' && <VehicleManagementDashboard />}
+
+        {/* ── DRIVERS TAB ── */}
+        {tab === 'drivers-mgmt' && <DriverManagementDashboard />}
+
+        {/* ── TRIPS TAB ── */}
+        {tab === 'trips' && <TripManagementDashboard />}
+
+        {/* ── BILLING TAB ── */}
+        {tab === 'billing' && <BillingDashboard />}
 
         {/* ── IMPORT TAB ── */}
         {tab === 'import' && (
