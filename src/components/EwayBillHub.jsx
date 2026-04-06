@@ -1635,7 +1635,7 @@ function ExtendModal({ ewb, onClose, onExtended }) {
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
           <button onClick={handleExtend} disabled={loading}
-            style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: loading ? '#93c5fd' : '#2563eb', color: '#fff', fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontSize: 11 }}>>
+            style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: loading ? '#93c5fd' : '#2563eb', color: '#fff', fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontSize: 11 }}>
             {loading ? 'Extending...' : 'Extend Validity'}
           </button>
         </div>
