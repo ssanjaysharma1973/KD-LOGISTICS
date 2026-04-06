@@ -935,11 +935,26 @@ async function handleRequest(req, res, rawPath) {
   const parsed = url.parse(req.url, true);
   // normalize pathname by stripping trailing slashes so routes match consistently
   const pathname = rawPath;
-  // enable simple CORS for local dashboard
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-ID, Authorization');
-  if (req.method === 'OPTIONS') return res.end();
+  
+  // ── CORS Configuration - set headers FIRST for all responses ──────────────
+  // Allow requests from frontend running on static IP and localhost
+  const allowedOrigins = ['http://168.144.77.126:8080', 'http://localhost:5173', 'http://localhost:8080', 'http://localhost:3000'];
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin) || origin === '*') {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Fallback to wildcard
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-ID, Authorization, Accept');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  
+  // Handle preflight OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    return res.end();
+  }
 
   // ── Client Operation Engine Routes ────────────────────────────────────────
   // These routes handle multi-client e-way bill operations
