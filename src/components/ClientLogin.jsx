@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function ClientLogin({ onLoginSuccess, onBack }) {
   const [clientCode, setClientCode] = useState('');
   const [password, setPassword] = useState('');
@@ -21,7 +23,8 @@ export default function ClientLogin({ onLoginSuccess, onBack }) {
     setError('');
 
     try {
-      const res = await fetch('/api/clients/login', {
+      const url = `${API_BASE}/api/clients/login`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

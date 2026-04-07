@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Lock, Truck, ArrowLeft } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function ClientCodeLogin({ onLoginSuccess, onBack }) {
   const [stage, setStage] = useState('code'); // 'code', 'vehicle', or 'confirm'
   const [code, setCode] = useState('');
@@ -31,7 +33,8 @@ export default function ClientCodeLogin({ onLoginSuccess, onBack }) {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/clients/get-by-pin', {
+      const url = `${API_BASE}/api/clients/get-by-pin`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin: code })

@@ -1026,6 +1026,56 @@ async function handleRequest(req, res, rawPath) {
     }
   }
 
+  // POST /api/clients/login — authenticate client with company code and PIN
+  if (pathname === '/api/clients/login' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { client_code, pin } = body;
+
+      if (!client_code || !pin) {
+        return jsonResp(res, { success: false, error: 'Company ID and PIN required' }, 400);
+      }
+
+      // Client credentials (configured in .env or hardcoded)
+      const clientCredentials = {
+        'CLIENT_001': {
+          pin: process.env.CLIENT_001_PIN || '0000',
+          name: 'Atul Logistics'
+        },
+        'CLIENT_002': {
+          pin: process.env.CLIENT_002_PIN || '0000',
+          name: 'Beta Logistics'
+        }
+      };
+
+      const clientCode = client_code.toUpperCase();
+      const credentials = clientCredentials[clientCode];
+
+      if (!credentials) {
+        return jsonResp(res, { success: false, error: 'Company not found' }, 404);
+      }
+
+      if (pin !== credentials.pin) {
+        return jsonResp(res, { success: false, error: 'Invalid PIN' }, 401);
+      }
+
+      // Success - return client info
+      return jsonResp(res, {
+        success: true,
+        client: {
+          client_id: clientCode,
+          client_code: clientCode,
+          name: credentials.name,
+          role: 'client',
+          token: generateToken({ sub: clientCode, role: 'client', client_id: clientCode })
+        }
+      });
+    } catch(e) {
+      console.error('[clients/login] Error:', e);
+      return jsonResp(res, { success: false, error: 'Login failed: ' + e.message }, 500);
+    }
+  }
+
   // ── Client Operation Engine Routes ────────────────────────────────────────
   // These routes handle multi-client e-way bill operations
   if (pathname.startsWith('/api/client-ops/')) {

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import './styles/MunshiLogin.css';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function MunshiLogin({ onLoginSuccess, onBack }) {
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
@@ -37,7 +39,8 @@ export default function MunshiLogin({ onLoginSuccess, onBack }) {
     setError('');
 
     try {
-      const response = await fetch('/api/munshis/login', {
+      const url = `${API_BASE}/api/munshis/login`;
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: email.toLowerCase(), pin })
