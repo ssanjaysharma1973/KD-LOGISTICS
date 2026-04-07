@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './styles/AdminPINLogin.css';
+import apiClient from '../services/apiClient';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
 
 export default function AdminPINLogin({ onLoginSuccess, onBack }) {
   const [username, setUsername] = useState('');
@@ -17,7 +20,8 @@ export default function AdminPINLogin({ onLoginSuccess, onBack }) {
 
   const loadClients = async () => {
     try {
-      const res = await fetch('/api/clients');
+      const url = `${API_BASE}/api/clients`;
+      const res = await fetch(url);
       const data = await res.json();
       // Filter clients - show all for admin to manage
       setClients(data.clients || []);
@@ -50,7 +54,8 @@ export default function AdminPINLogin({ onLoginSuccess, onBack }) {
     setError('');
 
     try {
-      const response = await fetch('/api/admin-pin/login', {
+      const url = `${API_BASE}/api/admin-pin/login`;
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, pin })
