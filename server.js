@@ -933,24 +933,14 @@ async function handleRequest(req, res, rawPath) {
 
   try {
   const parsed = url.parse(req.url, true);
-  // normalize pathname by stripping trailing slashes so routes match consistently
   const pathname = rawPath;
   
-  // ── CORS Configuration - set headers FIRST for all responses ──────────────
-  // Allow requests from frontend running on static IP and localhost
-  const allowedOrigins = ['http://168.144.77.126:8080', 'http://localhost:5173', 'http://localhost:8080', 'http://localhost:3000'];
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin) || origin === '*') {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Fallback to wildcard
-  }
+  // CORS headers - always set these first
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-ID, Authorization, Accept');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Tenant-ID');
   
-  // Handle preflight OPTIONS requests
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
     return res.end();
