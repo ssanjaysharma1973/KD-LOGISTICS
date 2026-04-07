@@ -48,33 +48,37 @@ def ensure_clients_table():
         )
     ''')
     
-    # Check if default client exists, if not create it
-    cursor.execute("SELECT id FROM clients WHERE pin = '001'")
+    # Seed CLIENT_000
+    cursor.execute("SELECT id FROM clients WHERE client_code = 'CLIENT_000'")
     if not cursor.fetchone():
         cursor.execute('''
             INSERT INTO clients (client_code, pin, name, status)
             VALUES (?, ?, ?, ?)
-        ''', ('CLIENT001', '001', 'CLIENT001', 'active'))
-        
+        ''', ('CLIENT_000', '000000', 'DevAdmin', 'active'))
+        print("[INFO] CLIENT_000 (DevAdmin) created")
+    
+    # Seed CLIENT_001
+    cursor.execute("SELECT id FROM clients WHERE client_code = 'CLIENT_001'")
+    if not cursor.fetchone():
+        cursor.execute('''
+            INSERT INTO clients (client_code, pin, name, status)
+            VALUES (?, ?, ?, ?)
+        ''', ('CLIENT_001', '001999', 'Atul Logistics', 'active'))
         client_id = cursor.lastrowid
-        
-        # Add sample vehicles to this client
         vehicles = [
             ('999', 'Test Vehicle 999'),
             ('MH01AB1234', 'Tata 1109'),
             ('MH02XY5678', 'Ashok Leyland'),
             ('MH03CD9999', 'Mahindra Truck'),
         ]
-        
         for vehicle_no, model in vehicles:
             cursor.execute('''
                 INSERT INTO client_vehicles (client_id, vehicle_number, model, status)
                 VALUES (?, ?, ?, ?)
             ''', (client_id, vehicle_no, model, 'active'))
-        
-        conn.commit()
-        print("[INFO] Clients table initialized with CLIENT001 (PIN: 001)")
+        print("[INFO] CLIENT_001 (Atul Logistics) created with vehicles")
     
+    conn.commit()
     conn.close()
 
 @clients_bp.route('/get-by-pin', methods=['POST'])
