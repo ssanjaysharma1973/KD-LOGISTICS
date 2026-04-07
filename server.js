@@ -1819,6 +1819,50 @@ async function handleRequest(req, res, rawPath) {
       });
     return;
   }
+    // GET /api/clients/seed-defaults
+  if (pathname === '/api/clients/seed-defaults' && req.method === 'GET') {
+    if (!sqlite3) return res.end(JSON.stringify({error:'db unavailable'}));
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.serialize(() => {
+      db2.run(`CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY AUTOINCREMENT, client_code TEXT UNIQUE NOT NULL, pin TEXT UNIQUE NOT NULL, name TEXT NOT NULL, status TEXT DEFAULT 'active', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+      db2.run(`INSERT OR IGNORE INTO clients (client_code,pin,name) VALUES ('CLIENT000','000000','DevAdmin')`);
+      db2.run(`INSERT OR IGNORE INTO clients (client_code,pin,name) VALUES ('CLIENT001','001999','Atul Logistics')`, function() {
+        db2.close();
+        res.setHeader('Content-Type','application/json');
+        res.end(JSON.stringify({success:true,message:'Clients seeded'}));
+      });
+    });
+    return;
+  }
+
+  // POST /api/clients/login
+  if (pathname === '/api/clients/login' && req.method === 'POST') {
+    const body = await readBody(req);
+    const clientCode = (body.client_code || '').trim().toUpperCase();
+    const pin = (body.pin || '').trim();
+    if (!clientCode || !pin) { res.statusCode = 400; return res.end(JSON.stringify({ success: false, error: 'client_code and pin required' })); }
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'db unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.get('SELECT id, client_code, name, status FROM clients WHERE client_code=? AND pin=?',
+      [clientCode, pin],
+      (err, row) => {
+        db2.close();
+        res.setHeader('Content-Type', 'application/json');
+        if (err || !row) return res.end(JSON.stringify({ success: false, error: 'Invalid client code or PIN' }));
+        if (row.status !== 'active') return res.end(JSON.stringify({ success: false, error: 'Account inactive' }));
+        res.end(JSON.stringify({ success: true, client: { client_id: row.client_code, client_code: row.client_code, client_name: row.name, name: row.name, id: row.id } }));
+      });
+    return;
+  }
+
+  // GET /api/clients
+  if (pathname === '/api/clients' && req.method === 'GET') {
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'db unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.all('SELECT id, client_code, name, status FROM clients ORDER BY id', [],
+      (err, rows) => { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true, clients: rows || [] })); });
+    return;
+  }
     import React, { useState, useRef } from 'react';
 
 export default function ClientLogin({ onLoginSuccess, onBack }) {
@@ -1934,128 +1978,7 @@ export default function ClientLogin({ onLoginSuccess, onBack }) {
             onFocus={(e) => e.target.style.borderColor = '#667eea'}
             onBlur={(e) => e.target.style.borderColor = error ? '#ef4444' : '#ddd'}
           />
-        </div>
 
-        {/* Password Input */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#333', marginBottom: '6px' }}>
-            PIN
-          </label>
-          <input
-            ref={passwordRef}
-            type="password"
-            placeholder="Enter your PIN"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setError('');
-            }}
-            onKeyDown={handleKeyDown}
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid #ddd',
-              borderRadius: '8px',
-              fontSize: '14px',
-              boxSizing: 'border-box',
-              outline: 'none',
-              transition: 'border-color 0.2s',
-              borderColor: error ? '#ef4444' : '#ddd'
-            }}
-            onFocus={(e) => e.target.style.borderColor = '#667eea'}
-            onBlur={(e) => e.target.style.borderColor = error ? '#ef4444' : '#ddd'}
-          />
-        </div>
-
-        {/* Error Message */}
-        {error && (
-          <div style={{
-            background: '#fee2e2',
-            border: '1px solid #fca5a5',
-            color: '#991b1b',
-            padding: '10px',
-            borderRadius: '6px',
-            fontSize: '13px',
-            marginBottom: '16px'
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* Login Button */}
-        <button
-          onClick={handleLogin}
-          disabled={loading || !clientCode.trim() || !password}
-          style={{
-            width: '100%',
-            padding: '12px',
-            background: (loading || !clientCode.trim() || !password) ? '#ddd' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            border: 'none',
-            borderRadius: '8px',
-            color: 'white',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            cursor: (loading || !clientCode.trim() || !password) ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s',
-            marginBottom: '12px'
-          }}
-          onMouseEnter={(e) => {
-            if (!loading && clientCode.trim() && password) {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 10px 20px rgba(102, 126, 234, 0.3)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.transform = 'translateY(0)';
-            e.target.style.boxShadow = 'none';
-          }}
-        >
-          {loading ? '⏳ Checking...' : '🔓 Login'}
-        </button>
-
-        {/* Back Button */}
-        <button
-          onClick={onBack}
-          style={{
-            width: '100%',
-            padding: '12px',
-            background: 'white',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            color: '#666',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = '#f5f5f5';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = 'white';
-          }}
-        >
-          ← Back to Roles
-        </button>
-
-        {/* Test Credentials */}
-        <div style={{
-          marginTop: '20px',
-          padding: '12px',
-          background: '#f0f4ff',
-          borderRadius: '6px',
-          fontSize: '12px',
-          color: '#4c51bf',
-          textAlign: 'center',
-          borderLeft: '3px solid #667eea'
-        }}>
-          <strong>Test Credentials:</strong>
-          <div>ID: CLIENT001 | PIN: 001</div>
-        </div>
-      </div>
-    </div>
-  );
-}
     // POST /api/clients/login
   if (pathname === '/api/clients/login' && req.method === 'POST') {
     const body = await readBody(req);
