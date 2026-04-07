@@ -78,9 +78,10 @@ def seed_all_data():
     # ===== 1. SEED CLIENTS (existing table schema) =====
     print("1️⃣  Setting up clients...")
     clients = [
-        ('CLIENT_001', '001', 'Atul Logistics', 'active'),
-        ('CLIENT_002', '002', 'Test Client 002', 'active'),
-        ('CLIENT_003', '003', 'Test Client 003', 'active'),
+    ('CLIENT_000', '000000', 'DevAdmin', 'active'),
+    ('CLIENT_001', '001999', 'Atul Logistics', 'active'),
+    ('CLIENT_002', '002', 'Test Client 002', 'active'),
+    ('CLIENT_003', '003', 'Test Client 003', 'active'),
     ]
     
     try:

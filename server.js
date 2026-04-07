@@ -1899,7 +1899,51 @@ async function handleRequest(req, res, rawPath) {
       });
     return;
   }
+    // GET /api/clients/seed-defaults
+  if (pathname === '/api/clients/seed-defaults' && req.method === 'GET') {
+    if (!sqlite3) return res.end(JSON.stringify({error:'db unavailable'}));
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.serialize(() => {
+      db2.run(`CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY AUTOINCREMENT, client_code TEXT UNIQUE NOT NULL, pin TEXT UNIQUE NOT NULL, name TEXT NOT NULL, status TEXT DEFAULT 'active', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+      db2.run(`INSERT OR IGNORE INTO clients (client_code,pin,name) VALUES ('CLIENT000','000000','DevAdmin')`);
+      db2.run(`INSERT OR IGNORE INTO clients (client_code,pin,name) VALUES ('CLIENT001','001999','Atul Logistics')`, function() {
+        db2.close();
+        res.setHeader('Content-Type','application/json');
+        res.end(JSON.stringify({success:true,message:'Clients seeded'}));
+      });
+    });
+    return;
+  }
 
+  // POST /api/clients/login
+  if (pathname === '/api/clients/login' && req.method === 'POST') {
+    const body = await readBody(req);
+    const clientCode = (body.client_code || '').trim().toUpperCase();
+    const pin = (body.pin || '').trim();
+    if (!clientCode || !pin) { res.statusCode = 400; return res.end(JSON.stringify({ success: false, error: 'client_code and pin required' })); }
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'db unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.get('SELECT id, client_code, name, status FROM clients WHERE client_code=? AND pin=?',
+      [clientCode, pin],
+      (err, row) => {
+        db2.close();
+        res.setHeader('Content-Type', 'application/json');
+        if (err || !row) return res.end(JSON.stringify({ success: false, error: 'Invalid client code or PIN' }));
+        if (row.status !== 'active') return res.end(JSON.stringify({ success: false, error: 'Account inactive' }));
+        res.end(JSON.stringify({ success: true, client: { client_id: row.client_code, client_code: row.client_code, client_name: row.name, name: row.name, id: row.id } }));
+      });
+    return;
+  }
+
+  // GET /api/clients
+  if (pathname === '/api/clients' && req.method === 'GET') {
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'db unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.all('SELECT id, client_code, name, status FROM clients ORDER BY id', [],
+      (err, rows) => { db2.close(); res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(err ? { error: err.message } : { success: true, clients: rows || [] })); });
+    return;
+  }
+    
   // GET /api/drivers
   if (pathname === '/api/drivers' && req.method === 'GET') {
     const clientId = parsed.query.clientId || parsed.query.client_id || 'CLIENT_001';
