@@ -21,12 +21,23 @@ export default function AdminPINLogin({ onLoginSuccess, onBack }) {
   const loadClients = async () => {
     try {
       const url = `${API_BASE}/api/clients`;
+      console.log('Loading clients from:', url);
       const res = await fetch(url);
+      
+      // Check if response is OK
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Backend error loading clients:', res.status, text.substring(0, 200));
+        setError(`Backend error: ${res.status}`);
+        return;
+      }
+      
       const data = await res.json();
       // Filter clients - show all for admin to manage
       setClients(data.clients || []);
     } catch (e) {
       console.error('Error loading clients:', e);
+      setError('Failed to connect to backend');
     }
   };
 

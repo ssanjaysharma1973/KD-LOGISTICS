@@ -946,6 +946,86 @@ async function handleRequest(req, res, rawPath) {
     return res.end();
   }
 
+  // ── Missing Authentication Routes ────────────────────────────────────────
+
+  // GET /api/clients — returns list of configured clients
+  if (pathname === '/api/clients' && req.method === 'GET') {
+    try {
+      if (!sqlite3) {
+        return jsonResp(res, { clients: [{ client_id: 'CLIENT_000', name: 'Admin' }, { client_id: 'CLIENT_001', name: 'Atul Logistics' }] });
+      }
+      const rows = await sqAll(`SELECT DISTINCT client_id FROM vehicles ORDER BY client_id`,[]);
+      const clients = rows.map(r => ({ client_id: r.client_id, name: r.client_id }));
+      // Add default admin client if not present
+      if (!clients.some(c => c.client_id === 'CLIENT_000')) {
+        clients.unshift({ client_id: 'CLIENT_000', name: 'Admin' });
+      }
+      return jsonResp(res, { clients });
+    } catch(e) {
+      return jsonResp(res, { clients: [{ client_id: 'CLIENT_000', name: 'Admin' }, { client_id: 'CLIENT_001', name: 'Atul Logistics' }] });
+    }
+  }
+
+  // POST /api/admin-pin/login — authenticate admin with PIN
+  if (pathname === '/api/admin-pin/login' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { username, pin } = body;
+
+      if (!username || !pin) {
+        return jsonResp(res, { error: 'Username and PIN required' }, 400);
+      }
+
+      // Hardcoded admin credentials (use env vars in production)
+      const ADMIN_USERNAME = 'admin';
+      const ADMIN_PIN = '1234';
+      const ADMIN_ID = 'ADM_001';
+
+      if (username === ADMIN_USERNAME && pin === ADMIN_PIN) {
+        return jsonResp(res, {
+          admin_id: ADMIN_ID,
+          username: username,
+          name: 'System Administrator',
+          role: 'admin',
+          client_id: 'CLIENT_000',
+          token: generateToken({ sub: ADMIN_ID, role: 'admin', client_id: 'CLIENT_000' })
+        });
+      }
+
+      // Check if credentials match any configured client admin
+      const clientAdmins = {
+        'CLIENT_001': {
+          username: process.env.CLIENT_001_EMAIL || 'koyna@atullogistics.com',
+          pin: process.env.CLIENT_001_ADMINS_PIN || '0000',
+          name: 'Atul Logistics Admin'
+        },
+        'CLIENT_002': {
+          username: process.env.CLIENT_002_EMAIL || 'admin@betalogistics.com',
+          pin: process.env.CLIENT_002_ADMINS_PIN || '0000',
+          name: 'Beta Logistics Admin'
+        }
+      };
+
+      for (const [clientId, admin] of Object.entries(clientAdmins)) {
+        if (username === admin.username && pin === admin.pin) {
+          return jsonResp(res, {
+            admin_id: `ADM_${clientId}`,
+            username: username,
+            name: admin.name,
+            role: 'admin',
+            client_id: clientId,
+            token: generateToken({ sub: `ADM_${clientId}`, role: 'admin', client_id: clientId })
+          });
+        }
+      }
+
+      return jsonResp(res, { error: 'Invalid credentials' }, 401);
+    } catch(e) {
+      console.error('[admin-pin/login] Error:', e);
+      return jsonResp(res, { error: 'Login failed: ' + e.message }, 500);
+    }
+  }
+
   // ── Client Operation Engine Routes ────────────────────────────────────────
   // These routes handle multi-client e-way bill operations
   if (pathname.startsWith('/api/client-ops/')) {
