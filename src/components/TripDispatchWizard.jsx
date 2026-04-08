@@ -1506,14 +1506,18 @@ export default function TripDispatchWizard() {
                       </div>
                     ) : (
                       <div>
-                        <div style={{ fontSize: 10, color: '#b45309', marginBottom: 6 }}>No vehicles assigned — search below</div>
+                        <div style={{ fontSize: 10, color: '#b45309', marginBottom: 6 }}>Available vehicles for {selectedMunshi.name}</div>
                         <input placeholder="Search vehicle / driver..." value={vehicleSearch} onChange={e => setVehicleSearch(e.target.value)} style={{ width: '100%', padding: '5px 8px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 11, boxSizing: 'border-box' }} />
-                        {vehicleSearch.length >= 1 && searchFiltered.slice(0, 8).map(v => (
-                          <button key={v.id} onClick={() => { setSelectedVehicle(v); setVehicleQuickEdit({}); setVehicleSearch(''); setSaveError(''); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', fontSize: 11, border: '1px solid #e2e8f0', borderRadius: 5, background: '#fff', cursor: 'pointer', marginTop: 4, boxSizing: 'border-box' }}>
-                            <div style={{ fontWeight: 700 }}>{v.vehicle_no}</div>
-                            <div style={{ color: '#64748b', fontSize: 10 }}>{v.driver_name || '—'}</div>
-                          </button>
-                        ))}
+                        {searchFiltered.length === 0 ? (
+                          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, padding: 6, background: '#f8fafc', borderRadius: 4 }}>No vehicles found</div>
+                        ) : (
+                          searchFiltered.slice(0, 8).map(v => (
+                            <button key={v.id} onClick={() => { setSelectedVehicle(v); setVehicleQuickEdit({}); setVehicleSearch(''); setSaveError(''); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', fontSize: 11, border: '1px solid #e2e8f0', borderRadius: 5, background: '#fff', cursor: 'pointer', marginTop: 4, boxSizing: 'border-box' }}>
+                              <div style={{ fontWeight: 700 }}>{v.vehicle_no}</div>
+                              <div style={{ color: '#64748b', fontSize: 10 }}>{v.driver_name || '—'}</div>
+                            </button>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
