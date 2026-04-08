@@ -41,7 +41,8 @@ function InvalidateSize() {
   return null;
 }
 
-const API = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+const API = API_BASE + '/api';
 
 // HERE Flexible Polyline decoder — spec: https://github.com/heremaps/flexible-polyline
 // Structure: [format_version_byte][header_byte][lat_delta][lng_delta]...

@@ -12,7 +12,7 @@
 
 import { getToken, getUser, getClientId } from './tokenManager';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
 
 /**
  * Build authorization headers from stored JWT + Tenant Context
