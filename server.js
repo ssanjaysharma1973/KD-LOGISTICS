@@ -3983,14 +3983,20 @@ async function handleRequest(req, res, rawPath) {
 
       for (const dateStr of datesToFetch) {
         try {
+          // API uses year + month params (e.g. year=2026&month=04)
+          const parts = dateStr.split('/');
+          const year = parts[2];
+          const month = parts[1];
           const { status: apiStatus, data: apiData } = await mastersGet(
-            `/api/v1/getEwayBillData/?action=GetEwayBillsByDate&gstin=${encodeURIComponent(MASTERS_GSTIN)}&date=${encodeURIComponent(dateStr)}`
+            `/api/v2/ewaybill/list?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`
           );
-          if (apiStatus !== 200 || !Array.isArray(apiData?.results?.message)) continue;
+          console.log(`[fetch-today] ${dateStr} → status=${apiStatus}, keys=${Object.keys(apiData||{}).join(',')}`);
+          const bills = apiData?.data || apiData?.results?.message || apiData?.message || [];
+          if (!Array.isArray(bills)) { console.warn(`[fetch-today] Unexpected response shape:`, JSON.stringify(apiData).substring(0,300)); continue; }
 
-          for (const item of apiData.results.message) {
+          for (const item of bills) {
             totalSeen++;
-            const ewbNo = String(item.eway_bill_number || '');
+            const ewbNo = String(item.ewbNo || item.eway_bill_number || item.ewb_no || '');
             if (!ewbNo) continue;
 
             // Parse dates
@@ -4425,7 +4431,7 @@ async function mastersAuth() {
 async function mastersGet(path) {
   const token = await mastersAuth();
   const r = await fetch(`${MASTERS_API_URL}${path}`, {
-    headers: { 'Authorization': `JWT ${token}`, 'Content-Type': 'application/json' }
+    headers: { 'Authorization': `JWT ${token}`, 'Content-Type': 'application/json', 'Gstin': MASTERS_GSTIN }
   });
   const text = await r.text();
   let json; try { json = JSON.parse(text); } catch { throw new Error(`Masters India non-JSON: ${text.substring(0,200)}`); }
@@ -4436,7 +4442,7 @@ async function mastersPost(path, body) {
   const token = await mastersAuth();
   const r = await fetch(`${MASTERS_API_URL}${path}`, {
     method: 'POST',
-    headers: { 'Authorization': `JWT ${token}`, 'Content-Type': 'application/json' },
+    headers: { 'Authorization': `JWT ${token}`, 'Content-Type': 'application/json', 'Gstin': MASTERS_GSTIN },
     body: JSON.stringify(body)
   });
   const text = await r.text();
