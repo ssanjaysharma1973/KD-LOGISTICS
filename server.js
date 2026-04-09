@@ -995,8 +995,7 @@ async function handleRequest(req, res, rawPath) {
       // Check if credentials match any configured client admin
       const clientAdmins = {
         'CLIENT_001': {
-          username: proc
-          ess.env.CLIENT_001_EMAIL || 'koyna@atullogistics.com',
+          username: process.env.CLIENT_001_EMAIL || 'koyna@atullogistics.com',
           pin: process.env.CLIENT_001_ADMINS_PIN || '0000',
           name: 'Atul Logistics Admin'
         },
