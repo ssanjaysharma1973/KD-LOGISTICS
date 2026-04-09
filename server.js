@@ -4394,9 +4394,9 @@ async function mastersAuth() {
         password: MASTERS_PASSWORD
       };
       
-      console.log(`[Masters Auth] 📤 POSTing to ${MASTERS_API_URL}/api/v2/token-auth`);
+      console.log(`[Masters Auth] 📤 POSTing to ${MASTERS_API_URL}/api/v2/token-auth/`);
       
-      const r = await fetch(`${MASTERS_API_URL}/api/v2/token-auth`, {
+      const r = await fetch(`${MASTERS_API_URL}/api/v2/token-auth/`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
