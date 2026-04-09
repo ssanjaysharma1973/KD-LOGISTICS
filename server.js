@@ -4292,7 +4292,7 @@ async function handleRequest(req, res, rawPath) {
 }
 
 // ── Masters India E-Way Bill API helpers ─────────────────────────────────────
-const MASTERS_API_URL  = (process.env.MASTERS_API_URL  || 'https://sandb-api.mastersindia.co').replace(/\/$/, '');
+const MASTERS_API_URL  = (process.env.MASTERS_API_URL  || 'https://api-platform.mastersindia.co').replace(/\/$/, '');
 const MASTERS_USERNAME = process.env.MASTERS_USERNAME  || '';
 const MASTERS_PASSWORD = process.env.MASTERS_PASSWORD  || '';
 const MASTERS_GSTIN    = process.env.MASTERS_GSTIN     || '';
@@ -4356,9 +4356,9 @@ async function mastersAuth() {
         password: MASTERS_PASSWORD
       };
       
-      console.log(`[Masters Auth] 📤 POSTing to ${MASTERS_API_URL}/api/v1/token-auth/`);
+      console.log(`[Masters Auth] 📤 POSTing to ${MASTERS_API_URL}/api/v2/token-auth`);
       
-      const r = await fetch(`${MASTERS_API_URL}/api/v1/token-auth/`, {
+      const r = await fetch(`${MASTERS_API_URL}/api/v2/token-auth`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
