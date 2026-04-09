@@ -4061,18 +4061,50 @@ async function handleRequest(req, res, rawPath) {
 
       // Fetch live details for requested EWB numbers
       if (ewbNos.length === 0) {
-        // No specific numbers — return local DB count
+        // No specific EWB numbers — pull from Masters India by year+month
         const rawDate = (body.date || '');
-        const dateStr = rawDate.match(/^\d{2}\/\d{2}\/\d{4}$/)
-          ? rawDate.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')
-          : rawDate;
-        let rows;
-        if (dateStr && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          rows = await sqAll(`SELECT ewb_no, ewb_number FROM eway_bills_master WHERE client_id=? AND doc_date=?`, [cid, dateStr]);
+        // Parse DD/MM/YYYY or YYYY-MM-DD
+        let year, month;
+        if (rawDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+          const parts = rawDate.split('/');
+          year = parts[2]; month = parts[1];
+        } else if (rawDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          year = rawDate.split('-')[0]; month = rawDate.split('-')[1];
         } else {
-          rows = await sqAll(`SELECT ewb_no, ewb_number FROM eway_bills_master WHERE client_id=? ORDER BY imported_at DESC LIMIT 50`, [cid]);
+          const now = new Date();
+          year = String(now.getFullYear());
+          month = String(now.getMonth() + 1).padStart(2, '0');
         }
-        return jsonResp(res, { status: 'ok', fetched: rows.length, new_in_master: 0, message: 'Pass ewb_numbers array to refresh from Masters India API' });
+        console.log(`[fetch-from-nic] Pulling EWBs from Masters India for year=${year} month=${month}`);
+        try {
+          const { status: apiStatus, data: apiData } = await mastersGet(
+            `/api/v2/ewaybill/list?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`
+          );
+          console.log(`[fetch-from-nic] Masters API status=${apiStatus}, keys=${Object.keys(apiData||{}).join(',')}`);
+          const bills = apiData?.data || apiData?.results?.message || apiData?.message || [];
+          if (!Array.isArray(bills)) {
+            console.warn(`[fetch-from-nic] Unexpected response:`, JSON.stringify(apiData).substring(0,300));
+            return jsonResp(res, { status: 'ok', fetched: 0, new_in_master: 0, message: `Masters India response: ${JSON.stringify(apiData).substring(0,200)}` });
+          }
+          let newCount = 0;
+          for (const item of bills) {
+            const ewbNo = String(item.ewbNo || item.eway_bill_number || item.ewb_no || '');
+            if (!ewbNo) continue;
+            const parseD = (s) => { if (!s) return null; const [d2,mn2,y2] = s.split('/'); return y2&&mn2&&d2?`${y2}-${mn2}-${d2}`:null; };
+            const parseT = (s) => { if (!s) return null; const p=s.split(/[/ ]/); return p[2]&&p[1]&&p[0]?`${p[2]}-${p[1]}-${p[0]} ${p[3]||'23:59:00'}`:null; };
+            const ewbStatus = (item.status||item.eway_bill_status||'') === 'Active' ? 'active' : (item.status||item.eway_bill_status||'').toLowerCase() || 'active';
+            const result = await sqRun(
+              `INSERT OR IGNORE INTO eway_bills_master (client_id, ewb_no, ewb_number, doc_no, doc_date, to_place, to_pincode, valid_upto, status, imported_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+              [cid, ewbNo, ewbNo, item.docNo||item.document_number||'', parseD(item.docDate||item.document_date)||'', item.toPlace||item.place_of_delivery||'', item.toPinCode||item.pincode_of_delivery||'', parseT(item.validUpto||item.eway_bill_valid_date)||'', ewbStatus]
+            );
+            if (result && result.changes > 0) newCount++;
+          }
+          console.log(`[fetch-from-nic] year=${year} month=${month} → ${bills.length} seen, ${newCount} new`);
+          return jsonResp(res, { status: 'ok', fetched: bills.length, new_in_master: newCount, message: `Fetched ${bills.length} EWBs from NIC (${newCount} new added)` });
+        } catch (e2) {
+          console.error(`[fetch-from-nic] Masters API error:`, e2.message);
+          return jsonResp(res, { status: 'error', message: e2.message }, 500);
+        }
       }
 
       // Refresh each requested EWB from Masters India
