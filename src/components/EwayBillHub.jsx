@@ -1900,7 +1900,7 @@ function NicLiveTab() {
     <div>
       {/* Pull from NIC */}
       <div style={{ background: '#fff', border: '2px solid #2563eb', borderRadius: 10, padding: 16, marginBottom: 18 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: '#1e40af' }}>📡 Pull EWBs from NIC (Your GSTIN: 06AAGCB1286Q006)</div>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: '#1e40af' }}>📡 Pull EWBs from NIC (Your GSTIN: 06EXQPK4096H1ZW)</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, color: '#6b7280' }}>Date:</span>
           <input
@@ -1913,7 +1913,7 @@ function NicLiveTab() {
             style={{ padding: '7px 22px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
             {nicFetching ? '⏳ Fetching…' : '📡 Pull from NIC'}
           </button>
-          <span style={{ fontSize: 11, color: '#6b7280' }}>Pulls active EWBs for your GSTIN from NIC sandbox API</span>
+          <span style={{ fontSize: 11, color: '#6b7280' }}>Pulls active EWBs for your GSTIN from NIC via Masters India API</span>
         </div>
         {nicMsg && <div style={{ marginTop: 8, fontSize: 12, color: nicMsg.startsWith('✅') ? '#15803d' : nicMsg.startsWith('⚠️') ? '#92400e' : '#dc2626', fontWeight: 600 }}>{nicMsg}</div>}
       </div>
