@@ -3988,9 +3988,9 @@ async function handleRequest(req, res, rawPath) {
           const year = parts[2];
           const month = parts[1];
           const { status: apiStatus, data: apiData } = await mastersGet(
-            `/api/v2/ewaybill/list?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`
+            `/api/v2/saas-apis/ewb/?year=${encodeURIComponent(year)}&month=${encodeURIComponent(parseInt(month,10))}`
           );
-          console.log(`[fetch-today] ${dateStr} → status=${apiStatus}, keys=${Object.keys(apiData||{}).join(',')}`);
+          console.log(`[fetch-today] ${dateStr} → status=${apiStatus}, keys=${Object.keys(apiData||{}).join(',')}, raw=${JSON.stringify(apiData).substring(0,200)}`);
           const bills = apiData?.data || apiData?.results?.message || apiData?.message || [];
           if (!Array.isArray(bills)) { console.warn(`[fetch-today] Unexpected response shape:`, JSON.stringify(apiData).substring(0,300)); continue; }
 
@@ -4078,9 +4078,9 @@ async function handleRequest(req, res, rawPath) {
         console.log(`[fetch-from-nic] Pulling EWBs from Masters India for year=${year} month=${month}`);
         try {
           const { status: apiStatus, data: apiData } = await mastersGet(
-            `/api/v2/ewaybill/list?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`
+            `/api/v2/saas-apis/ewb/?year=${encodeURIComponent(year)}&month=${encodeURIComponent(parseInt(month,10))}`
           );
-          console.log(`[fetch-from-nic] Masters API status=${apiStatus}, keys=${Object.keys(apiData||{}).join(',')}`);
+          console.log(`[fetch-from-nic] Masters API status=${apiStatus}, keys=${Object.keys(apiData||{}).join(',')}, raw=${JSON.stringify(apiData).substring(0,300)}`);
           const bills = apiData?.data || apiData?.results?.message || apiData?.message || [];
           if (!Array.isArray(bills)) {
             console.warn(`[fetch-from-nic] Unexpected response:`, JSON.stringify(apiData).substring(0,300));
