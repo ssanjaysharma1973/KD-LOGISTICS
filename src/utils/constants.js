@@ -1,5 +1,6 @@
 // API Configuration
-export const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
+const _API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+export const API_BASE_URL = _API_BASE + '/api';
 export const POI_API_URL = `${API_BASE_URL}/pois`;
 export const VEHICLES_API_URL = `${API_BASE_URL}/vehicles`;
 

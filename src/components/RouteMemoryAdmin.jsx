@@ -4,7 +4,8 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+const API = API_BASE + '/api';
 
 const TAG = {
   highway:   { bg: '#fef3c7', color: '#92400e', text: '🛣️ Highway' },

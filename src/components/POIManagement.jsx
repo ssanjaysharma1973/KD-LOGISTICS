@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 
-const API = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+const API = API_BASE + '/api';
 const APP_API = '';
 const CLIENT_ID = 'CLIENT_001';
 

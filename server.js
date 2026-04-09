@@ -891,6 +891,17 @@ const server = http.createServer((req, res) => {
   // Log every incoming request
   console.log(`[HTTP] ${req.method} ${req.url} from ${req.headers.host}`);
   
+  // ── CORS Headers – Set early for all responses ──────────────────────────────
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Tenant-ID,X-Requested-With');
+  
+  // ── Handle preflight OPTIONS requests ───────────────────────────────────────
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    return res.end();
+  }
+  
   // ── Healthcheck – sync, outside async handler ─────────────────────────────
   const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
   if (rawPath === '/health' || rawPath === '/api/health') {
@@ -934,17 +945,6 @@ async function handleRequest(req, res, rawPath) {
   try {
   const parsed = url.parse(req.url, true);
   const pathname = rawPath;
-  
-  // CORS headers - always set these first
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Tenant-ID');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    return res.end();
-  }
 
   // ── Missing Authentication Routes ────────────────────────────────────────
 
@@ -995,7 +995,8 @@ async function handleRequest(req, res, rawPath) {
       // Check if credentials match any configured client admin
       const clientAdmins = {
         'CLIENT_001': {
-          username: process.env.CLIENT_001_EMAIL || 'koyna@atullogistics.com',
+          username: proc
+          ess.env.CLIENT_001_EMAIL || 'koyna@atullogistics.com',
           pin: process.env.CLIENT_001_ADMINS_PIN || '0000',
           name: 'Atul Logistics Admin'
         },

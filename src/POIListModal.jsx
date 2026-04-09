@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { X, Edit2, Trash2, Search, MoreVertical, Plus } from 'lucide-react';
 
-const API = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+const API = API_BASE + '/api';
 const EMPTY_FORM = { poi_name: '', city: '', latitude: '', longitude: '', radius_meters: 1500 };
 
 export default function POIListModal({ pois, onClose, onEdit, onDelete, onAdd }) {

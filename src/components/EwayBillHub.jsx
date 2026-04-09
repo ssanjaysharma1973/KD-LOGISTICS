@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../services/apiClient';
 
-const API = '/api/eway-bills-hub';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+const API = API_BASE + '/api/eway-bills-hub';
 
 const MOVEMENT_LABELS = {
   primary_to_secondary:  { label: 'Hub → Distributor',      color: '#1d4ed8', bg: '#dbeafe' },

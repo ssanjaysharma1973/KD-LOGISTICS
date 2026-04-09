@@ -11,7 +11,8 @@ import DriverManagementDashboard from './DriverManagementDashboard.jsx';
 import TripManagementDashboard from './TripManagementDashboard.jsx';
 import BillingDashboard from './BillingDashboard.jsx';
 
-const API = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+const API = API_BASE + '/api';
 
 const SIZE_DISPLAY = {
   category_1_32ft_34ft: '32/34 Ft',
