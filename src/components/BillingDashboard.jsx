@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function BillingDashboard() {
   const [billings, setBillings] = useState([]);
   const [clients, setClients] = useState([]);
@@ -28,12 +30,12 @@ export default function BillingDashboard() {
       setLoading(true);
 
       // Fetch billings
-      const billingRes = await fetch('/api/billings/list');
+      const billingRes = await fetch(`${API_BASE}/api/billings/list`);
       const billingData = await billingRes.json();
       setBillings(billingData.billings || generateDummyBillings());
 
       // Fetch clients
-      const clientRes = await fetch('/api/clients');
+      const clientRes = await fetch(`${API_BASE}/api/clients`);
       const clientData = await clientRes.json();
       setClients(clientData.clients || []);
 
@@ -60,7 +62,7 @@ export default function BillingDashboard() {
   const handleAddBilling = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/billings/add', {
+      const res = await fetch(`${API_BASE}/api/billings/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -88,7 +90,7 @@ export default function BillingDashboard() {
 
   const handleMarkPaid = async (billingId) => {
     try {
-      const res = await fetch(`/api/billings/${billingId}`, {
+      const res = await fetch(`${API_BASE}/api/billings/${billingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'paid', payment_date: new Date().toISOString() }),

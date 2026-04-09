@@ -45,6 +45,8 @@ import FuelManagementPage from "./components/FuelManagementPage.jsx";
 import { formatDurationSince } from './utils.js';
 import { sortVehiclesByTime } from './utils/vehicle.js';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 // Error Boundary to catch React errors
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -162,7 +164,7 @@ function App() {
   // Fetch EWB vehicle-movement for dashboard cards
   const fetchEwbMovement = useCallback(async () => {
     try {
-      const res = await fetch('/api/eway-bills-hub/vehicle-movement');
+      const res = await fetch(`${API_BASE}/api/eway-bills-hub/vehicle-movement`);
       if (!res.ok) return;
       const data = await res.json();
       const map = {};
@@ -173,7 +175,7 @@ function App() {
 
   const fetchEwbAlerts = useCallback(async () => {
     try {
-      const res = await fetch('/api/ewb/active-list');
+      const res = await fetch(`${API_BASE}/api/ewb/active-list`);
       if (!res.ok) return;
       const data = await res.json();
       if (!Array.isArray(data)) return;
@@ -240,7 +242,7 @@ function App() {
     setFuelFetchLoading(true);
     setFuelFetchMsg(null);
     try {
-      const res = await fetch(`/api/fuel-prices/fetch?state=${encodeURIComponent(fuelFetchState)}`);
+      const res = await fetch(`${API_BASE}/api/fuel-prices/fetch?state=${encodeURIComponent(fuelFetchState)}`);
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.tip ? `${data.error} — ${data.tip}` : (data.error || 'Fetch failed'));
       // Pre-fill edits with fetched prices
@@ -255,7 +257,7 @@ function App() {
 
   const loadSettingDrivers = useCallback(async () => {
     try {
-      const res = await fetch('/api/drivers');
+      const res = await fetch(`${API_BASE}/api/drivers`);
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
       setSettingDrivers(list);
@@ -268,7 +270,7 @@ function App() {
   const saveDriverSalaryInSettings = async (driverId) => {
     setSettingDriverSaving(driverId);
     try {
-      const res = await fetch(`/api/ledger/driver/${driverId}/salary`, {
+      const res = await fetch(`${API_BASE}/api/ledger/driver/${driverId}/salary`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ monthly_salary: parseFloat(settingDriverSalaryEdits[driverId]) || 0 }),
       });
@@ -290,7 +292,7 @@ function App() {
 
   const fetchFuelTypeRates = async () => {
     try {
-      const res = await fetch('/api/fuel-type-rates');
+      const res = await fetch(`${API_BASE}/api/fuel-type-rates`);
       if (res.ok) {
         const data = await res.json();
         setFuelTypeRates(data);
@@ -304,7 +306,7 @@ function App() {
   const saveFuelTypeRate = async (fuelType) => {
     setFuelRateSaving(fuelType);
     try {
-      const res = await fetch(`/api/fuel-type-rates/${fuelType}`, {
+      const res = await fetch(`${API_BASE}/api/fuel-type-rates/${fuelType}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cost_per_liter: parseFloat(fuelRateEdits[fuelType]) || 0 }),
@@ -326,7 +328,7 @@ function App() {
   const fetchVehicles = useCallback(async () => {
     try {
       const clientId = tenantKey || 'CLIENT_001';
-      const response = await fetch(`/api/vehicles-master?clientId=${encodeURIComponent(clientId)}`);
+      const response = await fetch(`${API_BASE}/api/vehicles-master?clientId=${encodeURIComponent(clientId)}`);
       if (response.ok) {
         const data = await response.json();
         setVehicleList(Array.isArray(data) ? data : []);
@@ -356,8 +358,8 @@ function App() {
     try {
       const clientId = tenantKey || 'CLIENT_001';
       const url = selectedVehicleForEdit
-        ? `/api/vehicles-master/${selectedVehicleForEdit.id}`
-        : '/api/vehicles-master';
+        ? `${API_BASE}/api/vehicles-master/${selectedVehicleForEdit.id}`
+        : `${API_BASE}/api/vehicles-master`;
       
       const method = selectedVehicleForEdit ? 'PUT' : 'POST';
       const payload = { client_id: clientId, ...formData };
@@ -391,7 +393,7 @@ function App() {
     if (!confirm('Are you sure you want to delete this vehicle?')) return;
     
     try {
-      const response = await fetch(`/api/vehicles-master/${vehicleId}`, {
+      const response = await fetch(`${API_BASE}/api/vehicles-master/${vehicleId}`, {
         method: 'DELETE'
       });
 
@@ -1415,7 +1417,7 @@ function App() {
                     msgDiv.style.display = 'block';
                     
                     const clientId = localStorage.getItem('clientId') || 'CLIENT_001';
-                    fetch('/api/pois/create', {
+                    fetch(`${API_BASE}/api/pois/create`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
@@ -1652,7 +1654,7 @@ function App() {
                           msgDiv.style.color = '#0284c7';
                           msgDiv.style.display = 'block';
                           
-                          fetch(`/api/pois/${selectedPOIForEdit}`, {
+                          fetch(`${API_BASE}/api/pois/${selectedPOIForEdit}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({

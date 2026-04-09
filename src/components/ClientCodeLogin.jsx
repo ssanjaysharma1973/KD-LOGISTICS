@@ -78,7 +78,7 @@ export default function ClientCodeLogin({ onLoginSuccess, onBack }) {
 
     try {
       // Call backend driver login to authenticate
-      const res = await fetch('/api/drivers/login', {
+      const res = await fetch(`${API_BASE}/api/drivers/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

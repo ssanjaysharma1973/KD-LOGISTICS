@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function CentralControlCenter() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,7 +14,7 @@ export default function CentralControlCenter() {
 
   async function loadClients() {
     try {
-      const res = await fetch('/api/clients');
+      const res = await fetch(`${API_BASE}/api/clients`);
       const data = await res.json();
       // Filter out CLIENT_000 (DevAdmin) - show only regular clients
       const regularClients = (data.clients || []).filter(c => c.client_code !== 'CLIENT_000');
@@ -30,7 +32,7 @@ export default function CentralControlCenter() {
       const updateData = {};
       updateData[field] = value;
       
-      const res = await fetch(`/api/clients/${id}`, {
+      const res = await fetch(`${API_BASE}/api/clients/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData)

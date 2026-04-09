@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Phone, FileText } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function DriverManagement() {
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +23,7 @@ export default function DriverManagement() {
   const fetchDrivers = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/drivers?limit=100');
+      const res = await fetch(`${API_BASE}/api/drivers?limit=100`);
       if (!res.ok) throw new Error('Failed to fetch drivers');
       const data = await res.json();
       setDrivers(data.drivers || []);
@@ -63,7 +65,7 @@ export default function DriverManagement() {
   const handleDelete = async (id) => {
     if (!confirm('Delete this driver?')) return;
     try {
-      const res = await fetch(`/api/drivers/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/drivers/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete driver');
       await fetchDrivers();
     } catch (err) {

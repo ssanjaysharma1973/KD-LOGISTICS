@@ -225,7 +225,7 @@ function RoutingTab({ munshi, vehicles, pois, onGoToTrip }) {
   const fetchRoute = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/eway-bills-hub/vehicle-movement');
+      const res = await fetch(`${API_BASE}/api/eway-bills-hub/vehicle-movement`);
       const data = await res.json();
       setRouteVehicles(data.vehicles || []);
     } catch { setRouteVehicles([]); }
@@ -522,7 +522,7 @@ function MunshiDeliverModal({ ewb, munshi, onClose, onDone }) {
     try {
       // 1. Mark EWB delivered
       if (ewb.id) {
-        const pr = await fetch(`/api/eway-bills-hub/${ewb.id}`, {
+        const pr = await fetch(`${API_BASE}/api/eway-bills-hub/${ewb.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'delivered', munshi_id: String(munshi.id), munshi_name: munshi.name }),
@@ -531,7 +531,7 @@ function MunshiDeliverModal({ ewb, munshi, onClose, onDone }) {
         if (pd.error) throw new Error(pd.error);
       }
       // 2. Create munshi trip with expenses
-      await fetch('/api/munshi-trips', {
+      await fetch(`${API_BASE}/api/munshi-trips`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

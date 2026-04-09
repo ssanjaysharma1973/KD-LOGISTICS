@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Check, X, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 /**
  * Fuel Approval Dashboard Component
  * Munshi/Finance reviews and approves fuel advance requests
@@ -55,7 +57,7 @@ const FuelApprovalDashboard = ({ userRole = 'munshi', clientId }) => {
     setIssuingAdvance(true);
     try {
       // Step 1: Approve
-      const approveRes = await fetch(`/api/fuel/advance/${selectedApproval.advance_id}/approve`, {
+      const approveRes = await fetch(`${API_BASE}/api/fuel/advance/${selectedApproval.advance_id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -69,7 +71,7 @@ const FuelApprovalDashboard = ({ userRole = 'munshi', clientId }) => {
       }
 
       // Step 2: Issue (auto-issue for munshi approval)
-      const issueRes = await fetch(`/api/fuel/advance/${selectedApproval.advance_id}/issue`, {
+      const issueRes = await fetch(`${API_BASE}/api/fuel/advance/${selectedApproval.advance_id}/issue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

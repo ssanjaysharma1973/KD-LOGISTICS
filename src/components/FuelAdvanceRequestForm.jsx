@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, Clock, Send } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 /**
  * Fuel Advance Request Form Component
  * Allows drivers to request fuel advance for a trip
@@ -21,11 +23,11 @@ const FuelAdvanceRequestForm = ({ tripId, driverId, onRequestSubmitted }) => {
     const fetchTripData = async () => {
       try {
         // Fetch trip details
-        const tripRes = await fetch(`/api/trips/${tripId}`);
+        const tripRes = await fetch(`${API_BASE}/api/trips/${tripId}`);
         const trip = await tripRes.json();
 
         // Get fuel plan
-        const planRes = await fetch(`/api/fuel/plan/${tripId}`, { method: 'POST' });
+        const planRes = await fetch(`${API_BASE}/api/fuel/plan/${tripId}`, { method: 'POST' });
         const plan = await planRes.json();
 
         setTripInfo({
@@ -62,7 +64,7 @@ const FuelAdvanceRequestForm = ({ tripId, driverId, onRequestSubmitted }) => {
     setError('');
 
     try {
-      const response = await fetch('/api/fuel/advance/request', {
+      const response = await fetch(`${API_BASE}/api/fuel/advance/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

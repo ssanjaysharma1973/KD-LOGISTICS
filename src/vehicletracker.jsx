@@ -8,6 +8,8 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
 import { useVehicleData } from './context/VehicleDataContext.jsx';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 // Fix default marker icon paths for bundlers (CRA/Vite)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -156,7 +158,7 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
     if (!poiName) return;
     
     try {
-      const response = await fetch('/api/pois', {
+      const response = await fetch(`${API_BASE}/api/pois`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

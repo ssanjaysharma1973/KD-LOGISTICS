@@ -10,6 +10,8 @@ import POIListModal from './POIListModal.jsx';
 import VehicleFormModal from './VehicleFormModal.jsx';
 import VehicleDropdown from './VehicleDropdown.jsx';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function FleetMap({ vehicles, setTrackModalVehicle }) {
   const [pois, setPOIs] = useState([]);
   const [showPOIModal, setShowPOIModal] = useState(false);
@@ -25,7 +27,7 @@ export default function FleetMap({ vehicles, setTrackModalVehicle }) {
   useEffect(() => {
     const fetchPOIs = async () => {
       try {
-        const response = await fetch('/api/pois');
+        const response = await fetch(`${API_BASE}/api/pois`);
         const data = await response.json();
         setPOIs(Array.isArray(data) ? data : []);
       } catch (err) {
@@ -42,7 +44,7 @@ export default function FleetMap({ vehicles, setTrackModalVehicle }) {
   
   const fetchVehicles = async () => {
     try {
-      const response = await fetch('/api/vehicles-master?clientId=CLIENT_001');
+      const response = await fetch(`${API_BASE}/api/vehicles-master?clientId=CLIENT_001`);
       if (response.ok) {
         const data = await response.json();
         setVehicleList(Array.isArray(data) ? data : []);
@@ -61,7 +63,7 @@ export default function FleetMap({ vehicles, setTrackModalVehicle }) {
   // Submit POI with edited data
   const handleSubmitPOI = async (formData) => {
     try {
-      const response = await fetch('/api/pois', {
+      const response = await fetch(`${API_BASE}/api/pois`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -100,7 +102,7 @@ export default function FleetMap({ vehicles, setTrackModalVehicle }) {
     if (!window.confirm(`Delete POI "${poiName}"?`)) return;
     
     try {
-      const response = await fetch(`/api/pois/${poiId}`, {
+      const response = await fetch(`${API_BASE}/api/pois/${poiId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -126,7 +128,7 @@ export default function FleetMap({ vehicles, setTrackModalVehicle }) {
   // Submit POI edit
   const handleSubmitEditPOI = async (formData) => {
     try {
-      const response = await fetch(`/api/pois/${selectedPOI.id}`, {
+      const response = await fetch(`${API_BASE}/api/pois/${selectedPOI.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -167,7 +169,7 @@ export default function FleetMap({ vehicles, setTrackModalVehicle }) {
   // Delete POI from edit modal
   const handleDeleteFromEditModal = async () => {
     try {
-      const response = await fetch(`/api/pois/${selectedPOI.id}`, {
+      const response = await fetch(`${API_BASE}/api/pois/${selectedPOI.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -189,7 +191,7 @@ export default function FleetMap({ vehicles, setTrackModalVehicle }) {
   // Vehicle CRUD Handlers
   const handleVehicleSubmit = async (formData) => {
     try {
-      const response = await fetch('/api/vehicles-master', {
+      const response = await fetch(`${API_BASE}/api/vehicles-master`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -226,7 +228,7 @@ export default function FleetMap({ vehicles, setTrackModalVehicle }) {
   const handleVehicleDelete = async (vehicleId, vehicleNo) => {
     if (window.confirm(`Delete vehicle ${vehicleNo}? This cannot be undone.`)) {
       try {
-        const response = await fetch(`/api/vehicles-master/${vehicleId}`, {
+        const response = await fetch(`${API_BASE}/api/vehicles-master/${vehicleId}`, {
           method: 'DELETE'
         });
         

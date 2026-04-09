@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function StandardRouteFormTable({ onClose, routeData }) {
   const [formData, setFormData] = useState(routeData || {
     route_no: '',
@@ -80,9 +82,9 @@ export default function StandardRouteFormTable({ onClose, routeData }) {
     const fetchData = async () => {
       try {
         const [poisRes, ratesRes, vehiclesRes] = await Promise.all([
-          fetch('/api/pois?clientId=CLIENT_001'),
-          fetch('/api/poi-unloading-rates?clientId=CLIENT_001'),
-          fetch('/api/vehicles-master?clientId=CLIENT_001')
+          fetch(`${API_BASE}/api/pois?clientId=CLIENT_001`),
+          fetch(`${API_BASE}/api/poi-unloading-rates?clientId=CLIENT_001`),
+          fetch(`${API_BASE}/api/vehicles-master?clientId=CLIENT_001`)
         ]);
         if (poisRes.ok) {
           const data = await poisRes.json();

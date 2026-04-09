@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function DriverManagementDashboard() {
   const [drivers, setDrivers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -30,17 +32,17 @@ export default function DriverManagementDashboard() {
       setLoading(true);
       
       // Fetch drivers
-      const driverRes = await fetch('/api/drivers/list');
+      const driverRes = await fetch(`${API_BASE}/api/drivers/list`);
       const driverData = await driverRes.json();
       setDrivers(driverData.drivers || generateDummyDrivers());
 
       // Fetch vehicles
-      const vehicleRes = await fetch('/api/vehicles/list');
+      const vehicleRes = await fetch(`${API_BASE}/api/vehicles/list`);
       const vehicleData = await vehicleRes.json();
       setVehicles(vehicleData.success ? vehicleData.vehicles || [] : generateDummyVehicles());
 
       // Fetch clients
-      const clientRes = await fetch('/api/clients');
+      const clientRes = await fetch(`${API_BASE}/api/clients`);
       const clientData = await clientRes.json();
       setClients(clientData.clients || []);
 
@@ -78,7 +80,7 @@ export default function DriverManagementDashboard() {
   const handleAddDriver = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/drivers/add', {
+      const res = await fetch(`${API_BASE}/api/drivers/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -107,7 +109,7 @@ export default function DriverManagementDashboard() {
 
   const handleAssignVehicle = async (driverId, vehicleId) => {
     try {
-      const res = await fetch(`/api/drivers/${driverId}/assign-vehicle`, {
+      const res = await fetch(`${API_BASE}/api/drivers/${driverId}/assign-vehicle`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vehicle_id: vehicleId }),
@@ -124,7 +126,7 @@ export default function DriverManagementDashboard() {
 
   const handleUpdateStatus = async (driverId, newStatus) => {
     try {
-      const res = await fetch(`/api/drivers/${driverId}`, {
+      const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import VehicleTracker from '../vehicletracker.jsx';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 const VehicleTrackerTab = ({ vehicles = [] }) => {
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [trackedPath, setTrackedPath] = useState([]);
@@ -82,7 +84,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
 
     // Fetch data range for info display — NEVER auto-fill dates here (avoids race condition
     // where the async response arrives after the user has already set manual custom dates).
-    fetch(`/api/gps-data-range?vehicleId=${vehicleId}&clientId=CLIENT_001`)
+    fetch(`${API_BASE}/api/gps-data-range?vehicleId=${vehicleId}&clientId=CLIENT_001`)
       .then(r => r.json())
       .then(d => { if (d.min && d.max) setDataRange(d); })
       .catch(() => {});
@@ -590,7 +592,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
                     const id = vehicle.number || vehicle.vehicle_no || vehicle.vehicleNumber || vehicle.id;
                     setTrackLoading(true);
                     setTrackError(null);
-                    fetch(`/api/vehicle-track?vehicleId=${id}&clientId=CLIENT_001&startTime=${new Date(dataRange.min).toISOString()}&endTime=${new Date(dataRange.max).toISOString()}`)
+                    fetch(`${API_BASE}/api/vehicle-track?vehicleId=${id}&clientId=CLIENT_001&startTime=${new Date(dataRange.min).toISOString()}&endTime=${new Date(dataRange.max).toISOString()}`)
                       .then(r => r.json())
                       .then(data => {
                         if (!Array.isArray(data) || data.length === 0) { setTrackError('No GPS history available for this vehicle'); return; }

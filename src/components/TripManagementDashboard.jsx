@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function TripManagementDashboard() {
   const [trips, setTrips] = useState([]);
   const [drivers, setDrivers] = useState([]);
@@ -30,22 +32,22 @@ export default function TripManagementDashboard() {
       setLoading(true);
       
       // Fetch trips
-      const tripRes = await fetch('/api/trips/list');
+      const tripRes = await fetch(`${API_BASE}/api/trips/list`);
       const tripData = await tripRes.json();
       setTrips(tripData.trips || generateDummyTrips());
 
       // Fetch drivers
-      const driverRes = await fetch('/api/drivers/list');
+      const driverRes = await fetch(`${API_BASE}/api/drivers/list`);
       const driverData = await driverRes.json();
       setDrivers(driverData.drivers || []);
 
       // Fetch vehicles
-      const vehicleRes = await fetch('/api/vehicles/list');
+      const vehicleRes = await fetch(`${API_BASE}/api/vehicles/list`);
       const vehicleData = await vehicleRes.json();
       setVehicles(vehicleData.success ? vehicleData.vehicles || [] : []);
 
       // Fetch clients
-      const clientRes = await fetch('/api/clients');
+      const clientRes = await fetch(`${API_BASE}/api/clients`);
       const clientData = await clientRes.json();
       setClients(clientData.clients || []);
 
@@ -72,7 +74,7 @@ export default function TripManagementDashboard() {
   const handleAddTrip = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/trips/add', {
+      const res = await fetch(`${API_BASE}/api/trips/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -101,7 +103,7 @@ export default function TripManagementDashboard() {
 
   const handleUpdateStatus = async (tripId, newStatus) => {
     try {
-      const res = await fetch(`/api/trips/${tripId}`, {
+      const res = await fetch(`${API_BASE}/api/trips/${tripId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null }),

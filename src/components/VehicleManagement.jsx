@@ -9,6 +9,8 @@ import { sortVehiclesByTime } from '../utils/vehicle.js';
 import { useVehicleData } from '../context/VehicleDataContext.jsx';
 import VehicleSizeImport from './VehicleSizeImport.jsx';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 const VehicleManagement = () => {
   // Shared vehicle data from context (auto-refreshes every 30s)
   const { stats: sharedStats, refresh: refreshContext } = useVehicleData();
@@ -72,7 +74,7 @@ const VehicleManagement = () => {
   // Fetch vehicles on mount
   const fetchVehicles = async () => {
     try {
-      const response = await fetch('/api/vehicles-master?clientId=CLIENT_001');
+      const response = await fetch(`${API_BASE}/api/vehicles-master?clientId=CLIENT_001`);
       if (response.ok) {
         const data = await response.json();
         setVehicles(Array.isArray(data) ? data : []);
@@ -92,7 +94,7 @@ const VehicleManagement = () => {
   // Fetch drivers from API
   const fetchDrivers = async () => {
     try {
-      const response = await fetch('/api/drivers?clientId=CLIENT_001');
+      const response = await fetch(`${API_BASE}/api/drivers?clientId=CLIENT_001`);
       if (response.ok) {
         const data = await response.json();
         setDrivers(Array.isArray(data) ? data : []);
@@ -110,7 +112,7 @@ const VehicleManagement = () => {
   // Fetch munshis from API
   const fetchMunshis = async () => {
     try {
-      const response = await fetch('/api/munshis?clientId=CLIENT_001');
+      const response = await fetch(`${API_BASE}/api/munshis?clientId=CLIENT_001`);
       if (response.ok) {
         const data = await response.json();
         // Handle both flat array and {munshis:[...]} wrapper
@@ -130,7 +132,7 @@ const VehicleManagement = () => {
   // Fetch master fuel type rates
   const fetchFuelTypeRates = async () => {
     try {
-      const res = await fetch('/api/fuel-type-rates?clientId=CLIENT_001');
+      const res = await fetch(`${API_BASE}/api/fuel-type-rates?clientId=CLIENT_001`);
       if (res.ok) {
         const data = await res.json();
         const map = {};
@@ -145,7 +147,7 @@ const VehicleManagement = () => {
   // Fetch POIs
   const fetchPois = async () => {
     try {
-      const response = await fetch('/api/pois');
+      const response = await fetch(`${API_BASE}/api/pois`);
       if (response.ok) {
         const data = await response.json();
         setPois(Array.isArray(data) ? data : []);
@@ -308,7 +310,7 @@ const VehicleManagement = () => {
     }
 
     try {
-      const response = await fetch(`/api/vehicles-master/${selectedVehicle.id}/munshi`, {
+      const response = await fetch(`${API_BASE}/api/vehicles-master/${selectedVehicle.id}/munshi`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -342,7 +344,7 @@ const VehicleManagement = () => {
     if (!confirmDeassign) return;
 
     try {
-      const response = await fetch(`/api/vehicles-master/${selectedVehicle.id}/munshi`, {
+      const response = await fetch(`${API_BASE}/api/vehicles-master/${selectedVehicle.id}/munshi`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -392,7 +394,7 @@ const VehicleManagement = () => {
 
   const handleSaveVehicle = async () => {
     try {
-      const res = await fetch(`/api/vehicles-master/${selectedVehicle.id}`, {
+      const res = await fetch(`${API_BASE}/api/vehicles-master/${selectedVehicle.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -420,7 +422,7 @@ const VehicleManagement = () => {
     }
     
     try {
-      const response = await fetch('/api/drivers', {
+      const response = await fetch(`${API_BASE}/api/drivers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...newDriverData, client_id: 'CLIENT_001' })
@@ -448,7 +450,7 @@ const VehicleManagement = () => {
     }
     
     try {
-      const response = await fetch('/api/munshis', {
+      const response = await fetch(`${API_BASE}/api/munshis`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...newMunshiData, client_id: 'CLIENT_001' })
@@ -473,7 +475,7 @@ const VehicleManagement = () => {
     if (!deleteItem) return;
     
     try {
-      const response = await fetch(`/api/drivers/${deleteItem.id}`, {
+      const response = await fetch(`${API_BASE}/api/drivers/${deleteItem.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -498,7 +500,7 @@ const VehicleManagement = () => {
     if (!deleteItem) return;
     
     try {
-      const response = await fetch(`/api/munshis/${deleteItem.id}`, {
+      const response = await fetch(`${API_BASE}/api/munshis/${deleteItem.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -537,7 +539,7 @@ const VehicleManagement = () => {
     const vehicle = vehicles.find(v => v.id === vehicleId);
     if (!window.confirm(`Delete vehicle ${vehicle?.vehicle_no || vehicleId}? This cannot be undone.`)) return;
     try {
-      const res = await fetch(`/api/vehicles-master/${vehicleId}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/vehicles-master/${vehicleId}`, { method: 'DELETE' });
       if (res.ok) {
         await fetchVehicles();
         // Refresh shared context so dashboard, tracker, and all other pages
@@ -587,7 +589,7 @@ const VehicleManagement = () => {
       console.log(`Assigning munshi ${munshiName} to ${vehicleIds.length} vehicles`);
       
       const updatePromises = vehicleIds.map(vehicleId =>
-        fetch(`/api/vehicles-master/${vehicleId}/munshi`, {
+        fetch(`${API_BASE}/api/vehicles-master/${vehicleId}/munshi`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -634,7 +636,7 @@ const VehicleManagement = () => {
       console.log(`Setting fuel rate ${selectedBulkFuelRate} for ${vehicleIds.length} vehicles`);
       
       const updatePromises = vehicleIds.map(vehicleId =>
-        fetch(`/api/vehicles-master/${vehicleId}/fuel-rate`, {
+        fetch(`${API_BASE}/api/vehicles-master/${vehicleId}/fuel-rate`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -678,7 +680,7 @@ const VehicleManagement = () => {
       console.log(`Deassigning munshi from ${vehicleIds.length} vehicles`);
       
       const updatePromises = vehicleIds.map(vehicleId =>
-        fetch(`/api/vehicles-master/${vehicleId}/munshi`, {
+        fetch(`${API_BASE}/api/vehicles-master/${vehicleId}/munshi`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1270,7 +1272,7 @@ const VehicleManagement = () => {
                 onClick={async () => {
                   if (!fuelRateForm.fuel_type) { alert('Please select a fuel type'); return; }
                   try {
-                    const res = await fetch(`/api/vehicles-master/${selectedVehicle.id}`, {
+                    const res = await fetch(`${API_BASE}/api/vehicles-master/${selectedVehicle.id}`, {
                       method: 'PUT',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
@@ -1891,7 +1893,7 @@ const VehicleManagement = () => {
                   return;
                 }
                 try {
-                  const res = await fetch(`/api/munshis/${selectedMunshi.id}`, {
+                  const res = await fetch(`${API_BASE}/api/munshis/${selectedMunshi.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(editMunshiForm)

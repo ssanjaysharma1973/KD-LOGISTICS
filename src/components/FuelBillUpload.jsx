@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Upload, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 /**
  * Fuel Bill Upload Component
  * Drivers upload fuel receipt/bill after fueling up
@@ -58,7 +60,7 @@ const FuelBillUpload = ({ tripId, driverId, onBillUploaded }) => {
 
     try {
       // Submit fuel transaction
-      const response = await fetch('/api/fuel/transaction/create', {
+      const response = await fetch(`${API_BASE}/api/fuel/transaction/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

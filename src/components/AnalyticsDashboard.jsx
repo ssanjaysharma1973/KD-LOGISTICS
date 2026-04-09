@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function AnalyticsDashboard() {
   const [stats, setStats] = useState({
     totalClients: 0,
@@ -24,7 +26,7 @@ export default function AnalyticsDashboard() {
       setLoading(true);
       
       // Fetch all clients
-      const clientRes = await fetch('/api/clients');
+      const clientRes = await fetch(`${API_BASE}/api/clients`);
       const clientData = await clientRes.json();
       
       if (!clientData.success) throw new Error('Failed to fetch clients');
@@ -34,13 +36,13 @@ export default function AnalyticsDashboard() {
       const inactiveCount = clients.filter(c => c.status === 'inactive').length;
 
       // Fetch drivers
-      const driverRes = await fetch('/api/drivers/list');
+      const driverRes = await fetch(`${API_BASE}/api/drivers/list`);
       const driverData = await driverRes.json();
       const drivers = driverData.drivers || [];
       const activeDrivers = drivers.filter(d => d.status === 'active').length;
 
       // Fetch munshis
-      const munshiRes = await fetch('/api/munshis/list');
+      const munshiRes = await fetch(`${API_BASE}/api/munshis/list`);
       const munshiData = await munshiRes.json();
       const munshis = munshiData.munshis || [];
 

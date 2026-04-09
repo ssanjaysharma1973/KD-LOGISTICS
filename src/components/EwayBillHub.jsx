@@ -2232,7 +2232,7 @@ function AssignVehicleTab() {
   const [submitErr, setSubmitErr] = useState('');
 
   useEffect(() => {
-    fetch('/api/vehicles?client_id=CLIENT_001&limit=200')
+    fetch(`${API_BASE}/api/vehicles?client_id=CLIENT_001&limit=200`)
       .then(r => r.json())
       .then(d => {
         const list = d.vehicles || d.data || d || [];
@@ -2244,7 +2244,7 @@ function AssignVehicleTab() {
     if (!ewbNo.trim()) return;
     setFetching(true); setFetchErr(''); setEwbData(null); setSubmitResult(null); setSubmitErr('');
     try {
-      const res = await fetch(`/api/ewb/details/${encodeURIComponent(ewbNo.trim())}?client_id=CLIENT_001`);
+      const res = await fetch(`${API_BASE}/api/ewb/details/${encodeURIComponent(ewbNo.trim())}?client_id=CLIENT_001`);
       const d = await res.json();
       if (d.status === 'ok') {
         setEwbData(d.data);
@@ -2267,7 +2267,7 @@ function AssignVehicleTab() {
       const dd = String(today.getDate()).padStart(2,'0');
       const mm = String(today.getMonth()+1).padStart(2,'0');
       const yyyy = today.getFullYear();
-      const res = await fetch('/api/ewb/update-vehicle', {
+      const res = await fetch(`${API_BASE}/api/ewb/update-vehicle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

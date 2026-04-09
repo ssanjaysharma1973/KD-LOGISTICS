@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
+
 export default function VehicleManagementDashboard() {
   const [vehicles, setVehicles] = useState([]);
   const [clients, setClients] = useState([]);
@@ -24,7 +26,7 @@ export default function VehicleManagementDashboard() {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch('/api/clients');
+      const res = await fetch(`${API_BASE}/api/clients`);
       const data = await res.json();
       if (data.success) {
         setClients(data.clients || []);
@@ -37,7 +39,7 @@ export default function VehicleManagementDashboard() {
   const fetchVehicles = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/vehicles/list');
+      const res = await fetch(`${API_BASE}/api/vehicles/list`);
       const data = await res.json();
       
       if (data.success && data.vehicles) {
@@ -71,7 +73,7 @@ export default function VehicleManagementDashboard() {
   const handleAddVehicle = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/vehicles/add', {
+      const res = await fetch(`${API_BASE}/api/vehicles/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -92,7 +94,7 @@ export default function VehicleManagementDashboard() {
 
   const handleUpdateStatus = async (vehicleId, newStatus) => {
     try {
-      const res = await fetch(`/api/vehicles/${vehicleId}`, {
+      const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
