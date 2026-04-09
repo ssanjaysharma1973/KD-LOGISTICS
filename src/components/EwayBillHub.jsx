@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../services/apiClient';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-production.up.railway.app';
-const API = API_BASE + '/api/eway-bills-hub';
+const API = '/api/eway-bills-hub';
 
 const MOVEMENT_LABELS = {
   primary_to_secondary:  { label: 'Hub → Distributor',      color: '#1d4ed8', bg: '#dbeafe' },
@@ -1527,7 +1527,7 @@ function UnmatchedPoisTab() {
 
 // ─── ROOT COMPONENT ────────────────────────────────────────────────────────────
 // ─── NIC LIVE EWB TAB ─────────────────────────────────────────────────────────
-const EWB_API = API_BASE + '/api/ewb';
+const EWB_API = '/api/ewb';
 
 const EXTEND_REASONS = [
   { value: '1', label: 'Natural Calamity' },
@@ -2557,11 +2557,11 @@ export default function EwayBillHub({ defaultTab = 'assign' }) {
   const [unmatchedCount, setUnmatchedCount] = useState(0);
 
   const fetchSummary = useCallback(() => {
-    fetch(`${API}/summary`).then(r => r.json()).then(d => setSummary(d)).catch(() => {});
+    fetch(`${API_BASE}${API}/summary`).then(r => r.json()).then(d => setSummary(d)).catch(() => {});
   }, []);
 
   const fetchUnmatchedCount = useCallback(() => {
-    fetch(`${API}/unmatched-pois?per_page=1`)
+    fetch(`${API_BASE}${API}/unmatched-pois?per_page=1`)
       .then(r => r.json()).then(d => setUnmatchedCount(d.total || 0)).catch(() => {});
   }, []);
 
