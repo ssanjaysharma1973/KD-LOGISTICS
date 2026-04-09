@@ -1527,7 +1527,7 @@ function UnmatchedPoisTab() {
 
 // ─── ROOT COMPONENT ────────────────────────────────────────────────────────────
 // ─── NIC LIVE EWB TAB ─────────────────────────────────────────────────────────
-const EWB_API = '/api/ewb';
+const EWB_API = API_BASE + '/api/ewb';
 
 const EXTEND_REASONS = [
   { value: '1', label: 'Natural Calamity' },
