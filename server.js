@@ -2876,6 +2876,27 @@ async function handleRequest(req, res, rawPath) {
         const totalVal = parseFloat((mapped.total_value || '0').toString().replace(/[^0-9.]/g, '')) || 0;
         const distKm   = parseFloat((mapped.distance_km || '0').toString().replace(/[^0-9.]/g, '')) || 0;
 
+        // Convert Excel serial date numbers to YYYY-MM-DD strings
+        const excelSerialToDate = (val) => {
+          if (!val && val !== 0) return '';
+          const n = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.]/g,''));
+          if (!isNaN(n) && n > 40000 && n < 60000) {
+            // Excel serial: days since Jan 1, 1900 (with Excel's leap year bug)
+            const d = new Date((n - 25569) * 86400000);
+            const y = d.getUTCFullYear(), m = String(d.getUTCMonth()+1).padStart(2,'0'), dd = String(d.getUTCDate()).padStart(2,'0');
+            return `${y}-${m}-${dd}`;
+          }
+          // Try normal date string
+          const s = String(val).trim();
+          if (s.match(/^\d{2}\/\d{2}\/\d{4}$/)) { const [d2,mn2,y2]=s.split('/'); return `${y2}-${mn2}-${d2}`; }
+          if (s.match(/^\d{4}-\d{2}-\d{2}/)) return s.substring(0,10);
+          const parsed = new Date(s);
+          if (!isNaN(parsed)) return parsed.toISOString().substring(0,10);
+          return s;
+        };
+        if (mapped.doc_date) mapped.doc_date = excelSerialToDate(mapped.doc_date);
+        if (mapped.valid_upto) mapped.valid_upto = excelSerialToDate(mapped.valid_upto);
+
         // Parse validity days from valid_upto
         let validityDays = 0;
         if (mapped.valid_upto) {
