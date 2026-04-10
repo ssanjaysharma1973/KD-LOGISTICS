@@ -17,13 +17,16 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kd-logistics-
 /**
  * Build authorization headers from stored JWT + Tenant Context
  */
-function getAuthHeaders() {
+function getAuthHeaders(isFormData = false) {
   const token = getToken();
   const clientId = getClientId();
   
-  const headers = {
-    'Content-Type': 'application/json',
-  };
+  const headers = {};
+
+  // Don't set Content-Type for FormData — browser sets it automatically with boundary
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -106,13 +109,14 @@ async function get(endpoint, options = {}) {
  */
 async function post(endpoint, data, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
-  const headers = getAuthHeaders();
+  const isFormData = data instanceof FormData;
+  const headers = getAuthHeaders(isFormData);
 
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(data),
+      body: isFormData ? data : JSON.stringify(data),
       ...options,
     });
 
