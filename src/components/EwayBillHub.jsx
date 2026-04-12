@@ -427,10 +427,10 @@ function BillsListTab() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                           <InfoBlock label="GSTIN (From)" value={b.from_gstin} />
                           <InfoBlock label="From Trade Name" value={b.from_trade_name} />
-                          <InfoBlock label="From Place, State" value={`${b.from_place || '—'}, ${b.from_state || '—'} - ${b.from_pincode || ''}`} />
+                          <InfoBlock label="From Place, State" value={[b.from_place, b.from_state, b.from_pincode].filter(Boolean).join(', ') || '—'} />
                           <InfoBlock label="GSTIN (To)" value={b.to_gstin} />
                           <InfoBlock label="To Trade Name" value={b.to_trade_name} />
-                          <InfoBlock label="To Place, State" value={`${b.to_place || '—'}, ${b.to_state || '—'} - ${b.to_pincode || ''}`} />
+                          <InfoBlock label="To Place, State" value={[b.to_place, b.to_state, b.to_pincode].filter(Boolean).join(', ') || '—'} />
                           <InfoBlock label="Product" value={b.product_name} />
                           <InfoBlock label="HSN Code" value={b.hsn_code} />
                           <InfoBlock label="Taxable Value" value={b.taxable_value ? '₹' + Number(b.taxable_value).toLocaleString('en-IN') : '—'} />
