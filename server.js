@@ -3009,7 +3009,6 @@ async function handleRequest(req, res, rawPath) {
         );
         if (existing.length === 0) routesCreated++;
       }
-      }
 
       // Auto-backup all EWBs to /data/ewb_backup.json so they survive redeploys
       if (inserted > 0) writeEwbBackup().catch(() => {});
