@@ -20,7 +20,7 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
     { key: 'vehicles', label: 'Vehicles', emoji: '🚗' },
     { key: 'munshis', label: 'Munshis', emoji: '👨‍💼', adminOnly: true },
     { key: 'bulk-unloading-charges', label: 'Unloading Charges', emoji: '💰', adminOnly: true },
-    { key: 'poimanagement', label: 'POI & Discovery', emoji: '📍', adminOnly: true },
+    { key: 'poimanagement', label: 'POI & Discovery', emoji: '📍' },
     { key: 'route-memory', label: 'Learned Routes', emoji: '🧠', adminOnly: true },
     { key: 'settings', label: 'Settings', emoji: '⚙️', adminOnly: true },
   ];
