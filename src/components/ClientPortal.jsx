@@ -145,7 +145,7 @@ function DashboardTab({ client, vehicles, drivers }) {
       <div style={{ background: '#1e293b', borderRadius: 10, padding: '14px', marginBottom: 8, border: '1px solid #334155' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
           <span style={{ color: '#94a3b8' }}>Active Vehicles</span>
-          <span style={{ color: '#a3e635', fontWeight: 700 }}>{vehicles?.filter(v => v.status === 'active').length || 0}</span>
+          <span style={{ color: '#a3e635', fontWeight: 700 }}>{vehicles?.length || 0}</span>
         </div>
       </div>
       <div style={{ background: '#1e293b', borderRadius: 10, padding: '14px', border: '1px solid #334155' }}>
@@ -173,12 +173,12 @@ function VehiclesTab({ vehicles }) {
       {vehicles.map((v, i) => (
         <div key={i} style={{ background: '#1e293b', borderRadius: 10, padding: '14px', marginBottom: 10, border: '1px solid #334155' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#60a5fa' }}>🚗 {v.vehicle_number}</div>
-            <span style={{ fontSize: 11, background: v.status === 'active' ? '#14532d' : '#78350f', color: v.status === 'active' ? '#4ade80' : '#f59e0b', padding: '2px 8px', borderRadius: 8 }}>
-              {v.status === 'active' ? '✓ Active' : 'Inactive'}
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#60a5fa' }}>🚗 {v.vehicle_no || v.vehicle_number || v.number}</div>
+            <span style={{ fontSize: 11, background: '#1e3a5f', color: '#60a5fa', padding: '2px 8px', borderRadius: 8 }}>
+              {v.vehicle_type || v.type || '—'}
             </span>
           </div>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>{v.model || '—'}</div>
+          <div style={{ fontSize: 12, color: '#94a3b8' }}>{v.driver_name || v.driver || '—'} {v.phone ? `· ${v.phone}` : ''}</div>
         </div>
       ))}
     </div>
@@ -248,13 +248,13 @@ export default function ClientPortal() {
     setLoading(true);
     try {
       const [vRes, dRes] = await Promise.all([
-        fetch(`${API}/vehicles?client_id=${client.client_code}`),
-        fetch(`${API}/drivers?client_id=${client.client_code}`),
+        fetch(`${API}/vehicles-master?clientId=${client.client_id || client.client_code}`),
+        fetch(`${API}/drivers?client_id=${client.client_id || client.client_code}`),
       ]);
       const vData = await vRes.json();
       const dData = await dRes.json();
-      setVehicles(vData.vehicles ? vData.vehicles : []);
-      setDrivers(dData.drivers ? dData.drivers : []);
+      setVehicles(Array.isArray(vData) ? vData : (vData.vehicles || []));
+      setDrivers(Array.isArray(dData) ? dData : (dData.drivers || []));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [client?.client_code]);
