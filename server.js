@@ -204,7 +204,8 @@ function seedSqliteIfEmpty() {
         munshi_id TEXT, munshi_name TEXT, matched_trip_id TEXT, vehicle_status TEXT,
         delivered_at TEXT, notes TEXT, imported_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        validity_days INTEGER DEFAULT 0, ewb_number TEXT)`);
+        validity_days INTEGER DEFAULT 0, ewb_number TEXT,
+        cewb_no TEXT, multi_veh_info TEXT, route_id TEXT)`);
       await dbRun(`CREATE TABLE IF NOT EXISTS ewb_vehicle_changes (
         id INTEGER PRIMARY KEY AUTOINCREMENT, ewb_id TEXT, ewb_number TEXT,
         old_vehicle TEXT, new_vehicle TEXT, changed_at TEXT DEFAULT CURRENT_TIMESTAMP, notes TEXT)`);
@@ -347,6 +348,10 @@ function seedSqliteIfEmpty() {
       )`).catch(() => {});
       await dbRun(`ALTER TABLE munshi_trips ADD COLUMN ewb_nos TEXT DEFAULT '[]'`).catch(() => {});
       await dbRun(`ALTER TABLE munshi_trips ADD COLUMN process_step TEXT DEFAULT 'loading'`).catch(() => {});
+      // New EWB columns — safe to re-run; .catch ignores "duplicate column" errors
+      await dbRun(`ALTER TABLE eway_bills_master ADD COLUMN cewb_no TEXT`).catch(() => {});
+      await dbRun(`ALTER TABLE eway_bills_master ADD COLUMN multi_veh_info TEXT`).catch(() => {});
+      await dbRun(`ALTER TABLE eway_bills_master ADD COLUMN route_id TEXT`).catch(() => {});
       await dbRun(`CREATE TABLE IF NOT EXISTS driver_reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT DEFAULT 'CLIENT_001',
@@ -2821,6 +2826,8 @@ async function handleRequest(req, res, rawPath) {
         if (k.includes('ewbno') || k.includes('ewbnumber') || k.includes('ewaybillno')) return 'ewb_no';
         if (k.includes('docno') || k.includes('documentno')) return 'doc_no';
         if (k.includes('vehicleno') || k.includes('vehicleregno')) return 'vehicle_no';
+        if (k.includes('cewbno') || k.includes('cewbnumber') || k.includes('consolidatedewb')) return 'cewb_no';
+        if (k.includes('multiveh') || k.includes('multivehicle') || k.includes('multitveh')) return 'multi_veh_info';
         // NIC combined format: "From GSTIN Info" / "To GSTIN Info" — must check before plain fromgstin
         if (k === 'fromgstininfo') return '_from_gstin_info';
         if (k === 'togstininfo') return '_to_gstin_info';
@@ -2846,6 +2853,7 @@ async function handleRequest(req, res, rawPath) {
       const munshis = await sqAll('SELECT * FROM munshis WHERE client_id=?', ['CLIENT_001']);
 
       let inserted = 0, updated = 0, skipped = 0;
+      const insertedEwbs = []; // track for route_id generation
       for (const row of rows) {
         const mapped = {};
         for (const [k, v] of Object.entries(row)) {
@@ -2932,6 +2940,9 @@ async function handleRequest(req, res, rawPath) {
           if (!isNaN(expDate) && !isNaN(docDate)) validityDays = Math.round((expDate - docDate) / 86400000);
         }
 
+        const cewbNo     = (mapped.cewb_no || '').toString().trim();
+        const multiVeh   = (mapped.multi_veh_info || '').toString().trim();
+
         try {
           await sqRun(
             `INSERT OR REPLACE INTO eway_bills_master
@@ -2940,8 +2951,9 @@ async function handleRequest(req, res, rawPath) {
                from_trade_name, to_trade_name, from_pincode, to_pincode,
                total_value, doc_date, valid_upto, status, movement_type,
                supply_type, transport_mode, distance_km,
-               munshi_id, munshi_name, validity_days, imported_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+               munshi_id, munshi_name, validity_days, cewb_no, multi_veh_info,
+               imported_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             ['CLIENT_001', ewbNo, ewbNo, mapped.doc_no || '', vno,
              fromPlace, toPlace,
              fromPoi?.id || null, fromPoi?.poi_name || null,
@@ -2950,18 +2962,59 @@ async function handleRequest(req, res, rawPath) {
              totalVal, mapped.doc_date || '', mapped.valid_upto || '',
              'active', mvType,
              mapped.supply_type || '', mapped.transport_mode || 'Road', distKm,
-             munshiId, munshiName, validityDays, now, now]
+             munshiId, munshiName, validityDays, cewbNo, multiVeh,
+             now, now]
           );
+          insertedEwbs.push({ ewb_no: ewbNo, doc_no: mapped.doc_no || '', vehicle_no: vno, doc_date: mapped.doc_date || '' });
           inserted++;
         } catch (e) {
           console.error('EWB insert error:', e.message); skipped++;
         }
       }
 
+      // ── Auto Route ID generation ─────────────────────────────────────────
+      // Group EWBs by doc_no (same invoice = same route trip).
+      // If no doc_no, fall back to grouping by (vehicle_no + doc_date).
+      // Each group gets a route_id like ROUTE-20260412-0001.
+      let routesCreated = 0;
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      // Fetch existing max route sequence for today to avoid collisions
+      const existingRoutes = await sqAll(
+        `SELECT DISTINCT route_id FROM eway_bills_master WHERE client_id='CLIENT_001' AND route_id LIKE ?`,
+        [`ROUTE-${today}-%`]
+      );
+      let routeSeq = existingRoutes.length;
+
+      // Build groups
+      const docGroups = {};
+      for (const e of insertedEwbs) {
+        const key = e.doc_no ? `doc:${e.doc_no}` : `veh:${e.vehicle_no}:${e.doc_date}`;
+        if (!docGroups[key]) docGroups[key] = [];
+        docGroups[key].push(e.ewb_no);
+      }
+      for (const [, ewbNos] of Object.entries(docGroups)) {
+        if (ewbNos.length === 0) continue;
+        // Check if any of these EWBs already have a route_id
+        const placeholders = ewbNos.map(() => '?').join(',');
+        const existing = await sqAll(
+          `SELECT route_id FROM eway_bills_master WHERE client_id='CLIENT_001' AND ewb_no IN (${placeholders}) AND route_id IS NOT NULL AND route_id != ''`,
+          ewbNos
+        );
+        const routeId = existing.length > 0
+          ? existing[0].route_id
+          : `ROUTE-${today}-${String(++routeSeq).padStart(4, '0')}`;
+        await sqRun(
+          `UPDATE eway_bills_master SET route_id=? WHERE client_id='CLIENT_001' AND ewb_no IN (${placeholders})`,
+          [routeId, ...ewbNos]
+        );
+        if (existing.length === 0) routesCreated++;
+      }
+      }
+
       // Auto-backup all EWBs to /data/ewb_backup.json so they survive redeploys
       if (inserted > 0) writeEwbBackup().catch(() => {});
 
-      return jsonResp(res, { success: true, inserted, updated, skipped, total: rows.length, message: `Imported ${inserted} EWBs from ${rows.length} rows. New POIs auto-created are visible in the Unmatched POIs tab if any needed review.` });
+      return jsonResp(res, { success: true, inserted, updated, skipped, total: rows.length, routes_created: routesCreated, message: `Imported ${inserted} EWBs (${routesCreated} new routes auto-generated). Unmatched POIs visible in the Unmatched POIs tab.` });
     } catch (e) {
       console.error('[import-excel]', e);
       return jsonResp(res, { error: e.message }, 500);

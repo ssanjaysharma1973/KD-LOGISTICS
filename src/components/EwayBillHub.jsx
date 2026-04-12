@@ -117,13 +117,14 @@ function ImportTab({ onImported }) {
         {result && (
           <div style={{ marginTop: 20, padding: 16, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
             <div style={{ fontWeight: 700, color: '#166534', fontSize: 15, marginBottom: 10 }}>✅ Import Complete</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
               {[
                 { label: 'Total Rows', value: result.total_rows, color: '#374151' },
                 { label: 'Inserted', value: result.inserted, color: '#166534' },
                 { label: 'Status Updated', value: result.status_updated || 0, color: '#1d4ed8' },
                 { label: 'Skipped (dup)', value: result.skipped, color: '#92400e' },
                 { label: 'Failed', value: result.failed || 0, color: '#991b1b' },
+                { label: 'Routes Created', value: result.routes_created || 0, color: '#7c3aed' },
               ].map(s => (
                 <div key={s.label} style={{ textAlign: 'center', padding: '12px 8px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
                   <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
@@ -363,7 +364,7 @@ function BillsListTab() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-              {['EWB No', 'Doc Date', 'Vehicle', 'From', 'To', 'Value', 'Valid Upto', 'Movement', 'Status', 'Munshi', ''].map(h => (
+              {['Route ID', 'EWB No', 'Doc Date', 'Vehicle', 'From', 'To', 'Value', 'Valid Upto', 'Movement', 'Status', 'Munshi', ''].map(h => (
                 <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', fontSize: 12 }}>{h}</th>
               ))}
             </tr>
@@ -385,6 +386,7 @@ function BillsListTab() {
                     style={{ background: rowBg, borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
                     onClick={() => setExpanded(expanded === b.id ? null : b.id)}
                   >
+                    <td style={{ padding: '5px 10px', fontSize: 11, color: b.route_id ? '#7c3aed' : '#d1d5db', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{b.route_id || '—'}</td>
                     <td style={{ padding: '5px 10px', fontWeight: 600, color: '#1d4ed8', fontFamily: 'monospace', fontSize: 12 }}>{b.ewb_no || '—'}</td>
                     <td style={{ padding: '5px 10px', color: '#374151', fontSize: 12 }}>{b.doc_date ? b.doc_date.slice(0, 10) : '—'}</td>
                     <td style={{ padding: '5px 10px', fontWeight: 600, fontSize: 12 }}>{b.vehicle_no || '—'}</td>
@@ -421,7 +423,7 @@ function BillsListTab() {
                   </tr>
                   {expanded === b.id && (
                     <tr style={{ background: '#f9fafb' }}>
-                      <td colSpan={11} style={{ padding: '12px 16px' }}>
+                      <td colSpan={12} style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                           <InfoBlock label="GSTIN (From)" value={b.from_gstin} />
                           <InfoBlock label="From Trade Name" value={b.from_trade_name} />
@@ -435,6 +437,9 @@ function BillsListTab() {
                           <InfoBlock label="Distance (km)" value={b.distance_km} />
                           <InfoBlock label="Transport Mode" value={b.transport_mode} />
                           <InfoBlock label="Doc Type" value={b.doc_type} />
+                          <InfoBlock label="Route ID" value={b.route_id} />
+                          <InfoBlock label="CEWB No" value={b.cewb_no} />
+                          <InfoBlock label="Multi Veh Info" value={b.multi_veh_info} />
                           <InfoBlock label="Supply Type" value={b.supply_type} />
                           <InfoBlock label="Notes" value={b.notes} />
                         </div>
