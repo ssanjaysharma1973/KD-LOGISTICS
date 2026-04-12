@@ -371,12 +371,27 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
 
         {/* Location Filter Buttons */}
         {(() => {
-          const getLs = v => {
+          // Determine if a vehicle is on-road or at-POI:
+          // 1. Use liveStatus (from vehicle-movement API) if available
+          // 2. Fall back to GPS speed/status from the vehicles list
+          const classify = v => {
             const key = (v.number || v.vehicle_no || v.vehicleNumber || '').trim().toUpperCase();
-            return liveStatus[key]?.load_status || v.load_status || '';
+            const live = liveStatus[key];
+            if (live) {
+              const ls = live.load_status || '';
+              if (ls === 'in_transit_loaded' || ls === 'in_transit_empty') return 'onroad';
+              if (ls && ls !== 'unknown') return 'atpoi';
+            }
+            // Fallback: GPS status (no EWB data or vehicle not in movement API)
+            const gpsStatus = (v.status || '').toUpperCase();
+            if (gpsStatus === 'ACTIVE' || gpsStatus === 'SLOW') return 'onroad';
+            if (gpsStatus === 'STOPPED' && (v.stop_poi || v.nearby_poi)) return 'atpoi';
+            // Has lat/lng but unknown POI status → count as on road
+            if ((v.lat || v.latitude) && (v.lng || v.longitude)) return 'onroad';
+            return 'unknown';
           };
-          const isOnRoad = v => { const ls = getLs(v); return ls === 'in_transit_loaded' || ls === 'in_transit_empty'; };
-          const isAtPoi  = v => { const ls = getLs(v); return ls && ls !== 'in_transit_loaded' && ls !== 'in_transit_empty' && ls !== 'unknown'; };
+          const isOnRoad = v => classify(v) === 'onroad';
+          const isAtPoi  = v => classify(v) === 'atpoi';
           const onRoadCount = vehicles.filter(isOnRoad).length;
           const atPoiCount  = vehicles.filter(isAtPoi).length;
           const filterBtns = [
@@ -427,11 +442,21 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
               <option value="">-- Choose a vehicle --</option>
               {vehicles
                 .filter(v => {
+                  if (locationFilter === 'all') return true;
                   const key = (v.number || v.vehicle_no || v.vehicleNumber || '').trim().toUpperCase();
-                  const ls = liveStatus[key]?.load_status || v.load_status || '';
-                  if (locationFilter === 'onroad') return ls === 'in_transit_loaded' || ls === 'in_transit_empty';
-                  if (locationFilter === 'atpoi')  return ls && ls !== 'in_transit_loaded' && ls !== 'in_transit_empty' && ls !== 'unknown';
-                  return true;
+                  const live = liveStatus[key];
+                  let cat = 'unknown';
+                  if (live) {
+                    const ls = live.load_status || '';
+                    if (ls === 'in_transit_loaded' || ls === 'in_transit_empty') cat = 'onroad';
+                    else if (ls && ls !== 'unknown') cat = 'atpoi';
+                  } else {
+                    const gs = (v.status || '').toUpperCase();
+                    if (gs === 'ACTIVE' || gs === 'SLOW') cat = 'onroad';
+                    else if (gs === 'STOPPED' && (v.stop_poi || v.nearby_poi)) cat = 'atpoi';
+                    else if ((v.lat || v.latitude) && (v.lng || v.longitude)) cat = 'onroad';
+                  }
+                  return cat === locationFilter;
                 })
                 .map(v => {
                   const vno = v.number || v.vehicle_no || v.vehicleNumber || v.id;
