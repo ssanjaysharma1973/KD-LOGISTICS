@@ -835,7 +835,7 @@ function VehicleMovementTab() {
             const inlineParked = !hasLoadUnload && g.parked.length > 0;
             const separateParked = hasLoadUnload && g.parked.length > 0;
             return (
-            <div key={poi} style={{ background: '#fff', borderRadius: 10, border: '1px solid #3b82f6', overflow: 'hidden', boxShadow: '0 1px 4px rgba(59,130,246,0.10)' }}>
+            <div key={poi} style={{ background: '#fff', borderRadius: 10, border: '1px solid #3b82f6', overflow: 'visible', boxShadow: '0 1px 4px rgba(59,130,246,0.10)', position: 'relative', zIndex: 1 }}>
               {/* Row 1: POI name + LOAD + UNLOAD chips inline (or PARK chips if no load/unload) */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 0,
@@ -893,7 +893,7 @@ function VehicleMovementTab() {
 
           {/* In Transit */}
           {inTransit.length > 0 && (
-            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #86efac', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #86efac', overflow: 'visible', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'relative', zIndex: 1 }}>
               <div style={{ padding: '9px 16px', background: '#f0fdf4', borderBottom: '1px solid #86efac', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 15 }}>🚛</span>
                 <span style={{ fontWeight: 700, fontSize: 13, color: '#111827', flex: 1 }}>In Transit</span>
@@ -924,7 +924,7 @@ function VehicleMovementTab() {
 
           {/* No GPS */}
           {noGps.length > 0 && (
-            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'visible', position: 'relative', zIndex: 1 }}>
               <div style={{ padding: '9px 16px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontWeight: 600, fontSize: 13, color: '#9ca3af', flex: 1 }}>📵 No GPS Signal</span>
                 <span style={{ fontSize: 11, color: '#9ca3af' }}>{noGps.length} veh</span>
