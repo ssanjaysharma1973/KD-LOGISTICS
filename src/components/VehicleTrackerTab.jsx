@@ -23,6 +23,26 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
 
   // Vehicle location filter
   const [locationFilter, setLocationFilter] = useState('all'); // 'all' | 'onroad' | 'atpoi'
+  // Live movement data: vehicleNo → { load_status, current_poi_name }
+  const [liveStatus, setLiveStatus] = useState({}); // keyed by vehicle_no
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/eway-bills-hub/vehicle-movement`);
+        if (!r.ok || cancelled) return;
+        const d = await r.json();
+        const map = {};
+        (d.vehicles || []).forEach(v => {
+          const key = (v.vehicle_no || '').trim().toUpperCase();
+          if (key) map[key] = { load_status: v.load_status, poi: v.current_poi_name };
+        });
+        if (!cancelled) setLiveStatus(map);
+      } catch { /* ignore */ }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
 
   // Compute filtered path — only for preset time filters (3h/24h/7d).
@@ -351,8 +371,14 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
 
         {/* Location Filter Buttons */}
         {(() => {
-          const onRoadCount = vehicles.filter(v => v.load_status === 'in_transit_loaded' || v.load_status === 'in_transit_empty').length;
-          const atPoiCount  = vehicles.filter(v => v.stop_poi || (v.load_status && v.load_status !== 'in_transit_loaded' && v.load_status !== 'in_transit_empty' && v.load_status !== 'unknown')).length;
+          const getLs = v => {
+            const key = (v.number || v.vehicle_no || v.vehicleNumber || '').trim().toUpperCase();
+            return liveStatus[key]?.load_status || v.load_status || '';
+          };
+          const isOnRoad = v => { const ls = getLs(v); return ls === 'in_transit_loaded' || ls === 'in_transit_empty'; };
+          const isAtPoi  = v => { const ls = getLs(v); return ls && ls !== 'in_transit_loaded' && ls !== 'in_transit_empty' && ls !== 'unknown'; };
+          const onRoadCount = vehicles.filter(isOnRoad).length;
+          const atPoiCount  = vehicles.filter(isAtPoi).length;
           const filterBtns = [
             { key: 'all',    label: `All (${vehicles.length})`,         color: '#475569', bg: '#f1f5f9', active: '#475569' },
             { key: 'onroad', label: `🛣️ On Road (${onRoadCount})`,     color: '#1d4ed8', bg: '#eff6ff', active: '#1d4ed8' },
@@ -368,6 +394,9 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
                   {b.label}
                 </button>
               ))}
+              {Object.keys(liveStatus).length === 0 && (
+                <span style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center', fontStyle: 'italic' }}>Loading status…</span>
+              )}
             </div>
           );
         })()}
@@ -398,13 +427,17 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
               <option value="">-- Choose a vehicle --</option>
               {vehicles
                 .filter(v => {
-                  if (locationFilter === 'onroad') return v.load_status === 'in_transit_loaded' || v.load_status === 'in_transit_empty';
-                  if (locationFilter === 'atpoi')  return v.stop_poi || (v.load_status && v.load_status !== 'in_transit_loaded' && v.load_status !== 'in_transit_empty' && v.load_status !== 'unknown');
+                  const key = (v.number || v.vehicle_no || v.vehicleNumber || '').trim().toUpperCase();
+                  const ls = liveStatus[key]?.load_status || v.load_status || '';
+                  if (locationFilter === 'onroad') return ls === 'in_transit_loaded' || ls === 'in_transit_empty';
+                  if (locationFilter === 'atpoi')  return ls && ls !== 'in_transit_loaded' && ls !== 'in_transit_empty' && ls !== 'unknown';
                   return true;
                 })
                 .map(v => {
                   const vno = v.number || v.vehicle_no || v.vehicleNumber || v.id;
-                  const poi = v.stop_poi ? ` @ ${v.stop_poi}` : '';
+                  const key = (vno || '').trim().toUpperCase();
+                  const live = liveStatus[key];
+                  const poi = live?.poi ? ` @ ${live.poi}` : (v.stop_poi ? ` @ ${v.stop_poi}` : '');
                   const driver = v.driver_name || v.driver || v.driverName || 'No driver';
                   return (
                     <option key={v.id || v.number} value={vno}>
