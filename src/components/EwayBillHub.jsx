@@ -563,29 +563,43 @@ function sizeColor(size) {
 
 function VehicleChip({ v, pois = [] }) {
   const [open, setOpen]       = useState(false);
+  const [ctxMenu, setCtxMenu] = useState(null); // {x,y} for right-click flag menu
+  const [flagged, setFlagged] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ewb_flags') || '{}')[v.vehicle_no] || null; } catch { return null; }
+  });
   const [selCity, setSelCity] = useState('');
   const [orgQ, setOrgQ]       = useState('');
   const [fwding, setFwding]   = useState(null);
   const ref = useRef(null);
 
+  const saveFlag = (label) => {
+    const all = JSON.parse(localStorage.getItem('ewb_flags') || '{}');
+    if (label) all[v.vehicle_no] = label; else delete all[v.vehicle_no];
+    localStorage.setItem('ewb_flags', JSON.stringify(all));
+    setFlagged(label || null);
+    setCtxMenu(null);
+  };
+
   useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    if (!open && !ctxMenu) return;
+    const handler = (e) => {
+      if (!ref.current?.contains(e.target)) { setOpen(false); setCtxMenu(null); }
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  }, [open, ctxMenu]);
 
   const sc   = sizeColor(v.vehicle_size);
   const ewbs = v.active_ewbs?.length || 0;
   const dest = v.active_ewbs?.[0]?.to_poi_name || v.active_ewbs?.[0]?.to_place || '';
-  const tip  = [
-    v.vehicle_no,
-    v.vehicle_size ? `🚛 ${v.vehicle_size}` : '',
-    v.current_poi_name ? `📍 ${v.current_poi_name}` : '📍 No POI',
-    dest ? `→ ${dest}` : '',
-    ewbs ? `📄 ${ewbs} EWB${ewbs > 1 ? 's' : ''}` : 'No active EWBs',
-    v.last_seen ? `🕐 ${new Date(v.last_seen).toLocaleString('en-IN')}` : '',
-  ].filter(Boolean).join('\n');
+  const totalVal = (v.active_ewbs || []).reduce((s, e) => s + (e.total_value || 0), 0);
+
+  const FLAG_OPTIONS = [
+    { label: '🔴 Urgent', color: '#dc2626' },
+    { label: '🟡 On Hold', color: '#d97706' },
+    { label: '🟢 Cleared', color: '#059669' },
+    { label: '🔵 Priority', color: '#2563eb' },
+  ];
 
   const cities    = [...new Set(pois.map(p => p.city).filter(Boolean))].sort();
   const cityPois  = selCity ? pois.filter(p => p.city === selCity) : [];
@@ -607,89 +621,163 @@ function VehicleChip({ v, pois = [] }) {
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      {/* ── Chip ── */}
       <div
-        onClick={() => setOpen(o => !o)}
-        title={tip}
+        onClick={() => { setOpen(o => !o); setCtxMenu(null); }}
+        onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }); setOpen(false); }}
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          background: sc.bg, border: `1.5px solid ${open ? '#fff' : sc.border}`, color: '#fff',
-          borderRadius: 7, padding: '4px 10px', fontSize: 12, fontWeight: 700,
-          cursor: 'pointer', whiteSpace: 'nowrap',
-          boxShadow: open ? `0 0 0 2px ${sc.bg}, 0 4px 12px ${sc.bg}88` : `0 1px 3px ${sc.bg}55`,
-          transition: 'box-shadow 0.15s',
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          background: sc.bg, border: `2px solid ${flagged ? '#fbbf24' : open ? '#fff' : sc.border}`,
+          color: '#fff', borderRadius: 8, padding: '4px 9px', fontSize: 12, fontWeight: 700,
+          cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none',
+          boxShadow: flagged
+            ? '0 0 0 2px #fbbf24, 0 2px 8px rgba(0,0,0,0.2)'
+            : open ? `0 0 0 2px ${sc.bg}, 0 4px 12px ${sc.bg}88` : `0 1px 3px ${sc.bg}55`,
+          transition: 'box-shadow 0.15s, border-color 0.15s',
         }}
       >
-        <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
-        {v.vehicle_no}
+        {/* Status dot */}
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: ewbs > 0 ? '#86efac' : 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
+        <span>{v.vehicle_no}</span>
+        {/* EWB count badge */}
         {ewbs > 0 && (
           <span style={{
             background: '#fff', color: sc.bg,
-            borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 800, lineHeight: '16px',
+            borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 800, lineHeight: '16px', flexShrink: 0,
           }}>{ewbs}</span>
         )}
-        <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+        {/* Destination shorthand */}
+        {dest && (
+          <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85, maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            →{dest.split(',')[0].trim().slice(0, 8)}
+          </span>
+        )}
+        {/* Flag indicator */}
+        {flagged && <span style={{ fontSize: 11, flexShrink: 0 }}>{flagged.slice(0, 2)}</span>}
+        <span style={{ fontSize: 9, opacity: 0.6 }}>▾</span>
       </div>
 
+      {/* ── Left-click panel: EWB details + Route to ── */}
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1000,
-          background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
-          boxShadow: '0 8px 28px rgba(0,0,0,0.18)', padding: 12, minWidth: 280,
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 1000,
+          background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: 12,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.18)', padding: 14, minWidth: 300, maxWidth: 340,
         }}>
-          <div style={{ fontWeight: 800, fontSize: 12, color: '#111827', marginBottom: 10 }}>
-            🚛 {v.vehicle_no} <span style={{ color: '#6b7280', fontWeight: 500 }}>→ Route to</span>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>
+            <span style={{ fontSize: 18 }}>🚛</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#111827' }}>{v.vehicle_no}</div>
+              {v.vehicle_size && <div style={{ fontSize: 10, color: '#6b7280' }}>{v.vehicle_size}</div>}
+            </div>
+            {totalVal > 0 && (
+              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                <div style={{ fontSize: 11, color: '#9ca3af' }}>Cargo Value</div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: '#1d4ed8' }}>₹{Number(totalVal).toLocaleString('en-IN')}</div>
+              </div>
+            )}
           </div>
 
-          {/* Step 1: City */}
-          <select
-            value={selCity}
-            onChange={e => { setSelCity(e.target.value); setOrgQ(''); }}
-            style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, marginBottom: 8, color: selCity ? '#111827' : '#9ca3af', background: '#fff', boxSizing: 'border-box' }}
-          >
-            <option value="">📍 Select City…</option>
-            {cities.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-
-          {/* Step 2: Org name filter */}
-          {selCity && (
-            <input
-              autoFocus
-              value={orgQ}
-              onChange={e => setOrgQ(e.target.value)}
-              placeholder="🔍 Filter by org name (e.g. Haier)"
-              style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, marginBottom: 8, boxSizing: 'border-box', outline: 'none' }}
-            />
-          )}
-
-          {/* POI list */}
-          {matchPois.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 210, overflowY: 'auto' }}>
-              {matchPois.map(poi => (
-                <div key={poi.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 7, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0c4a6e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{poi.poi_name}</div>
-                    <div style={{ fontSize: 10, color: '#6b7280' }}>{poi.city}{poi.pin_code ? ` · ${poi.pin_code}` : ''}</div>
+          {/* Active EWBs list */}
+          {ewbs > 0 ? (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 5 }}>Active EWBs ({ewbs})</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 130, overflowY: 'auto' }}>
+                {(v.active_ewbs || []).map(ewb => (
+                  <div key={ewb.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: '#f8fafc', borderRadius: 7, border: '1px solid #e5e7eb', fontSize: 11 }}>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1d4ed8', flexShrink: 0 }}>{ewb.ewb_no}</span>
+                    <span style={{ color: '#9ca3af', flexShrink: 0 }}>→</span>
+                    <span style={{ color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{ewb.to_poi_name || ewb.to_place || '—'}</span>
+                    {ewb.valid_upto && (() => {
+                      const exp = new Date(ewb.valid_upto) < new Date();
+                      return <span style={{ fontSize: 10, color: exp ? '#dc2626' : '#059669', fontWeight: 700, flexShrink: 0 }}>{exp ? '⚠️Exp' : '✓'}</span>;
+                    })()}
                   </div>
-                  <button
-                    onClick={() => forward(poi)}
-                    disabled={fwding != null}
-                    style={{ padding: '5px 12px', background: fwding === poi.id ? '#d1d5db' : '#2563eb', color: '#fff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: fwding == null ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', flexShrink: 0 }}
-                  >
-                    {fwding === poi.id ? '⏳' : '→ Forward'}
-                  </button>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+          ) : (
+            <div style={{ marginBottom: 10, padding: '8px 10px', background: '#fff7ed', borderRadius: 7, fontSize: 12, color: '#92400e' }}>⚠️ No active EWBs on this vehicle</div>
           )}
 
-          {selCity && cityPois.length === 0 && (
-            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: 8 }}>No POIs in {selCity}</div>
-          )}
-          {selCity && cityPois.length > 0 && matchPois.length === 0 && orgQ && (
-            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: 8 }}>No match — try a different name</div>
-          )}
-          {selCity && !v.active_ewbs?.length && (
-            <div style={{ fontSize: 11, color: '#f59e0b', textAlign: 'center', padding: '6px 4px', marginTop: 4, borderTop: '1px solid #fef3c7' }}>⚠️ No active EWBs on this vehicle</div>
+          {/* Route to section */}
+          <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 6 }}>📍 Forward to POI</div>
+            <select
+              value={selCity}
+              onChange={e => { setSelCity(e.target.value); setOrgQ(''); }}
+              style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, marginBottom: 6, color: selCity ? '#111827' : '#9ca3af', background: '#fff', boxSizing: 'border-box' }}
+            >
+              <option value="">📍 Select City…</option>
+              {cities.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {selCity && (
+              <input
+                autoFocus
+                value={orgQ}
+                onChange={e => setOrgQ(e.target.value)}
+                placeholder="🔍 Filter org name…"
+                style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, marginBottom: 6, boxSizing: 'border-box', outline: 'none' }}
+              />
+            )}
+            {matchPois.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
+                {matchPois.map(poi => (
+                  <div key={poi.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 7, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0c4a6e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{poi.poi_name}</div>
+                      <div style={{ fontSize: 10, color: '#6b7280' }}>{poi.city}{poi.pin_code ? ` · ${poi.pin_code}` : ''}</div>
+                    </div>
+                    <button
+                      onClick={() => forward(poi)}
+                      disabled={fwding != null}
+                      style={{ padding: '5px 12px', background: fwding === poi.id ? '#d1d5db' : '#2563eb', color: '#fff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: fwding == null ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      {fwding === poi.id ? '⏳' : '→ Forward'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {selCity && cityPois.length === 0 && <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: 6 }}>No POIs in {selCity}</div>}
+            {selCity && cityPois.length > 0 && matchPois.length === 0 && orgQ && <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: 6 }}>No match for "{orgQ}"</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ── Right-click context menu: flag ── */}
+      {ctxMenu && (
+        <div style={{
+          position: 'fixed', top: ctxMenu.y, left: ctxMenu.x, zIndex: 9999,
+          background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)', padding: '6px 0', minWidth: 160,
+        }}>
+          <div style={{ padding: '4px 14px 8px', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', borderBottom: '1px solid #f3f4f6' }}>
+            🚛 {v.vehicle_no}
+          </div>
+          {FLAG_OPTIONS.map(f => (
+            <div
+              key={f.label}
+              onClick={() => saveFlag(flagged === f.label ? null : f.label)}
+              style={{
+                padding: '8px 14px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                background: flagged === f.label ? '#f0f9ff' : 'transparent',
+                fontWeight: flagged === f.label ? 700 : 400,
+                color: flagged === f.label ? f.color : '#374151',
+              }}
+            >
+              {f.label}
+              {flagged === f.label && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>✓ active</span>}
+            </div>
+          ))}
+          {flagged && (
+            <div
+              onClick={() => saveFlag(null)}
+              style={{ padding: '8px 14px', fontSize: 12, cursor: 'pointer', color: '#9ca3af', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              ✕ Clear Flag
+            </div>
           )}
         </div>
       )}
