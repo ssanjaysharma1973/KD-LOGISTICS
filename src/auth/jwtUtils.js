@@ -5,7 +5,8 @@
 
 import crypto from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('[jwtUtils] JWT_SECRET env var is required but not set');
 const TOKEN_EXPIRY = process.env.TOKEN_EXPIRY || '24h';
 
 /**

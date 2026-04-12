@@ -981,10 +981,10 @@ async function handleRequest(req, res, rawPath) {
         return jsonResp(res, { error: 'Username and PIN required' }, 400);
       }
 
-      // Hardcoded admin credentials (use env vars in production)
-      const ADMIN_USERNAME = 'admin';
-      const ADMIN_PIN = '1234';
+      const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+      const ADMIN_PIN = process.env.ADMIN_PIN;
       const ADMIN_ID = 'ADM_001';
+      if (!ADMIN_PIN) return jsonResp(res, { error: 'Server not configured' }, 503);
 
       if (username === ADMIN_USERNAME && pin === ADMIN_PIN) {
         return jsonResp(res, {
@@ -1000,13 +1000,13 @@ async function handleRequest(req, res, rawPath) {
       // Check if credentials match any configured client admin
       const clientAdmins = {
         'CLIENT_001': {
-          username: process.env.CLIENT_001_EMAIL || 'koyna@atullogistics.com',
-          pin: process.env.CLIENT_001_ADMINS_PIN || '0000',
+          username: process.env.CLIENT_001_EMAIL,
+          pin: process.env.CLIENT_001_ADMINS_PIN,
           name: 'Atul Logistics Admin'
         },
         'CLIENT_002': {
-          username: process.env.CLIENT_002_EMAIL || 'admin@betalogistics.com',
-          pin: process.env.CLIENT_002_ADMINS_PIN || '0000',
+          username: process.env.CLIENT_002_EMAIL,
+          pin: process.env.CLIENT_002_ADMINS_PIN,
           name: 'Beta Logistics Admin'
         }
       };
@@ -1044,11 +1044,11 @@ async function handleRequest(req, res, rawPath) {
       // Client credentials (configured in .env or hardcoded)
       const clientCredentials = {
         'CLIENT_001': {
-          pin: process.env.CLIENT_001_PIN || '0000',
+          pin: process.env.CLIENT_001_PIN,
           name: 'Atul Logistics'
         },
         'CLIENT_002': {
-          pin: process.env.CLIENT_002_PIN || '0000',
+          pin: process.env.CLIENT_002_PIN,
           name: 'Beta Logistics'
         }
       };
@@ -1056,7 +1056,7 @@ async function handleRequest(req, res, rawPath) {
       const clientCode = client_code.toUpperCase();
       const credentials = clientCredentials[clientCode];
 
-      if (!credentials) {
+      if (!credentials || !credentials.pin) {
         return jsonResp(res, { success: false, error: 'Company not found' }, 404);
       }
 
