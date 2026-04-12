@@ -906,7 +906,7 @@ const server = http.createServer((req, res) => {
   const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
   if (rawPath === '/health' || rawPath === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 4, build: 'ewb-import-fix' }));
+    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 7, build: 'fix-dates-v1' }));
   }
   // Delegate everything else to async handler
   handleRequest(req, res, rawPath).catch(err => {
@@ -4056,6 +4056,42 @@ async function handleRequest(req, res, rawPath) {
       console.log(`[fetch-today] Dates: ${datesToFetch.join(', ')} → seen ${totalSeen}, new ${totalNew}`);
       return jsonResp(res, { seen: totalSeen, new: totalNew, errors, dates: datesToFetch, status: 'ok' });
     } catch(e) { return jsonResp(res, { error: e.message }, 500); }
+  }
+
+  // POST or GET /api/ewb/fix-dates — fix DD/MM/YYYY dates stored as YYYY-DD-MM
+  if (pathname === '/api/ewb/fix-dates' && (req.method === 'POST' || req.method === 'GET')) {
+    try {
+      const cid = 'CLIENT_001';
+      const rows = await sqAll(`SELECT id, doc_date, valid_upto FROM eway_bills_master WHERE client_id=?`, [cid]);
+      let fixed = 0;
+      const today = new Date();
+      const fixDate = (s, maxFutureDays) => {
+        if (!s) return s;
+        const mISO = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!mISO) return s;
+        const mm = parseInt(mISO[2]), dd = parseInt(mISO[3]);
+        if (mm > 12) return `${mISO[1]}-${mISO[3]}-${mISO[2]}`;
+        if (dd > 12) return s;
+        const stored  = new Date(`${mISO[1]}-${mISO[2]}-${mISO[3]}`);
+        const swapped = new Date(`${mISO[1]}-${mISO[3]}-${mISO[2]}`);
+        if (!isNaN(stored) && !isNaN(swapped)) {
+          const storedDiff  = (stored  - today) / 86400000;
+          const swappedDiff = (swapped - today) / 86400000;
+          if (storedDiff > maxFutureDays && Math.abs(swappedDiff) < Math.abs(storedDiff))
+            return `${mISO[1]}-${mISO[3]}-${mISO[2]}`;
+        }
+        return s;
+      };
+      for (const r of rows) {
+        const newDoc  = fixDate(r.doc_date,  7);
+        const newVali = fixDate(r.valid_upto, 45);
+        if (newDoc !== r.doc_date || newVali !== r.valid_upto) {
+          await sqRun(`UPDATE eway_bills_master SET doc_date=?, valid_upto=? WHERE id=?`, [newDoc, newVali, r.id]);
+          fixed++;
+        }
+      }
+      return jsonResp(res, { status: 'ok', fixed, total: rows.length });
+    } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
   }
 
   // POST /api/ewb/fetch-from-nic — fetch & refresh EWB from Masters India by EWB number or date

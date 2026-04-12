@@ -1,4 +1,4 @@
-# Build on: 2026-04-04 02:35 UTC - Better auth error logging for AutoSync
+# Build on: 2026-04-11 - fix-dates endpoint for EWB date patch
 FROM node:20-slim
 
 WORKDIR /app
