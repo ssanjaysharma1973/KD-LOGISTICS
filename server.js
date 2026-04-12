@@ -906,7 +906,7 @@ const server = http.createServer((req, res) => {
   const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
   if (rawPath === '/health' || rawPath === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 9, build: 'unmatch-pinmismatch-v1' }));
+    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 10, build: 'unmatch-citymatch-v1' }));
   }
   // Delegate everything else to async handler
   handleRequest(req, res, rawPath).catch(err => {
@@ -3356,22 +3356,26 @@ async function handleRequest(req, res, rawPath) {
       const threshold = Math.max(0, parseInt(parsed.query.threshold || '5'));
       const page    = Math.max(1, parseInt(parsed.query.page || '1'));
       const perPage = Math.min(100, parseInt(parsed.query.per_page || '25'));
-      // Unmatched = (from_poi_id IS NULL) OR (to_poi_id IS NULL)
-      //           OR poi pincode doesn't match EWB pincode (wrong auto-match)
+      // Unmatched = from_poi_id IS NULL OR to_poi_id IS NULL
+      // Also catch clear city mismatches: POI city doesn't match EWB place at all
       const unmatchedSQL = `
         SELECT e.* FROM eway_bills_master e
         WHERE e.client_id=?
           AND (
             e.from_poi_id IS NULL OR e.to_poi_id IS NULL
-            OR (e.from_poi_id IS NOT NULL AND e.from_pincode IS NOT NULL AND EXISTS (
-              SELECT 1 FROM pois p WHERE p.id=e.from_poi_id
-                AND p.pin_code IS NOT NULL AND p.pin_code!=''
-                AND REPLACE(p.pin_code,' ','') != REPLACE(e.from_pincode,' ','')
-            ))
             OR (e.to_poi_id IS NOT NULL AND e.to_pincode IS NOT NULL AND EXISTS (
               SELECT 1 FROM pois p WHERE p.id=e.to_poi_id
                 AND p.pin_code IS NOT NULL AND p.pin_code!=''
                 AND REPLACE(p.pin_code,' ','') != REPLACE(e.to_pincode,' ','')
+                AND LOWER(COALESCE(p.city,'')) NOT LIKE '%' || LOWER(TRIM(COALESCE(e.to_place,''))) || '%'
+                AND LOWER(TRIM(COALESCE(e.to_place,''))) NOT LIKE '%' || LOWER(COALESCE(p.city,'')) || '%'
+            ))
+            OR (e.from_poi_id IS NOT NULL AND e.from_pincode IS NOT NULL AND EXISTS (
+              SELECT 1 FROM pois p WHERE p.id=e.from_poi_id
+                AND p.pin_code IS NOT NULL AND p.pin_code!=''
+                AND REPLACE(p.pin_code,' ','') != REPLACE(e.from_pincode,' ','')
+                AND LOWER(COALESCE(p.city,'')) NOT LIKE '%' || LOWER(TRIM(COALESCE(e.from_place,''))) || '%'
+                AND LOWER(TRIM(COALESCE(e.from_place,''))) NOT LIKE '%' || LOWER(COALESCE(p.city,'')) || '%'
             ))
           )`;
       const [cntRows, bills, pois] = await Promise.all([
@@ -4123,20 +4127,23 @@ async function handleRequest(req, res, rawPath) {
       const r2 = await sqRun(
         `UPDATE eway_bills_master SET from_poi_id=NULL, from_poi_name=NULL
          WHERE client_id=? AND from_poi_id=1136 AND from_pincode='201308'`, [cid]);
-      // Clear to_poi_id for EWBs where matched POI pincode doesn't match EWB to_pincode
-      // (catches cases like Indore EWB matched to Gurugram POI)
+      // Clear to_poi_id for EWBs where matched POI is in a DIFFERENT city (not just different pin)
+      // E.g. Indore EWB matched to Gurugram POI — clear it. But pin 122503 vs 124103 same city — keep it.
       const ewbs = await sqAll(
-        `SELECT e.id, e.to_poi_id, e.to_pincode, p.pin_code as poi_pin
+        `SELECT e.id, e.to_poi_id, e.to_pincode, e.to_place, p.pin_code as poi_pin, p.city as poi_city
          FROM eway_bills_master e JOIN pois p ON e.to_poi_id=p.id
          WHERE e.client_id=? AND e.to_poi_id IS NOT NULL AND e.to_pincode IS NOT NULL
            AND REPLACE(e.to_pincode,' ','') != REPLACE(COALESCE(p.pin_code,''),' ','')`, [cid]);
       let pinMismatch = 0;
       for (const row of ewbs) {
-        // Only clear if POI pin is non-empty and clearly different
-        if (row.poi_pin && row.to_pincode && row.poi_pin.replace(/\D/g,'') !== row.to_pincode.replace(/\D/g,'')) {
-          await sqRun(`UPDATE eway_bills_master SET to_poi_id=NULL, to_poi_name=NULL WHERE id=?`, [row.id]);
-          pinMismatch++;
-        }
+        if (!row.poi_pin || !row.to_pincode) continue;
+        if (row.poi_pin.replace(/\D/g,'') === row.to_pincode.replace(/\D/g,'')) continue;
+        // Only clear if city names don't overlap (different city, not just different pin)
+        const poiCity  = (row.poi_city  || '').toLowerCase().trim();
+        const ewbPlace = (row.to_place  || '').toLowerCase().trim();
+        if (poiCity && ewbPlace && (poiCity.includes(ewbPlace) || ewbPlace.includes(poiCity))) continue;
+        await sqRun(`UPDATE eway_bills_master SET to_poi_id=NULL, to_poi_name=NULL WHERE id=?`, [row.id]);
+        pinMismatch++;
       }
       return jsonResp(res, { status: 'ok', poi_updated: 1, from_unmatched: r2.changes || 0, to_pin_mismatch_cleared: pinMismatch });
     } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
