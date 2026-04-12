@@ -3277,7 +3277,8 @@ async function handleRequest(req, res, rawPath) {
       const billId = parseInt(pathname.split('/').pop());
       const body = await readBody(req);
       const allowed = ['munshi_id','munshi_name','status','matched_trip_id','notes','movement_type',
-                       'vehicle_status','to_poi_id','to_poi_name','from_poi_id','from_poi_name','delivered_at'];
+                       'vehicle_status','to_poi_id','to_poi_name','to_place','from_poi_id','from_poi_name','from_place',
+                       'delivered_at','cewb_no','multi_veh_info','route_id'];
       const sets = {};
       for (const k of allowed) if (k in body) sets[k] = body[k];
       if (!Object.keys(sets).length) return jsonResp(res, { error: 'Nothing to update' }, 400);
