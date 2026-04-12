@@ -179,7 +179,12 @@ function seedSqliteIfEmpty() {
         id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, name TEXT, phone TEXT, email TEXT,
         primary_poi_ids TEXT, notes TEXT, balance REAL DEFAULT 0)`);
       await dbRun(`CREATE TABLE IF NOT EXISTS drivers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, name TEXT, phone TEXT, license TEXT, notes TEXT)`);
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, name TEXT, phone TEXT, license TEXT,
+        license_number TEXT, email TEXT, status TEXT DEFAULT 'active', notes TEXT)`);
+      // Add columns added after initial deploy
+      await dbRun(`ALTER TABLE drivers ADD COLUMN license_number TEXT`).catch(()=>{});
+      await dbRun(`ALTER TABLE drivers ADD COLUMN email TEXT`).catch(()=>{});
+      await dbRun(`ALTER TABLE drivers ADD COLUMN status TEXT DEFAULT 'active'`).catch(()=>{});
       await dbRun(`CREATE TABLE IF NOT EXISTS fuel_type_rates (
         id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT, fuel_type TEXT, cost_per_liter REAL DEFAULT 0,
         updated_at TEXT, UNIQUE(client_id, fuel_type))`);
@@ -1232,6 +1237,9 @@ async function handleRequest(req, res, rawPath) {
     // JWT present: enforce client_id match
     const requestClientId = requestBody?.client_id || requestBody?.clientId || tenantIdParam;
     const jwtClientId = jwtPayload.clientId;
+
+    // CLIENT_000 is the system admin — allow cross-tenant access
+    if (jwtClientId === 'CLIENT_000') return true;
     
     if (requestClientId && requestClientId !== jwtClientId) {
       // Mismatch: user trying to access another tenant's data
@@ -1814,8 +1822,10 @@ async function handleRequest(req, res, rawPath) {
     if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    const clientId = jwtPayload?.clientId;
-    // Ensure update only affects records belonging to the JWT clientId
+    const clientId = (jwtPayload?.clientId && jwtPayload.clientId !== 'CLIENT_000')
+      ? jwtPayload.clientId
+      : (body.client_id || body.clientId || 'CLIENT_001');
+    // Ensure update only affects records belonging to the clientId
     db2.run('UPDATE pois SET poi_name=?,latitude=?,longitude=?,city=?,address=?,radius_meters=?,type=?,state=?,pin_code=?,munshi_id=?,munshi_name=? WHERE id=? AND client_id=?',
       [body.poi_name, body.latitude, body.longitude, body.city||'', body.address||'', body.radius_meters||500, body.type||'primary', body.state||'', body.pin_code||'', body.munshi_id||'', body.munshi_name||'', poiId, clientId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
@@ -1902,8 +1912,10 @@ async function handleRequest(req, res, rawPath) {
     if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    const clientId = jwtPayload?.clientId;
-    // Ensure update only affects vehicles belonging to the JWT clientId
+    const clientId = (jwtPayload?.clientId && jwtPayload.clientId !== 'CLIENT_000')
+      ? jwtPayload.clientId
+      : (body.client_id || body.clientId || 'CLIENT_001');
+    // Ensure update only affects vehicles belonging to the clientId
     db2.run('UPDATE vehicles SET driver_name=?, vehicle_size=?, driver_id=?, munshi_id=?, munshi_name=?, fuel_type=?, kmpl=?, fuel_cost_per_liter=?, driver_pin=? WHERE (vehicle_no=? OR id=?) AND client_id=?',
       [body.driver_name||'', body.type||body.vehicle_size||'', body.driver_id||null, body.munshi_id||null, body.munshi_name||null, body.fuel_type||null, body.kmpl!=null?body.kmpl:null, body.fuel_cost_per_liter!=null?body.fuel_cost_per_liter:null, body.driver_pin||'', vId, vId, clientId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
@@ -1921,8 +1933,10 @@ async function handleRequest(req, res, rawPath) {
     if (!await enforceClientId(body)) return;
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    const clientId = jwtPayload?.clientId;
-    // Ensure update only affects vehicles belonging to the JWT clientId
+    const clientId = (jwtPayload?.clientId && jwtPayload.clientId !== 'CLIENT_000')
+      ? jwtPayload.clientId
+      : (body.client_id || body.clientId || 'CLIENT_001');
+    // Ensure update only affects vehicles belonging to the clientId
     db2.run('UPDATE vehicles SET kmpl=?, fuel_cost_per_liter=? WHERE (vehicle_no=? OR id=?) AND client_id=?',
       [body.kmpl != null ? body.kmpl : null, body.fuel_cost_per_liter != null ? body.fuel_cost_per_liter : null, vId, vId, clientId],
       function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
@@ -2034,16 +2048,29 @@ async function handleRequest(req, res, rawPath) {
     return;
   }
 
+  // PUT /api/drivers/:id
+  if (/^\/api\/drivers\/\d+$/.test(pathname) && req.method === 'PUT') {
+    const dId = pathname.split('/').pop();
+    const body = await readBody(req);
+    if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
+    const db2 = new sqlite3.Database(SQLITE_DB_PATH);
+    db2.run('UPDATE drivers SET name=?,phone=?,license=?,license_number=?,email=?,status=? WHERE id=?',
+      [body.name||'', body.phone||'', body.license_number||body.license||'', body.license_number||'', body.email||'', body.status||'active', dId],
+      function(err) { db2.close(); res.setHeader('Content-Type','application/json');
+        if (err) return res.end(JSON.stringify({ error: err.message }));
+        res.end(JSON.stringify({ success: true }));
+      });
+    return;
+  }
+
   // DELETE /api/drivers/:id
   if (/^\/api\/drivers\/\d+$/.test(pathname) && req.method === 'DELETE') {
     const dId = pathname.split('/').pop();
     if (!sqlite3) { res.statusCode = 503; return res.end(JSON.stringify({ error: 'sqlite3 unavailable' })); }
     const db2 = new sqlite3.Database(SQLITE_DB_PATH);
-    const clientId = jwtPayload?.clientId;
-    if (!clientId) { res.statusCode = 401; return res.end(JSON.stringify({ error: 'Unauthorized' })); }
-    db2.run('DELETE FROM drivers WHERE id=? AND client_id=?', [dId, clientId], function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
+    db2.run('DELETE FROM drivers WHERE id=?', [dId], function(err) { db2.close(); res.setHeader('Content-Type','application/json'); 
       if (err) return res.end(JSON.stringify({ error: err.message }));
-      if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'Driver not found or unauthorized' }));
+      if (this.changes === 0) return res.statusCode = 404, res.end(JSON.stringify({ error: 'Driver not found' }));
       res.end(JSON.stringify({ success: true }));
     });
     return;
