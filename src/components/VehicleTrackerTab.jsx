@@ -21,6 +21,9 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
   // Full view state
   const [isFullView, setIsFullView] = useState(false);
 
+  // Vehicle location filter
+  const [locationFilter, setLocationFilter] = useState('all'); // 'all' | 'onroad' | 'atpoi'
+
 
   // Compute filtered path — only for preset time filters (3h/24h/7d).
   // Custom Range: filtering is done server-side on Load Track click, so return trackedPath as-is.
@@ -346,6 +349,29 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
           </button>
         </div>
 
+        {/* Location Filter Buttons */}
+        {(() => {
+          const onRoadCount = vehicles.filter(v => v.load_status === 'in_transit_loaded' || v.load_status === 'in_transit_empty').length;
+          const atPoiCount  = vehicles.filter(v => v.stop_poi || (v.load_status && v.load_status !== 'in_transit_loaded' && v.load_status !== 'in_transit_empty' && v.load_status !== 'unknown')).length;
+          const filterBtns = [
+            { key: 'all',    label: `All (${vehicles.length})`,         color: '#475569', bg: '#f1f5f9', active: '#475569' },
+            { key: 'onroad', label: `🛣️ On Road (${onRoadCount})`,     color: '#1d4ed8', bg: '#eff6ff', active: '#1d4ed8' },
+            { key: 'atpoi',  label: `📍 At POI (${atPoiCount})`,       color: '#166534', bg: '#f0fdf4', active: '#166534' },
+          ];
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+              {filterBtns.map(b => (
+                <button key={b.key} onClick={() => setLocationFilter(b.key)}
+                  style={{ padding: '5px 12px', fontSize: 12, fontWeight: 700, borderRadius: 20, cursor: 'pointer', border: `2px solid ${locationFilter === b.key ? b.active : '#e2e8f0'}`,
+                    background: locationFilter === b.key ? b.active : b.bg,
+                    color: locationFilter === b.key ? '#fff' : b.color, transition: 'all 0.15s' }}>
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Vehicle Dropdown and Time Filter */}
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
           {/* Vehicle Selection */}
@@ -370,11 +396,22 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
               }}
             >
               <option value="">-- Choose a vehicle --</option>
-              {vehicles.map(v => (
-                <option key={v.id || v.number} value={v.number || v.vehicle_no || v.vehicleNumber || v.id}>
-                  {v.number || v.vehicleNumber} ({v.driver_name || v.driver || v.driverName || 'No driver'})
-                </option>
-              ))}
+              {vehicles
+                .filter(v => {
+                  if (locationFilter === 'onroad') return v.load_status === 'in_transit_loaded' || v.load_status === 'in_transit_empty';
+                  if (locationFilter === 'atpoi')  return v.stop_poi || (v.load_status && v.load_status !== 'in_transit_loaded' && v.load_status !== 'in_transit_empty' && v.load_status !== 'unknown');
+                  return true;
+                })
+                .map(v => {
+                  const vno = v.number || v.vehicle_no || v.vehicleNumber || v.id;
+                  const poi = v.stop_poi ? ` @ ${v.stop_poi}` : '';
+                  const driver = v.driver_name || v.driver || v.driverName || 'No driver';
+                  return (
+                    <option key={v.id || v.number} value={vno}>
+                      {vno} ({driver}{poi})
+                    </option>
+                  );
+                })}
             </select>
           </div>
           
