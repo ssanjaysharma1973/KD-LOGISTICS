@@ -4,26 +4,29 @@ export function MapComponent() {
   return <div>MapComponent placeholder</div>;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDashboardView }) {
-  const navItems = [
+export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDashboardView, clientMode, clientSession }) {
+  const allNavItems = [
     { key: 'dashboard', label: 'Dashboard', emoji: '⊞', view: 'grid' },
     { key: 'tracker', label: 'Live Tracker', emoji: '🗺️' },
     { key: 'ewaybill', label: 'E-Way Bill Hub', emoji: '📄' },
-    { key: 'trip-dispatch', label: 'Trip Dispatch', emoji: '🚚' },
-    { key: 'munshi-ops', label: 'Munshi Hub', emoji: '📋' },
-    { key: 'fuel-management', label: 'Fuel Control', emoji: '⛽' },
-    { key: 'route-ops', label: 'Route Ops', emoji: '🚦' },
+    { key: 'trip-dispatch', label: 'Trip Dispatch', emoji: '🚚', adminOnly: true },
+    { key: 'munshi-ops', label: 'Munshi Hub', emoji: '📋', adminOnly: true },
+    { key: 'fuel-management', label: 'Fuel Control', emoji: '⛽', adminOnly: true },
+    { key: 'route-ops', label: 'Route Ops', emoji: '🚦', adminOnly: true },
   ];
 
-  const settingsItems = [
+  const allSettingsItems = [
     { key: 'drivers', label: 'Drivers', emoji: '👨‍🚗' },
     { key: 'vehicles', label: 'Vehicles', emoji: '🚗' },
-    { key: 'munshis', label: 'Munshis', emoji: '👨‍💼' },
-    { key: 'bulk-unloading-charges', label: 'Unloading Charges', emoji: '💰' },
-    { key: 'poimanagement', label: 'POI & Discovery', emoji: '📍' },
-    { key: 'route-memory', label: 'Learned Routes', emoji: '🧠' },
-    { key: 'settings', label: 'Settings', emoji: '⚙️' },
+    { key: 'munshis', label: 'Munshis', emoji: '👨‍💼', adminOnly: true },
+    { key: 'bulk-unloading-charges', label: 'Unloading Charges', emoji: '💰', adminOnly: true },
+    { key: 'poimanagement', label: 'POI & Discovery', emoji: '📍', adminOnly: true },
+    { key: 'route-memory', label: 'Learned Routes', emoji: '🧠', adminOnly: true },
+    { key: 'settings', label: 'Settings', emoji: '⚙️', adminOnly: true },
   ];
+
+  const navItems = clientMode ? allNavItems.filter(i => !i.adminOnly) : allNavItems;
+  const settingsItems = clientMode ? allSettingsItems.filter(i => !i.adminOnly) : allSettingsItems;
 
   const isSettingsActive = settingsItems.some(item => activeTab === item.key);
   const [settingsOpen, setSettingsOpen] = React.useState(isSettingsActive);
@@ -47,7 +50,14 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
         fontSize: 13, fontWeight: 800, color: '#1e40af',
         margin: 0, marginRight: 18, whiteSpace: 'nowrap',
         textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0,
-      }}>{CLIENT_NAME}</h1>
+      }}>{clientMode ? (clientSession?.name || 'Client') : CLIENT_NAME}</h1>
+
+      {/* Client mode badge + logout */}
+      {clientMode && (
+        <span style={{ fontSize: 11, background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: 6, fontWeight: 700, flexShrink: 0, marginRight: 8 }}>
+          CLIENT
+        </span>
+      )}
 
       {/* Divider */}
       <div style={{ width: 1, height: 22, background: '#e2e8f0', marginRight: 14, flexShrink: 0 }} />
@@ -77,8 +87,8 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
 
       </div>
 
-      {/* Admin Panel Button - Only show if logged in as admin */}
-      {isAdminLoggedIn && (
+      {/* Admin Panel Button - Only show if admin logged in AND not client mode */}
+      {isAdminLoggedIn && !clientMode && (
         <button
           onClick={() => setActiveTab('central-control')}
           style={{
@@ -140,6 +150,21 @@ export default function Sidebar({ activeTab, setActiveTab, dashboardView, setDas
           </div>
         )}
       </div>
+
+      {/* Client logout */}
+      {clientMode && (
+        <button
+          onClick={() => {
+            localStorage.removeItem('clientPortal_session');
+            window.location.href = '/?portal=client';
+          }}
+          style={{
+            padding: '5px 11px', borderRadius: 6, border: 'none',
+            background: 'transparent', color: '#dc2626', fontSize: 12,
+            fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+          }}
+        >🔒 Logout</button>
+      )}
     </div>
   );
 }

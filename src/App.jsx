@@ -133,12 +133,14 @@ function App() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('portal') === 'driver') return 'driver-portal';
     if (urlParams.get('portal') === 'munshi') return 'munshi-portal';
-    if (urlParams.get('portal') === 'client') return 'client-portal';
+    if (urlParams.get('portal') === 'client') {
+      return localStorage.getItem('clientPortal_session') ? 'ewaybill' : 'client-portal';
+    }
     
     // Check localStorage for persistent login (survives page refresh)
     if (localStorage.getItem('driverPortal_session')) return 'driver-portal';
     if (localStorage.getItem('munshiPortal_session')) return 'munshi-portal';
-    if (localStorage.getItem('clientPortal_session')) return 'client-portal';
+    if (localStorage.getItem('clientPortal_session')) return 'ewaybill';
     if (localStorage.getItem('adminPINLogin')) return 'admin-portal';
     
     return 'ewaybill';
@@ -147,7 +149,11 @@ function App() {
   // ── Standalone portals — full-screen, no admin shell ─────────────────────
   if (activeTab === 'driver-portal') return <DriverPage />;
   if (activeTab === 'munshi-portal') return <MunshiPortal />;
-  if (activeTab === 'client-portal') return <ClientPortal />;
+  if (activeTab === 'client-portal') return <ClientPortal onLogin={() => setActiveTab('ewaybill')} />;
+
+  // ── Client mode: client logged in, full app with filtered sidebar ─────────
+  const clientSession = (() => { try { return JSON.parse(localStorage.getItem('clientPortal_session')); } catch { return null; } })();
+  const clientMode = !!clientSession;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // const [routes] = useState([]); // unused
   const [poiRadiusMeters] = useState(1000);
@@ -469,7 +475,7 @@ function App() {
   const mainContent = (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', fontFamily: 'sans-serif', background: '#fff' }}>
       {/* Top navigation bar */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} dashboardView={dashboardView} setDashboardView={setDashboardView} pois={pois} onSelectPOI={setSelectedPOI} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(c => !c)} sidebarCollapsed={sidebarCollapsed} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} dashboardView={dashboardView} setDashboardView={setDashboardView} pois={pois} onSelectPOI={setSelectedPOI} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(c => !c)} sidebarCollapsed={sidebarCollapsed} clientMode={clientMode} clientSession={clientSession} />
       {/* Main Content Area */}
       <div style={{ flex: 1, marginTop: 46, padding: activeTab === 'ewaybill' ? '12px 12px' : 20, overflowY: 'auto', background: '#fff', color: '#111' }}>
         {loading && (
