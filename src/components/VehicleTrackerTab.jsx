@@ -45,6 +45,28 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
   }, []);
 
 
+  // Classify each vehicle as 'onroad', 'atpoi', or 'unknown'
+  const classifyVehicle = React.useCallback((v) => {
+    const key = (v.number || v.vehicle_no || v.vehicleNumber || '').trim().toUpperCase();
+    const live = liveStatus[key];
+    if (live) {
+      const ls = live.load_status || '';
+      if (ls === 'in_transit_loaded' || ls === 'in_transit_empty') return 'onroad';
+      if (ls && ls !== 'unknown') return 'atpoi';
+    }
+    const gs = (v.status || '').toUpperCase();
+    if (gs === 'ACTIVE' || gs === 'SLOW') return 'onroad';
+    if (gs === 'STOPPED' && (v.stop_poi || v.nearby_poi)) return 'atpoi';
+    if ((v.lat || v.latitude) && (v.lng || v.longitude)) return 'onroad';
+    return 'unknown';
+  }, [liveStatus]);
+
+  // Vehicles visible on the map (respects locationFilter)
+  const filteredVehicles = React.useMemo(() => {
+    if (locationFilter === 'all') return vehicles;
+    return vehicles.filter(v => classifyVehicle(v) === locationFilter);
+  }, [vehicles, locationFilter, classifyVehicle]);
+
   // Compute filtered path — only for preset time filters (3h/24h/7d).
   // Custom Range: filtering is done server-side on Load Track click, so return trackedPath as-is.
   const filteredPath = React.useMemo(() => {
@@ -371,29 +393,8 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
 
         {/* Location Filter Buttons */}
         {(() => {
-          // Determine if a vehicle is on-road or at-POI:
-          // 1. Use liveStatus (from vehicle-movement API) if available
-          // 2. Fall back to GPS speed/status from the vehicles list
-          const classify = v => {
-            const key = (v.number || v.vehicle_no || v.vehicleNumber || '').trim().toUpperCase();
-            const live = liveStatus[key];
-            if (live) {
-              const ls = live.load_status || '';
-              if (ls === 'in_transit_loaded' || ls === 'in_transit_empty') return 'onroad';
-              if (ls && ls !== 'unknown') return 'atpoi';
-            }
-            // Fallback: GPS status (no EWB data or vehicle not in movement API)
-            const gpsStatus = (v.status || '').toUpperCase();
-            if (gpsStatus === 'ACTIVE' || gpsStatus === 'SLOW') return 'onroad';
-            if (gpsStatus === 'STOPPED' && (v.stop_poi || v.nearby_poi)) return 'atpoi';
-            // Has lat/lng but unknown POI status → count as on road
-            if ((v.lat || v.latitude) && (v.lng || v.longitude)) return 'onroad';
-            return 'unknown';
-          };
-          const isOnRoad = v => classify(v) === 'onroad';
-          const isAtPoi  = v => classify(v) === 'atpoi';
-          const onRoadCount = vehicles.filter(isOnRoad).length;
-          const atPoiCount  = vehicles.filter(isAtPoi).length;
+          const onRoadCount = vehicles.filter(v => classifyVehicle(v) === 'onroad').length;
+          const atPoiCount  = vehicles.filter(v => classifyVehicle(v) === 'atpoi').length;
           const filterBtns = [
             { key: 'all',    label: `All (${vehicles.length})`,         color: '#475569', bg: '#f1f5f9', active: '#475569' },
             { key: 'onroad', label: `🛣️ On Road (${onRoadCount})`,     color: '#1d4ed8', bg: '#eff6ff', active: '#1d4ed8' },
@@ -441,23 +442,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
             >
               <option value="">-- Choose a vehicle --</option>
               {vehicles
-                .filter(v => {
-                  if (locationFilter === 'all') return true;
-                  const key = (v.number || v.vehicle_no || v.vehicleNumber || '').trim().toUpperCase();
-                  const live = liveStatus[key];
-                  let cat = 'unknown';
-                  if (live) {
-                    const ls = live.load_status || '';
-                    if (ls === 'in_transit_loaded' || ls === 'in_transit_empty') cat = 'onroad';
-                    else if (ls && ls !== 'unknown') cat = 'atpoi';
-                  } else {
-                    const gs = (v.status || '').toUpperCase();
-                    if (gs === 'ACTIVE' || gs === 'SLOW') cat = 'onroad';
-                    else if (gs === 'STOPPED' && (v.stop_poi || v.nearby_poi)) cat = 'atpoi';
-                    else if ((v.lat || v.latitude) && (v.lng || v.longitude)) cat = 'onroad';
-                  }
-                  return cat === locationFilter;
-                })
+                .filter(v => locationFilter === 'all' || classifyVehicle(v) === locationFilter)
                 .map(v => {
                   const vno = v.number || v.vehicle_no || v.vehicleNumber || v.id;
                   const key = (vno || '').trim().toUpperCase();
@@ -744,7 +729,7 @@ const VehicleTrackerTab = ({ vehicles = [] }) => {
         height: isFullView ? '100%' : 500
       }}>
         <VehicleTracker
-          vehicles={vehicles}
+          vehicles={filteredVehicles}
           highlightNumbers={selectedVehicle ? [selectedVehicle] : []}
           allVehiclesPaths={allVehiclesPaths}
           trackingVehicleId={selectedVehicle || null}
