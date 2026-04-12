@@ -906,7 +906,7 @@ const server = http.createServer((req, res) => {
   const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
   if (rawPath === '/health' || rawPath === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 7, build: 'fix-dates-v1' }));
+    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 8, build: 'fix-unmatch-pois-v1' }));
   }
   // Delegate everything else to async handler
   handleRequest(req, res, rawPath).catch(err => {
@@ -4091,6 +4091,22 @@ async function handleRequest(req, res, rawPath) {
         }
       }
       return jsonResp(res, { status: 'ok', fixed, total: rows.length });
+    } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
+  }
+
+  // POST or GET /api/ewb/fix-unmatch-pois — clear wrong Gurugram→Greater Noida POI assignments + fix POI 1730
+  if (pathname === '/api/ewb/fix-unmatch-pois' && (req.method === 'POST' || req.method === 'GET')) {
+    try {
+      const cid = 'CLIENT_001';
+      // Fix POI 1730: correct pincode and trade-name-friendly poi_name
+      await sqRun(`UPDATE pois SET poi_name='HAIER APPLIANCES INDIA PVT LIMITED, Greater Noida',
+        pin_code='201308', address='Plot No H-6# DMIC Integrated Industrial Township, Greater Noida'
+        WHERE id=1730 AND client_id=?`, [cid]);
+      // Clear from_poi_id for EWBs matched to Gurugram (1136) but frompin=201308 (Greater Noida)
+      const res2 = await sqRun(
+        `UPDATE eway_bills_master SET from_poi_id=NULL, from_poi_name=NULL
+         WHERE client_id=? AND from_poi_id=1136 AND from_pincode='201308'`, [cid]);
+      return jsonResp(res, { status: 'ok', poi_updated: 1, ewbs_unmatched: res2.changes || 0 });
     } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
   }
 
