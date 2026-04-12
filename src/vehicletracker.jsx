@@ -19,6 +19,59 @@ L.Icon.Default.mergeOptions({
 });
 
 
+// --- Module-level map components (must NOT be defined inside VehicleTracker render
+//     to prevent unmount/remount on every re-render which resets zoom) ---
+
+function MapInteractionHandler({ map, onInteractionStart, onInteractionEnd }) {
+  React.useEffect(() => {
+    const handleDragStart = () => onInteractionStart();
+    const handleDragEnd = () => { setTimeout(() => onInteractionEnd(), 100); };
+    const handleZoomStart = () => onInteractionStart();
+    const handleZoomEnd = () => { setTimeout(() => onInteractionEnd(), 100); };
+    const handleWheel = () => { onInteractionStart(); setTimeout(() => onInteractionEnd(), 200); };
+
+    map.on('dragstart', handleDragStart);
+    map.on('dragend', handleDragEnd);
+    map.on('zoomstart', handleZoomStart);
+    map.on('zoomend', handleZoomEnd);
+    map.on('wheel', handleWheel);
+
+    return () => {
+      map.off('dragstart', handleDragStart);
+      map.off('dragend', handleDragEnd);
+      map.off('zoomstart', handleZoomStart);
+      map.off('zoomend', handleZoomEnd);
+      map.off('wheel', handleWheel);
+    };
+  }, [map, onInteractionStart, onInteractionEnd]);
+  return null;
+}
+
+function FitBounds({ vehicles, userInteractingRef }) {
+  const map = useMap();
+  const initialFitRef = React.useRef(false);
+
+  const handleInteractionStart = React.useCallback(() => { userInteractingRef.current = true; }, [userInteractingRef]);
+  const handleInteractionEnd   = React.useCallback(() => { userInteractingRef.current = false; }, [userInteractingRef]);
+
+  React.useEffect(() => {
+    if (initialFitRef.current) return;
+    const coords = vehicles
+      .filter(v => v && v.lat != null && v.lng != null)
+      .map(v => [Number(v.lat), Number(v.lng)]);
+    if (coords.length === 0) return;
+    try {
+      map.fitBounds(coords, { padding: [50, 50], animate: false, maxZoom: 12 });
+      initialFitRef.current = true;
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — fit only on first mount, never on updates
+
+  return <MapInteractionHandler map={map} onInteractionStart={handleInteractionStart} onInteractionEnd={handleInteractionEnd} />;
+}
+
+// ---------------------------------------------------------------------------
+
 const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths = {}, trackingVehicleId = null, trackLoading = false, trackError = null, trackedPathDirect = null }) => {
   // debug: log path source so we can confirm data flows correctly
   console.log('VehicleTracker | vehicles:', vehicles.length, '| tracking:', trackingVehicleId, '| directPath:', trackedPathDirect?.length ?? 0, '| loading:', trackLoading);
@@ -187,85 +240,13 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
 
   // POIs are synced from context above — no separate fetch needed
 
-  // Track if user has manually interacted with map
-  const [, setUserInteracting] = React.useState(false);
+  // Track if user has manually interacted with map (ref only — no state to avoid re-renders)
   const userInteractingRef = React.useRef(false);
 
   // choose center from first vehicle if available (normalize lat/lng vs latitude/longitude)
   const first = vehicles.find(v => v && (v.lat != null || v.latitude != null) && (v.lng != null || v.longitude != null));
   const center = first ? [Number(first.lat ?? first.latitude), Number(first.lng ?? first.longitude)] : [28.4595, 77.0266];
   const zoom = first ? 10 : 5;
-
-  function FitBounds({ vehicles, trackedPath, trackingVehicleId }) {
-    const map = useMap();
-    const initialFitRef = React.useRef(false);
-    
-    React.useEffect(() => {
-      // ONLY fit bounds on FIRST load, NEVER adjust again
-      // This keeps zoom completely stable while user can manually zoom/pan
-      if (initialFitRef.current) return;
-      
-      // Initial fit: show all fleet vehicles
-      const coords = vehicles
-        .filter((v) => v && v.lat != null && v.lng != null)
-        .map((v) => [Number(v.lat), Number(v.lng)]);
-      
-      if (coords.length === 0) return;
-      
-      try {
-        map.fitBounds(coords, { padding: [50, 50], animate: false, maxZoom: 12 });
-        initialFitRef.current = true;
-      } catch {
-        // ignore fit errors
-      }
-    }, []); // Empty dependency — only run once on mount
-    
-    return (
-      <MapInteractionHandler 
-        map={map} 
-        onInteractionStart={() => {
-          userInteractingRef.current = true;
-          setUserInteracting(true);
-        }}
-        onInteractionEnd={() => {
-          userInteractingRef.current = false;
-          setUserInteracting(false);
-        }}
-      />
-    );
-  }
-
-  // Component to track map interactions
-  function MapInteractionHandler({ map, onInteractionStart, onInteractionEnd }) {
-    React.useEffect(() => {
-      const handleDragStart = () => onInteractionStart();
-      const handleDragEnd = () => {
-        setTimeout(() => onInteractionEnd(), 100);
-      };
-      const handleZoomStart = () => onInteractionStart();
-      const handleZoomEnd = () => {
-        setTimeout(() => onInteractionEnd(), 100);
-      };
-      
-      map.on('dragstart', handleDragStart);
-      map.on('dragend', handleDragEnd);
-      map.on('zoomstart', handleZoomStart);
-      map.on('zoomend', handleZoomEnd);
-      map.on('wheel', (e) => {
-        onInteractionStart();
-        setTimeout(() => onInteractionEnd(), 200);
-      });
-      
-      return () => {
-        map.off('dragstart', handleDragStart);
-        map.off('dragend', handleDragEnd);
-        map.off('zoomstart', handleZoomStart);
-        map.off('zoomend', handleZoomEnd);
-      };
-    }, [map, onInteractionStart, onInteractionEnd]);
-    
-    return null;
-  }
 
   // deduplicate vehicles by id or number to avoid duplicate markers
   // Normalize lat/lng — GPS API returns latitude/longitude
@@ -298,7 +279,7 @@ const VehicleTracker = ({ vehicles = [], highlightNumbers = [], allVehiclesPaths
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <FitBounds vehicles={uniqueVehicles} trackedPath={displayPath} trackingVehicleId={trackingVehicleId} />
+        <FitBounds vehicles={uniqueVehicles} userInteractingRef={userInteractingRef} />
         {uniqueVehicles.map((v, idx) => {
           const isHighlighted = highlightNumbers.includes(v.number);
           if (isHighlighted) {
