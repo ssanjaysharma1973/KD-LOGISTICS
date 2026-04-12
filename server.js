@@ -906,7 +906,7 @@ const server = http.createServer((req, res) => {
   const rawPath = (url.parse(req.url || '/', true).pathname || '/').replace(/\/+$/g, '') || '/';
   if (rawPath === '/health' || rawPath === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 8, build: 'fix-unmatch-pois-v1' }));
+    return res.end(JSON.stringify({ status: 'ok', ts: Date.now(), sqlite: !!sqlite3, v: 9, build: 'unmatch-pinmismatch-v1' }));
   }
   // Delegate everything else to async handler
   handleRequest(req, res, rawPath).catch(err => {
@@ -3356,10 +3356,27 @@ async function handleRequest(req, res, rawPath) {
       const threshold = Math.max(0, parseInt(parsed.query.threshold || '5'));
       const page    = Math.max(1, parseInt(parsed.query.page || '1'));
       const perPage = Math.min(100, parseInt(parsed.query.per_page || '25'));
+      // Unmatched = (from_poi_id IS NULL) OR (to_poi_id IS NULL)
+      //           OR poi pincode doesn't match EWB pincode (wrong auto-match)
+      const unmatchedSQL = `
+        SELECT e.* FROM eway_bills_master e
+        WHERE e.client_id=?
+          AND (
+            e.from_poi_id IS NULL OR e.to_poi_id IS NULL
+            OR (e.from_poi_id IS NOT NULL AND e.from_pincode IS NOT NULL AND EXISTS (
+              SELECT 1 FROM pois p WHERE p.id=e.from_poi_id
+                AND p.pin_code IS NOT NULL AND p.pin_code!=''
+                AND REPLACE(p.pin_code,' ','') != REPLACE(e.from_pincode,' ','')
+            ))
+            OR (e.to_poi_id IS NOT NULL AND e.to_pincode IS NOT NULL AND EXISTS (
+              SELECT 1 FROM pois p WHERE p.id=e.to_poi_id
+                AND p.pin_code IS NOT NULL AND p.pin_code!=''
+                AND REPLACE(p.pin_code,' ','') != REPLACE(e.to_pincode,' ','')
+            ))
+          )`;
       const [cntRows, bills, pois] = await Promise.all([
-        sqAll(`SELECT COUNT(*) as cnt FROM eway_bills_master WHERE client_id=? AND (from_poi_id IS NULL OR to_poi_id IS NULL)`, [cid]),
-        sqAll(`SELECT * FROM eway_bills_master WHERE client_id=? AND (from_poi_id IS NULL OR to_poi_id IS NULL)
-               ORDER BY doc_date DESC, id DESC LIMIT ? OFFSET ?`, [cid, perPage, (page-1)*perPage]),
+        sqAll(`SELECT COUNT(*) as cnt FROM (${unmatchedSQL})`, [cid]),
+        sqAll(`${unmatchedSQL} ORDER BY doc_date DESC, e.id DESC LIMIT ? OFFSET ?`, [cid, perPage, (page-1)*perPage]),
         sqAll(`SELECT id, poi_name, city, pin_code, type FROM pois WHERE client_id=?`, [cid]),
       ]);
       const norm = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -4103,10 +4120,25 @@ async function handleRequest(req, res, rawPath) {
         pin_code='201308', address='Plot No H-6# DMIC Integrated Industrial Township, Greater Noida'
         WHERE id=1730 AND client_id=?`, [cid]);
       // Clear from_poi_id for EWBs matched to Gurugram (1136) but frompin=201308 (Greater Noida)
-      const res2 = await sqRun(
+      const r2 = await sqRun(
         `UPDATE eway_bills_master SET from_poi_id=NULL, from_poi_name=NULL
          WHERE client_id=? AND from_poi_id=1136 AND from_pincode='201308'`, [cid]);
-      return jsonResp(res, { status: 'ok', poi_updated: 1, ewbs_unmatched: res2.changes || 0 });
+      // Clear to_poi_id for EWBs where matched POI pincode doesn't match EWB to_pincode
+      // (catches cases like Indore EWB matched to Gurugram POI)
+      const ewbs = await sqAll(
+        `SELECT e.id, e.to_poi_id, e.to_pincode, p.pin_code as poi_pin
+         FROM eway_bills_master e JOIN pois p ON e.to_poi_id=p.id
+         WHERE e.client_id=? AND e.to_poi_id IS NOT NULL AND e.to_pincode IS NOT NULL
+           AND REPLACE(e.to_pincode,' ','') != REPLACE(COALESCE(p.pin_code,''),' ','')`, [cid]);
+      let pinMismatch = 0;
+      for (const row of ewbs) {
+        // Only clear if POI pin is non-empty and clearly different
+        if (row.poi_pin && row.to_pincode && row.poi_pin.replace(/\D/g,'') !== row.to_pincode.replace(/\D/g,'')) {
+          await sqRun(`UPDATE eway_bills_master SET to_poi_id=NULL, to_poi_name=NULL WHERE id=?`, [row.id]);
+          pinMismatch++;
+        }
+      }
+      return jsonResp(res, { status: 'ok', poi_updated: 1, from_unmatched: r2.changes || 0, to_pin_mismatch_cleared: pinMismatch });
     } catch(e) { return jsonResp(res, { status: 'error', message: e.message }, 500); }
   }
 
